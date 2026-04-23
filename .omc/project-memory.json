@@ -1,0 +1,91 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1776690846393,
+  "projectRoot": "D:\\vibe\\zettaranc-skill",
+  "techStack": {
+    "languages": [],
+    "frameworks": [],
+    "packageManager": null,
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "scripts"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "references": {
+      "path": "references",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1776690846367,
+      "keyFiles": []
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 6,
+      "lastAccessed": 1776690846367,
+      "keyFiles": [
+        "batch_download_bilibili.py",
+        "batch_transcribe.py",
+        "download_subtitles.sh",
+        "merge_research.py",
+        "quality_check.py"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "docs\\小白安装指南.html",
+      "accessCount": 26,
+      "lastAccessed": 1776693259192,
+      "type": "file"
+    },
+    {
+      "path": "docs\\小白安装指南.md",
+      "accessCount": 5,
+      "lastAccessed": 1776694922820,
+      "type": "file"
+    },
+    {
+      "path": "README.md",
+      "accessCount": 1,
+      "lastAccessed": 1776690982197,
+      "type": "file"
+    },
+    {
+      "path": "SKILL.md",
+      "accessCount": 1,
+      "lastAccessed": 1776690982371,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 1,
+      "lastAccessed": 1776690982447,
+      "type": "directory"
+    }
+  ],
+  "userDirectives": []
+}

@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"cd D:/vibe/lululu-skill/team/zettaranc-skill && git push https://github.com/lululu811/zettaranc-skill.git main --force-with-lease\",\"timeout\":120000}",
+  "error": "Exit code 1\nTo https://github.com/lululu811/zettaranc-skill.git\n ! [rejected]        main -> main (stale info)\nerror: failed to push some refs to 'https://github.com/lululu811/zettaranc-skill.git'",
+  "timestamp": "2026-04-23T16:17:17.520Z",
+  "retry_count": 2
+}
