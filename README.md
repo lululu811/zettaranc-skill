@@ -94,13 +94,13 @@ npx skills add lululu811/zettaranc-skill
 git clone https://github.com/lululu811/zettaranc-knowledge.git
 ```
 
-**Gitee（镜像）**：
+**Gitee（自动同步镜像）**：
 
 ```bash
 git clone https://gitee.com/chenleizzzz/zettaranc-knowledge.git
 ```
 
-> **注意**：Gitee 平台对 Skill 类项目有公开限制，因此 Skill 核心文件仅在 GitHub 公开。Gitee 仓库作为镜像同步，但部分内容可能受限。
+> **注意**：Gitee 为 GitHub 自动同步镜像，无需手动推送。Gitee 平台对 Skill 类项目有公开限制，因此 Skill 核心文件仅在 GitHub 公开。
 
 克隆后将 `SKILL.md` 文件放入你的 AI 工具（Claude Code / Cursor / 其他支持 Skill 的编辑器）的 skill 目录中。
 
