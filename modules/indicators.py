@@ -178,13 +178,10 @@ class IndicatorResult:
     b2_score: int = 0            # B2匹配度评分(0-4)
 
     # 关键K检测
-    is_key_k: bool = False       # 是否关键K
-    key_k_type: str = ""         # 关键K类型: 反转/衰竭
-    key_k_body_pct: float = 0    # 实体占前日收盘比%
-    key_k_vol_ratio: float = 0   # 量比(当日量/前5日平均)
+    key_k_list: List[Dict] = None    # 关键K列表，每根含日期/类型/实体%/量比
 
     # 暴力K检测
-    is_violence_k: bool = False  # 是否暴力K
+    is_violence_k: bool = False  # 最新这天是否暴力K
     violence_k_type: str = ""    # 大暴力/小暴力
     violence_k_body: float = 0   # 实体涨幅%
 
@@ -1359,77 +1356,120 @@ def detect_b2_today(klines: List[DailyData]) -> Dict:
     return result
 
 
-def detect_key_k(klines: List[DailyData]) -> Dict:
+def detect_key_k(klines: List[DailyData], lookback: int = 60) -> List[Dict]:
     """
-    关键K检测（位置 + 放量 + 长阳/长阴）
-    三要素缺一不可
+    关键K检测（位置 + 放量 + 长阳/长阴），扫描最近lookback天
+    找出那2-3根真正在指挥走势的关键K
     """
-    result = {
-        'is_key_k': False,
-        'key_k_type': '',
-        'key_k_body_pct': 0,
-        'key_k_vol_ratio': 0,
-    }
-    if len(klines) < 6:
-        return result
-    today = klines[-1]
-    prev = klines[-2]
-    if prev.close <= 0:
-        return result
-    body = abs(today.close - today.open)
-    body_pct = body / prev.close * 100
-    # 前5日平均量
-    avg_vol = sum(k.vol for k in klines[-6:-1]) / 5 if len(klines) >= 6 else prev.vol
-    vol_ratio = today.vol / avg_vol if avg_vol > 0 else 0
-    # 三要素
-    is_big_body = body_pct >= 3  # 实体>=3%
-    is_high_vol = vol_ratio >= 1.5  # 量>=1.5倍均量
-    # 位置关键：突破前高/前低或位于平台位
-    recent_high = max(k.high for k in klines[-20:-1]) if len(klines) >= 21 else prev.high
-    recent_low = min(k.low for k in klines[-20:-1]) if len(klines) >= 21 else prev.low
-    at_key_position = abs(today.high - recent_high) / recent_high < 0.02 or abs(today.low - recent_low) / recent_low < 0.02
-    if is_big_body and is_high_vol and at_key_position:
-        result['is_key_k'] = True
-        result['key_k_type'] = '反转' if today.close > today.open else '衰竭'
-        result['key_k_body_pct'] = round(body_pct, 2)
-        result['key_k_vol_ratio'] = round(vol_ratio, 2)
-    return result
+    n = len(klines)
+    if n < 10:
+        return []
+    start = max(0, n - lookback)
+    scan = klines[start:]
+    n = len(scan)
+    if n < 10:
+        return []
+
+    results = []
+    for i in range(max(5, n - 5), n):
+        day = scan[i]
+        prev = scan[i - 1] if i > 0 else None
+        if not prev or prev.close <= 0:
+            continue
+
+        body = abs(day.close - day.open)
+        body_pct = body / prev.close * 100
+
+        vol_start = max(0, i - 5)
+        avg_vol = sum(k.vol for k in scan[vol_start:i]) / max(1, i - vol_start)
+        vol_ratio = day.vol / avg_vol if avg_vol > 0 else 0
+
+        is_big_body = body_pct >= 3
+        # 大阳线(>=7%)或涨停时放宽量比要求，涨停缩量突破也认可
+        vol_threshold = 1.1 if body_pct >= 7 else 1.3
+        is_high_vol = vol_ratio >= vol_threshold
+
+        pos_start = max(0, i - 20)
+        if i > pos_start:
+            recent_high = max(k.high for k in scan[pos_start:i])
+            recent_low = min(k.low for k in scan[pos_start:i])
+            dist_high = (day.high - recent_high) / recent_high
+            dist_low = (recent_low - day.low) / recent_low if recent_low > 0 else 0
+            at_key = (dist_high >= -0.02 and dist_high <= 0.15) or (dist_low >= -0.02 and dist_low <= 0.15)
+        else:
+            at_key = False
+
+        if is_big_body and is_high_vol and at_key:
+            results.append({
+                'date': day.trade_date,
+                'close': day.close,
+                'pct': day.pct_chg,
+                'type': '反转' if day.close > day.open else '衰竭',
+                'body_pct': round(body_pct, 1),
+                'vol_ratio': round(vol_ratio, 1),
+                'is_latest': (i == n - 1),
+            })
+
+    return results
 
 
-def detect_violence_k(klines: List[DailyData]) -> Dict:
+def detect_violence_k(klines: List[DailyData], lookback: int = 60) -> List[Dict]:
     """
-    暴力K检测（底部 + 突兀 + 倍量）
+    暴力K检测（底部 + 突兀 + 倍量），扫描最近lookback天
     关键K的满配版
     """
-    result = {
-        'is_violence_k': False,
-        'violence_k_type': '',
-        'violence_k_body': 0,
-    }
-    if len(klines) < 10:
-        return result
-    today = klines[-1]
-    prev = klines[-2]
-    if prev.close <= 0:
-        return result
-    # 位置在底部：相对20日低点附近
-    recent_low = min(k.low for k in klines[-20:-1]) if len(klines) >= 21 else prev.low
-    at_bottom = today.low <= recent_low * 1.05
-    # 突兀：涨跌幅显著大于前5日平均
-    body = abs(today.close - today.open)
-    body_pct = body / prev.close * 100
-    prev_bodies = [abs(k.close - k.open) / (klines[i-1].close if i > 0 else 1) * 100 for i, k in enumerate(klines[-6:-1])]
-    avg_body = sum(prev_bodies) / len(prev_bodies) if prev_bodies else 0
-    is_abrupt = body_pct > avg_body * 2
-    # 倍量
-    avg_vol = sum(k.vol for k in klines[-6:-1]) / 5
-    vol_ratio = today.vol / avg_vol if avg_vol > 0 else 0
-    is_double_vol = vol_ratio >= 2
-    if at_bottom and is_abrupt and is_double_vol:
-        result['is_violence_k'] = True
-        result['violence_k_type'] = '大暴力' if vol_ratio >= 3 else '小暴力'
-        result['violence_k_body'] = round(body_pct, 2)
-    return result
+    n = len(klines)
+    if n < 10:
+        return []
+    start = max(0, n - lookback)
+    scan = klines[start:]
+    n = len(scan)
+    if n < 10:
+        return []
+
+    results = []
+    for i in range(max(5, n - 5), n):
+        day = scan[i]
+        prev = scan[i - 1] if i > 0 else None
+        if not prev or prev.close <= 0:
+            continue
+
+        body = abs(day.close - day.open)
+        body_pct = body / prev.close * 100
+
+        pos_start = max(0, i - 20)
+        if i > pos_start:
+            recent_low = min(k.low for k in scan[pos_start:i])
+            at_bottom = day.low <= recent_low * 1.05
+        else:
+            at_bottom = False
+
+        body_start = max(0, i - 5)
+        prev_bodies = []
+        for j in range(body_start, i):
+            p = scan[j - 1] if j > 0 else None
+            if p and p.close > 0:
+                prev_bodies.append(abs(scan[j].close - scan[j].open) / p.close * 100)
+        avg_body = sum(prev_bodies) / len(prev_bodies) if prev_bodies else 0
+        is_abrupt = body_pct > avg_body * 2 and body_pct >= 5
+
+        vol_start = max(0, i - 5)
+        avg_vol = sum(k.vol for k in scan[vol_start:i]) / max(1, i - vol_start)
+        vol_ratio = day.vol / avg_vol if avg_vol > 0 else 0
+        is_double_vol = vol_ratio >= 2
+
+        if at_bottom and is_abrupt and is_double_vol:
+            results.append({
+                'date': day.trade_date,
+                'close': day.close,
+                'pct': day.pct_chg,
+                'type': '大暴力' if vol_ratio >= 3 else '小暴力',
+                'body_pct': round(body_pct, 1),
+                'vol_ratio': round(vol_ratio, 1),
+                'is_latest': (i == n - 1),
+            })
+
+    return results
 
 
 def check_two_30_rule(klines: List[DailyData]) -> Dict:
@@ -1776,20 +1816,20 @@ def analyze_stock(ts_code: str, days: int = 100) -> IndicatorResult:
         result.b2_volume_up = b2['b2_volume_up']
         result.b2_score = b2['b2_score']
 
-    # ========== 关键K检测 ==========
-    if len(klines) >= 6:
-        key_k = detect_key_k(klines)
-        result.is_key_k = key_k['is_key_k']
-        result.key_k_type = key_k['key_k_type']
-        result.key_k_body_pct = key_k['key_k_body_pct']
-        result.key_k_vol_ratio = key_k['key_k_vol_ratio']
-
-    # ========== 暴力K检测 ==========
+    # ========== 关键K检测（扫描60日） ==========
     if len(klines) >= 10:
-        vk = detect_violence_k(klines)
-        result.is_violence_k = vk['is_violence_k']
-        result.violence_k_type = vk['violence_k_type']
-        result.violence_k_body = vk['violence_k_body']
+        result.key_k_list = detect_key_k(klines)
+
+    # ========== 暴力K检测（扫描60日） ==========
+    if len(klines) >= 10:
+        vk_list = detect_violence_k(klines)
+        if vk_list:
+            latest_vk = [v for v in vk_list if v.get('is_latest', False)]
+            if latest_vk:
+                vk = latest_vk[0]
+                result.is_violence_k = True
+                result.violence_k_type = vk['type']
+                result.violence_k_body = vk['body_pct']
 
     # ========== 两个30%原则 ==========
     if len(klines) >= 10:
@@ -1977,12 +2017,15 @@ def format_result(result: IndicatorResult) -> str:
     lines.append(f"  假阴真阳: {'OK' if result.is_jiayin_zhenyang else '--'}  放量阴线: {'OK' if result.is_fangliang_yinxian else '--'}")
     lines.append("")
 
-    # 关键K / 暴力K
-    if result.is_key_k or result.is_violence_k:
-        if result.is_key_k:
-            lines.append(f"[关键K] *** {result.key_k_type}  实体={result.key_k_body_pct:.1f}%  量比={result.key_k_vol_ratio:.1f}x")
-        if result.is_violence_k:
-            lines.append(f"[暴力K] *** {result.violence_k_type}  实体={result.violence_k_body:.1f}%")
+    # 关键K / 暴力K（显示60日内找到的关键K）
+    if result.key_k_list:
+        lines.append(f"[关键K] 60日内找到 {len(result.key_k_list)} 根关键K:")
+        for kk in result.key_k_list[-5:]:  # 最多显示最近5根
+            marker = " <<< 今日" if kk.get('is_latest', False) else ""
+            lines.append(f"  {kk['date']}  {kk['type']}  收{kk['close']:.2f}({kk['pct']:+.1f}%)  实体{kk['body_pct']:.1f}%  量比{kk['vol_ratio']:.1f}x{marker}")
+        lines.append("")
+    if result.is_violence_k:
+        lines.append(f"[暴力K] *** {result.violence_k_type}  实体={result.violence_k_body:.1f}%")
         lines.append("")
 
     # 两个30%原则
