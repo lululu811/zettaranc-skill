@@ -2,6 +2,77 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [v2.0-JNB] - 2026-04-28
+
+> **「你用假数据练出来的全是花架子，上了市场就是被割的命。」**
+
+### 重大发布
+
+**v2.0-JNB**：zettaranc 从纯 LLM 文字对话升级为**具备真实数据查询能力的 Agent**。接入 Tushare API 实时行情、K线、资金流向、财务数据，让 Z 哥的思维框架跑在真实数据之上。
+
+曼城阵容 10 只重点股（茅台/平安/万科/宁德/隆基/比亚迪/招行/五粮液/中国平安/海康威视）317 天 K 线 + 120 天技术指标已全部入库。
+
+### 新增 Python 模块（8 个）
+
+| 模块 | 说明 |
+|------|------|
+| `tushare_client.py` | Tushare 中转 API 封装（120次/分钟限流，tsy.xiaodefa.cn） |
+| `database.py` | SQLite 数据库管理（7 张表，context manager 事务） |
+| `data_sync.py` | 数据同步器（增量/全量，K线/指标/资金流向） |
+| `indicators.py` | 技术指标计算引擎（60+ 指标：MACD/KDJ/RSI/WR/布林带/DMI/砖形图/双枪/四块砖…） |
+| `screener.py` | 选股器（曼城评分体系、趋势评分、量能评分、完美图形识别） |
+| `strategies.py` | 30+ 战法识别引擎（B1/B2/B3/SB1、长安战法、四分之三阴量、娜娜图形、异动地量…） |
+| `setup_wizard.py` | 初始化配置向导（环境检测、数据模式切换、API 连通性测试） |
+| `zettaranc_voice.py` | Z哥话术生成 |
+
+### 新增测试套件（126 个用例）
+
+| 文件 | 覆盖范围 |
+|------|---------|
+| `test_database.py` | 数据库初始化、连接管理、事务回滚、表增删 |
+| `test_indicators.py` | 56 个指标计算测试（MA/EMA/KDJ/MACD/RSI/WR/布林带/砖形图/DMI…） |
+| `test_screener.py` | 选股评分、趋势评分、量能评分、完美图形 |
+| `test_strategies.py` | 12 个战法识别测试、数据库集成 |
+| `test_setup_wizard.py` | 环境变量检测、数据模式切换 |
+
+### 新增数据能力
+
+- 实时行情查询（股价、涨跌幅、量比、市值）
+- 日线 K 线数据（支持增量更新）
+- 60+ 技术指标实时计算 + SQLite 缓存
+- 资金流向数据（大小单净流入）
+- 涨停股列表
+- 每日指标快照历史（支持回测）
+- 曼城阵容预设数据（开箱即用）
+
+### 架构重构
+
+- **模块化拆分**：从单一 `SKILL.md` 拆分为 **12 个独立能力模块** + **8 个 Python 代码模块**
+- **数据与逻辑分离**：知识文档迁移至 `knowledge/` 目录
+- **测试基础设施**：`tests/conftest.py` 提供临时数据库 fixture、K 线数据工厂
+- **配置向导**：`setup_wizard.py` 支持 JNB/websearch 双模式切换
+
+### Bug 修复
+
+- 修复 `data_sync.py` 中 `calculate_sell_score` 返回值类型不匹配（`dict` → `str`）
+- 修复 `detect_trade_signal` 返回 `TradeSignal` enum 对象的解包问题
+- 修复 `calculate_macd` 返回列表而非单值的 SQL 绑定错误
+
+### 知识文档
+
+- 新增 `knowledge/data_dictionary.md` — 输入数据字典（DailyBar/MoneyFlow/Financial 等）
+- 新增 `knowledge/signal_dictionary.md` — 输出信号字典（Agent 解读指南）
+- 原有 12 个能力模块 `.md` 文件从 `modules/` 迁移至 `knowledge/`
+
+### 新增依赖
+
+- `tushare` — Tushare API 客户端
+- `python-dotenv` — 环境变量管理
+- `pandas` — 数据处理
+- `pytest` — 测试框架
+
+---
+
 ## [未发布] - v2.0.0
 
 ### 重大更新

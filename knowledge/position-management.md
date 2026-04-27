@@ -98,7 +98,7 @@
 
 ## 组合配置扩展
 
-完整组合配置体系详见 → `modules/portfolio-management.md`
+完整组合配置体系详见 → `knowledge/portfolio-management.md`
 
 ### 快速参考
 

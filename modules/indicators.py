@@ -23,6 +23,14 @@ if not _db_path.is_absolute():
     _db_path = Path(__file__).parent.parent / _db_path_str
 DB_PATH = str(_db_path.resolve())
 
+# 数据模式
+DATA_MODE = os.getenv("DATA_MODE", "websearch")
+
+
+def get_data_mode() -> str:
+    """获取当前数据模式：jnb 或 websearch"""
+    return DATA_MODE
+
 
 class TradeSignal(Enum):
     """交易信号"""
@@ -76,9 +84,7 @@ class IndicatorResult:
     is_gold_fake: bool = False  # 金叉空（金叉后立即死叉，诱多）
     is_dead_fake: bool = False  # 死叉多（死叉后立即金叉，空中加油）
     is_top_divergence: bool = False  # 顶背离
-    top_div_desc: str = ""           # 顶背离描述
     is_bottom_divergence: bool = False  # 底背离
-    bottom_div_desc: str = ""        # 底背离描述
     macd_veto: bool = False  # MACD 一票否决（不能买）
 
     # BBI
@@ -122,6 +128,15 @@ class IndicatorResult:
     rsl_long: float = 0     # 长期RSL (21日)
     is_needle_20: bool = False  # 单针下20信号
 
+    # ========== 单针下30 ==========
+    is_needle_30: bool = False  # 单针下30信号（红>85, 白<30）
+
+    # ========== 异动选股法 ==========
+    is_yidong: bool = False    # 当日是否异动（突然放量+60日线附近）
+    yidong_type: str = ""      # 异动类型：詹姆斯级/徐杰级
+    yidong_vol_ratio: float = 0  # 异动量比
+    yidong_above_60d: bool = False  # 是否从60日线附近起来
+
     # ========== 砖型图系统 ==========
     brick_value: float = 0   # 砖型图数值
     brick_trend: str = "NEUTRAL"  # 趋势: RED(红砖)/GREEN(绿砖)/NEUTRAL(中性)
@@ -138,11 +153,10 @@ class IndicatorResult:
 
     # 卖出评分
     sell_score: int = 0         # 0-5分
-    sell_reason: str = ""        # 扣分原因
+    sell_items: Dict[str, bool] = None  # 5项明细 {项目名: 是否通过}
 
     # 交易信号
     signal: TradeSignal = TradeSignal.WATCH
-    signal_desc: str = ""
 
     # 关键价位
     prev_high: float = 0    # 昨日最高价
@@ -177,6 +191,15 @@ class IndicatorResult:
     b2_volume_up: bool = False   # 是否放量
     b2_score: int = 0            # B2匹配度评分(0-4)
 
+    # 双枪战法
+    is_double_gun: bool = False  # 双枪战法信号
+    double_gun_vol1: float = 0   # 第一枪量比
+    double_gun_vol2: float = 0   # 第二枪量比
+    double_gun_gap_days: int = 0  # 两枪间隔天数
+
+    # 超级B1
+    is_sb1_detailed: bool = False  # 超级B1（独立检测）
+
     # 关键K检测
     key_k_list: List[Dict] = None    # 关键K列表，每根含日期/类型/实体%/量比
 
@@ -192,7 +215,6 @@ class IndicatorResult:
 
     # 娜娜图 (完美建仓形态)
     is_nana: bool = False        # 娜娜图信号
-    nana_desc: str = ""          # 描述
 
     # 黄金碗 (白线黄线之间的区域)
     is_in_bowl: bool = False     # 价格是否在碗内(白线>价>黄线)
@@ -200,16 +222,20 @@ class IndicatorResult:
     bowl_lower: float = 0        # 碗下沿(黄线)
 
     # 呼吸结构
-    breath_phase: str = ""       # 呼气/吸气/无
+    breath_phase: str = ""       # exhale/inhale/none
     breath_n_type: bool = False  # 是否N型结构
 
     # SB1假摔
     is_sb1: bool = False         # SB1假摔信号
-    sb1_desc: str = ""           # 描述
 
     # B3买点
     is_b3: bool = False          # B3买点信号
-    b3_desc: str = ""            # 描述
+
+    # 四块砖交易体系
+    brick_consecutive: int = 0   # 当前连续砖数
+    brick_action: str = ""       # 操作建议: 减仓/止损/持有/观望/禁止抄底
+    brick_action_desc: str = ""  # 操作描述
+    is_brick_flip_green: bool = False  # 红砖刚翻绿（止损信号）
 
     # 异动记录
     last_yidong_date: str = ""
@@ -481,9 +507,7 @@ def detect_divergence(klines: List[DailyData], dif_list: List[float]) -> Dict:
     """
     result = {
         'is_top_divergence': False,
-        'top_div_desc': '',
         'is_bottom_divergence': False,
-        'bottom_div_desc': '',
     }
 
     if len(klines) < 60 or len(dif_list) < 30:
@@ -515,8 +539,6 @@ def detect_divergence(klines: List[DailyData], dif_list: List[float]) -> Dict:
 
             if price_near_high and dif_weaker and max_dif > 0:
                 result['is_top_divergence'] = True
-                decay_pct = (1 - dif_list[-1] / max_dif) * 100 if max_dif != 0 else 0
-                result['top_div_desc'] = f"价近高({today_close:.2f} vs {max_close:.2f}) DIF衰减{decay_pct:.0f}%"
 
     # ====== 底背离检测 ======
     if window_end > window_start:
@@ -534,8 +556,6 @@ def detect_divergence(klines: List[DailyData], dif_list: List[float]) -> Dict:
 
             if price_near_low and dif_stronger and min_dif < 0:
                 result['is_bottom_divergence'] = True
-                strength_pct = (1 - dif_list[-1] / min_dif) * 100 if min_dif != 0 else 0
-                result['bottom_div_desc'] = f"价近低({today_close:.2f} vs {min_close:.2f}) DIF回升{strength_pct:.0f}%"
 
     return result
 
@@ -551,18 +571,16 @@ def detect_macd_signals(klines: List[DailyData], dif_list: List[float],
     3. 金叉空 + 死叉多 — 判陷阱
     """
     signals = {
-        'is_dif_positive': False,        # DIF > 0 多头区间
-        'is_dif_cross_zero': False,      # DIF 上穿 0 轴（红点）
-        'is_dif_cross_zero_down': False,  # DIF 下穿 0 轴（绿点）
-        'is_gold_cross': False,          # DIF 上穿 DEA
-        'is_dead_cross': False,          # DIF 下穿 DEA
-        'is_gold_fake': False,           # 金叉空（诱多）
-        'is_dead_fake': False,           # 死叉多（空中加油）
-        'is_top_divergence': False,      # 顶背离
-        'top_div_desc': '',              # 顶背离描述
-        'is_bottom_divergence': False,    # 底背离
-        'bottom_div_desc': '',           # 底背离描述
-        'macd_veto': False,              # 一票否决
+        'is_dif_positive': False,
+        'is_dif_cross_zero': False,
+        'is_dif_cross_zero_down': False,
+        'is_gold_cross': False,
+        'is_dead_cross': False,
+        'is_gold_fake': False,
+        'is_dead_fake': False,
+        'is_top_divergence': False,
+        'is_bottom_divergence': False,
+        'macd_veto': False,
     }
 
     if len(dif_list) < 2 or len(dea_list) < 1:
@@ -612,8 +630,6 @@ def detect_macd_signals(klines: List[DailyData], dif_list: List[float],
     div = detect_divergence(klines, dif_list)
     signals['is_top_divergence'] = div['is_top_divergence']
     signals['is_bottom_divergence'] = div['is_bottom_divergence']
-    signals['top_div_desc'] = div['top_div_desc']
-    signals['bottom_div_desc'] = div['bottom_div_desc']
 
     # === 一票否决权 ===
     # DIF < 0 + 没有底背离 → 一票否决
@@ -962,6 +978,242 @@ def detect_needle_20(klines: List[DailyData]) -> Tuple[float, float, bool]:
     is_needle = rsl_short <= 20 and rsl_long >= 60  # 对齐通达信
 
     return rsl_short, rsl_long, is_needle
+
+
+def detect_needle_30(klines: List[DailyData]) -> bool:
+    """
+    检测单针下30信号（单针下20的迭代版）
+
+    量化资金介入后阈值上移：
+    - 红线(主力控盘) > 85
+    - 白线(散户浮筹) < 30
+
+    舍弃部分低位空间，换取更高确定性与入场频次
+    """
+    if len(klines) < 22:
+        return False
+    rsl_short = calculate_rsl(klines, 3)
+    rsl_long = calculate_rsl(klines, 21)
+    return rsl_long > 85 and rsl_short < 30
+
+
+def detect_volume_anomaly(klines: List[DailyData]) -> Dict:
+    """
+    异动选股法检测
+
+    核心：成交量突然放大 + 价随量升 + 位置（60日线附近或下方）
+
+    分级：
+    - 詹姆斯级：建仓波大开大合，放巨量、假阴真阳反包、阳线密集堆积
+    - 徐杰级：仅一根放量阳线，量能没堆起来
+
+    返回异动信息，供后续缩量回调时介入
+    """
+    result = {
+        'is_yidong': False,
+        'yidong_type': '',
+        'yidong_vol_ratio': 0,
+        'yidong_above_60d': False,
+    }
+    if len(klines) < 65:  # 需要60日均线数据
+        return result
+
+    today = klines[-1]
+    prev = klines[-2] if len(klines) > 1 else None
+    if not prev or prev.vol <= 0:
+        return result
+
+    # 量比检测：今日量 / 5日均量 >= 2.0
+    avg_vol_5 = sum(klines[i].vol for i in range(max(1, len(klines)-6), len(klines)-1)) / 5
+    vol_ratio = today.vol / avg_vol_5 if avg_vol_5 > 0 else 0
+
+    if vol_ratio < 2.0:
+        return result
+
+    # 价随量升：收盘涨且不是滞涨（涨幅/量比合理）
+    if today.pct_chg <= 0:
+        return result
+
+    # 位置检测：收盘价是否在60日线附近或下方
+    closes_60 = [k.close for k in klines[-60:]]
+    ma60 = sum(closes_60) / 60
+    above_60d = today.close >= ma60 * 0.95  # 在60日线上下5%以内或上方
+
+    result['yidong_vol_ratio'] = round(vol_ratio, 2)
+    result['yidong_above_60d'] = above_60d
+
+    # 判断异动等级
+    # 詹姆斯级：量大 + 涨幅可观 + 有阳线堆积迹象
+    if vol_ratio >= 3.0 and today.pct_chg >= 5:
+        # 检查最近几天是否有阳线堆积
+        red_count = sum(1 for k in klines[-5:] if k.close > k.open)
+        if red_count >= 3:
+            result['is_yidong'] = True
+            result['yidong_type'] = '詹姆斯级'
+            return result
+
+    # 徐杰级：单根放量阳线
+    if vol_ratio >= 2.0 and today.pct_chg >= 2:
+        result['is_yidong'] = True
+        result['yidong_type'] = '徐杰级'
+
+    return result
+
+
+def detect_double_gun(klines: List[DailyData]) -> Dict:
+    """
+    双枪战法检测
+
+    图形特征：两根放量阳柱中间夹一堆缩量阴线
+    本质：主力建仓确认 — 第一根试盘，中间洗盘，第二根确认
+
+    规则：
+    - 往前找最近一根放量阳线（第二枪）
+    - 再往前找另一根放量阳线（第一枪）
+    - 中间夹缩量小阴小阳（3-10天）
+    - 第二枪前一日应有B1痕迹（J<13）
+    """
+    result = {
+        'is_double_gun': False,
+        'double_gun_vol1': 0,
+        'double_gun_vol2': 0,
+        'double_gun_gap_days': 0,
+    }
+    if len(klines) < 15:
+        return result
+
+    n = len(klines)
+
+    # 往前找最近一根放量阳线（第二枪），排除今天
+    gun2_idx = None
+    for i in range(n - 2, max(0, n - 15), -1):
+        if i > 0:
+            prev_i = klines[i - 1]
+            vol_ratio = klines[i].vol / prev_i.vol if prev_i.vol > 0 else 0
+            if klines[i].pct_chg >= 3 and klines[i].close > klines[i].open and vol_ratio >= 1.8:
+                gun2_idx = i
+                break
+
+    if gun2_idx is None or gun2_idx < 5:
+        return result
+
+    # 检查第二枪前一日是否有B1痕迹
+    _, _, j_before_gun2 = calculate_kdj(klines[:gun2_idx])
+    has_b1_before = j_before_gun2 < 20
+
+    # 从第二枪往前找第一枪
+    gun1_idx = None
+    for i in range(gun2_idx - 3, max(0, gun2_idx - 12), -1):
+        if i > 0:
+            prev_i = klines[i - 1]
+            vol_ratio = klines[i].vol / prev_i.vol if prev_i.vol > 0 else 0
+            if klines[i].pct_chg >= 3 and klines[i].close > klines[i].open and vol_ratio >= 1.8:
+                gun1_idx = i
+                break
+
+    if gun1_idx is None:
+        return result
+
+    gap_days = gun2_idx - gun1_idx
+
+    # 检查中间是否缩量
+    mid_vols = []
+    for i in range(gun1_idx + 1, gun2_idx):
+        if i > 0:
+            prev_i = klines[i - 1]
+            if prev_i.vol > 0:
+                mid_vols.append(klines[i].vol / prev_i.vol)
+
+    if not mid_vols:
+        return result
+
+    avg_mid_vol = sum(mid_vols) / len(mid_vols)
+    is_shrink_mid = avg_mid_vol < 1.2  # 中间平均量比 < 1.2
+
+    # 计算两枪的量比
+    g1_prev = klines[gun1_idx - 1] if gun1_idx > 0 else None
+    g2_prev = klines[gun2_idx - 1] if gun2_idx > 0 else None
+    vol1 = klines[gun1_idx].vol / g1_prev.vol if g1_prev and g1_prev.vol > 0 else 0
+    vol2 = klines[gun2_idx].vol / g2_prev.vol if g2_prev and g2_prev.vol > 0 else 0
+
+    if is_shrink_mid and has_b1_before and 3 <= gap_days <= 10:
+        result['is_double_gun'] = True
+        result['double_gun_vol1'] = round(vol1, 1)
+        result['double_gun_vol2'] = round(vol2, 1)
+        result['double_gun_gap_days'] = gap_days
+
+    return result
+
+
+def detect_sb1_detailed(klines: List[DailyData]) -> Dict:
+    """
+    超级B1独立检测
+
+    形态流程：
+    N型上涨 → 缩量回调 → 标准B1触发 → 突然放量大阴线击穿止损位 →
+    缩量企稳 + J值大负值 → 反转K线确认 → 入场
+
+    只赌一次，不可重复博弈
+    """
+    result = {
+        'is_sb1_detailed': False,
+    }
+    if len(klines) < 15:
+        return result
+
+    n = len(klines)
+    today = klines[-1]
+    _, _, j_today = calculate_kdj(klines)
+
+    # 往前找放量大阴线（击穿止损位）
+    big_drop_idx = None
+    for i in range(n - 2, max(0, n - 10), -1):
+        if i > 0:
+            prev_i = klines[i - 1]
+            vol_ratio = klines[i].vol / prev_i.vol if prev_i.vol > 0 else 0
+            # 放量大阴线：跌幅>3%, 量比>1.5, 收阴
+            if klines[i].pct_chg <= -3 and vol_ratio >= 1.5 and klines[i].close < klines[i].open:
+                big_drop_idx = i
+                break
+
+    if big_drop_idx is None:
+        return result
+
+    # 大阴线后缩量企稳（1-3天）
+    days_after_drop = n - 1 - big_drop_idx
+    if days_after_drop < 1 or days_after_drop > 3:
+        return result
+
+    # 检查大阴线后是否缩量
+    drop_vol = klines[big_drop_idx].vol
+    for i in range(big_drop_idx + 1, n):
+        if klines[i].vol > drop_vol * 0.7:
+            return result  # 没有缩量
+
+    # J值大负值
+    if j_today > -5:
+        return result
+
+    # 反转K线确认（十字星或小阳）
+    body = abs(today.close - today.open)
+    prev_close = klines[-2].close if len(klines) > 1 else today.close
+    body_pct = body / prev_close * 100 if prev_close > 0 else 0
+    is_reversal = body_pct <= 2 or (today.pct_chg > 0 and today.close > today.open)
+
+    if not is_reversal:
+        return result
+
+    # 检查大阴线前是否有N型上涨结构
+    if big_drop_idx >= 5:
+        pre_lows = [klines[i].low for i in range(max(0, big_drop_idx - 10), big_drop_idx)]
+        if len(pre_lows) >= 3:
+            # 简单判断：大阴线前的低点在抬高
+            first_half = pre_lows[:len(pre_lows)//2]
+            second_half = pre_lows[len(pre_lows)//2:]
+            if min(second_half) < min(first_half):
+                result['is_sb1_detailed'] = True
+
+    return result
 
 
 # ========== DMI/ADX 趋势指标 ==========
@@ -1527,7 +1779,7 @@ def detect_nana_chart(klines: List[DailyData]) -> Dict:
     娜娜图检测：完美建仓形态
     条件：股价新高但阳线缩量，次高点阴线也缩量
     """
-    result = {'is_nana': False, 'nana_desc': ''}
+    result = {'is_nana': False}
     if len(klines) < 20:
         return result
     n = len(klines)
@@ -1558,7 +1810,6 @@ def detect_nana_chart(klines: List[DailyData]) -> Dict:
     bottom_vol = klines[low_idx].vol
     if vol_shrink_at_peak and vol_shrink_second and bottom_vol > peak_vol * 0.5:
         result['is_nana'] = True
-        result['nana_desc'] = f"价新高缩量(量{peak_vol:.0f}<{prev5_avg:.0f}), 次高也缩量"
     return result
 
 
@@ -1608,11 +1859,11 @@ def detect_breathing_structure(klines: List[DailyData]) -> Dict:
     # 判断当前阶段
     if len(phases) >= 2:
         if phases[-1] == 'exhale':
-            result['breath_phase'] = '呼气(放量上涨)'
+            result['breath_phase'] = 'exhale'
         elif phases[-1] == 'inhale':
-            result['breath_phase'] = '吸气(缩量回调)'
+            result['breath_phase'] = 'inhale'
         else:
-            result['breath_phase'] = '无明确节奏'
+            result['breath_phase'] = 'none'
     # N型结构：最近3个低点依次抬高
     if n >= 10:
         lows = [klines[i].low for i in range(n-10, n, 3)]
@@ -1626,7 +1877,7 @@ def detect_sb1(klines: List[DailyData]) -> Dict:
     SB1假摔检测：B1后跌破前低再迅速收回
     条件：1)跌破前低 2)次日反包收回 3)收回放量
     """
-    result = {'is_sb1': False, 'sb1_desc': ''}
+    result = {'is_sb1': False}
     if len(klines) < 6:
         return result
     n = len(klines)
@@ -1644,7 +1895,6 @@ def detect_sb1(klines: List[DailyData]) -> Dict:
         vol_up = yesterday.vol > fake_drop.vol * 1.2
         if broken_low and recovered and vol_up:
             result['is_sb1'] = True
-            result['sb1_desc'] = f"假摔收回 收{yesterday.close:.2f}(+{yesterday.pct_chg:.1f}%) 量比{yesterday.vol/fake_drop.vol:.1f}x"
     return result
 
 
@@ -1653,7 +1903,7 @@ def detect_b3(klines: List[DailyData]) -> Dict:
     B3买点检测：B2后缩量回踩不破B2低点
     条件：1) 前面有B2(大涨>=4%) 2) 缩量小阳/十字星 3) 不破B2低点
     """
-    result = {'is_b3': False, 'b3_desc': ''}
+    result = {'is_b3': False}
     if len(klines) < 15:
         return result
     n = len(klines)
@@ -1676,11 +1926,108 @@ def detect_b3(klines: List[DailyData]) -> Dict:
         small_candle = abs(today.pct_chg) < 3
         if today_vol_ratio < 0.8 and not_break_low and small_candle:
             result['is_b3'] = True
-            result['b3_desc'] = f"B2后回踩 收{today.close:.2f}(+{today.pct_chg:.1f}%) 量比{today_vol_ratio:.1f}x"
     return result
 
 
-def calculate_sell_score(klines: List[DailyData]) -> Tuple[int, str]:
+def detect_four_brick_system(klines: List[DailyData]) -> Dict:
+    """
+    四块砖交易体系检测
+
+    基于A股4天情绪循环，红砖=上涨动量，绿砖=下跌动量。
+
+    规则：
+    1. 红砖数满4块 → 减仓至少一半
+    2. 红砖翻绿 → 立刻止损
+    3. 绿砖下跌 → 绝不抄底，先数4块
+    4. 买入后3天不涨 → 止损（DSZ铁律）
+    """
+    result = {
+        'brick_consecutive': 0,      # 当前连续砖数
+        'brick_action': '观望',      # 操作建议
+        'brick_action_desc': '',     # 操作描述
+        'is_brick_flip_green': False,  # 红砖刚翻绿
+    }
+
+    if len(klines) < 10:
+        result['brick_action_desc'] = '数据不足'
+        return result
+
+    # 计算历史砖值序列（至少需要8天才能开始算砖值）
+    brick_history = []
+    for i in range(8, len(klines) + 1):
+        sub_klines = klines[:i]
+        brick_val = calculate_brick_value(sub_klines)
+        brick_history.append(brick_val)
+
+    if len(brick_history) < 3:
+        result['brick_action_desc'] = '数据不足'
+        return result
+
+    # 计算红绿砖：当日砖值 >= 昨日砖值 = 红砖
+    colors = []  # 1=红, -1=绿
+    for i in range(1, len(brick_history)):
+        if brick_history[i] >= brick_history[i - 1]:
+            colors.append(1)
+        else:
+            colors.append(-1)
+
+    if not colors:
+        result['brick_action_desc'] = '无砖型数据'
+        return result
+
+    # 从最新往前数连续同色砖
+    current_color = colors[-1]
+    count = 1
+    for i in range(len(colors) - 2, -1, -1):
+        if colors[i] == current_color:
+            count += 1
+        else:
+            break
+
+    result['brick_consecutive'] = count
+
+    # === 规则判断 ===
+
+    # 1. 红砖翻绿（止损信号）
+    if current_color == -1 and len(colors) >= 2:
+        prev_color = colors[-2] if len(colors) >= 2 else 1
+        if prev_color == 1:
+            # 刚翻绿
+            result['is_brick_flip_green'] = True
+            result['brick_action'] = '止损'
+            result['brick_action_desc'] = f'红砖翻绿！立刻止损（连续红砖{count}块后翻绿）'
+            return result
+
+    # 2. 红砖数满4块 → 减仓
+    if current_color == 1 and count >= 4:
+        result['brick_action'] = '减仓'
+        if count == 4:
+            result['brick_action_desc'] = f'红砖已满4块，至少减仓一半'
+        else:
+            result['brick_action_desc'] = f'红砖已延续{count}块，趋势延续中，但未减仓需警惕'
+        return result
+
+    # 3. 绿砖下跌 → 禁止抄底
+    if current_color == -1:
+        result['brick_action'] = '禁止抄底'
+        if count >= 4:
+            result['brick_action_desc'] = f'绿砖已连续{count}块，跌势可能接近尾声但仍禁止抄底'
+        else:
+            result['brick_action_desc'] = f'绿砖下跌中（{count}块），绝不抄底，先数4块'
+        return result
+
+    # 4. 红砖不足4块 → 持有/观察
+    if current_color == 1 and count < 4:
+        result['brick_action'] = '持有'
+        result['brick_action_desc'] = f'红砖上涨中（{count}块），继续持有'
+        return result
+
+    result['brick_action'] = '观望'
+    result['brick_action_desc'] = '中性'
+    return result
+
+
+def calculate_sell_score(klines: List[DailyData]) -> Tuple[int, str, Dict[str, bool]]:
     """
     计算防卖飞评分 V1.4（5分制）
 
@@ -1691,36 +2038,40 @@ def calculate_sell_score(klines: List[DailyData]) -> Tuple[int, str]:
     4. 趋势还向上？ +1
     5. J 没死叉？ +1
 
-    Args:
-        klines: K线数据（至少5天）
-
     Returns:
-        (评分, 扣分原因)
+        (评分, 满分描述, 明细字典)
     """
     if len(klines) < 2:
-        return 3, "数据不足"
+        return 3, "数据不足", {}
 
     today = klines[-1]
     yesterday = klines[-2]
 
     score = 5
     reasons = []
+    items = {}
 
     # 1. 收盘涨？
-    if today.close <= today.prev_close:
+    close_up = today.close > today.prev_close if hasattr(today, 'prev_close') and today.prev_close > 0 else today.pct_chg > 0
+    items['收盘上涨'] = close_up
+    if not close_up:
         score -= 1
         reasons.append("收盘不涨")
 
     # 2. BBI 没破？
     if len(klines) >= 24:
         bbi = calculate_bbi(klines)
-        if today.close < bbi:
+        bbi_ok = today.close >= bbi
+        items['BBI支撑'] = bbi_ok
+        if not bbi_ok:
             score -= 1
             reasons.append("跌破BBI")
 
     # 3. 不是放量阴线？
     vol_pattern = detect_volume_pattern(today, yesterday)
-    if vol_pattern['is_fangliang_yinxian']:
+    not_bearish_vol = not vol_pattern['is_fangliang_yinxian']
+    items['非放量阴线'] = not_bearish_vol
+    if not not_bearish_vol:
         score -= 1
         reasons.append("放量阴线")
 
@@ -1728,24 +2079,25 @@ def calculate_sell_score(klines: List[DailyData]) -> Tuple[int, str]:
     if len(klines) >= 5:
         ma5_today = calculate_ma([k.close for k in klines[-5:]], 5)
         ma5_yesterday = calculate_ma([k.close for k in klines[-6:-1]], 5)
-        if ma5_today <= ma5_yesterday:
+        trend_up = ma5_today > ma5_yesterday
+        items['趋势向上'] = trend_up
+        if not trend_up:
             score -= 1
             reasons.append("均线向下")
 
     # 5. J 没死叉？
     if len(klines) >= 9:
         k, d, j = calculate_kdj(klines)
-        prev_k, prev_d, prev_j = calculate_kdj(klines[:-1])
-
-        # 死叉状态：J 在 K、D 之下
-        if j < k and j < d:
+        j_ok = j >= d or j < 80  # J没有从高位下穿
+        items['KDJ未死叉'] = j_ok
+        if not j_ok:
             score -= 1
             reasons.append("KDJ死叉")
 
-    return max(0, score), "; ".join(reasons) if reasons else "满分"
+    return score, items
 
 
-def detect_trade_signal(klines: List[DailyData]) -> Tuple[TradeSignal, str]:
+def detect_trade_signal(klines: List[DailyData]) -> TradeSignal:
     """
     检测交易信号（集成 MACD 一票否决权）
 
@@ -1753,10 +2105,10 @@ def detect_trade_signal(klines: List[DailyData]) -> Tuple[TradeSignal, str]:
         klines: K线数据（至少30天）
 
     Returns:
-        (信号类型, 信号描述)
+        信号类型
     """
     if len(klines) < 30:
-        return TradeSignal.WATCH, "数据不足"
+        return TradeSignal.WATCH
 
     today = klines[-1]
     yesterday = klines[-2]
@@ -1773,11 +2125,10 @@ def detect_trade_signal(klines: List[DailyData]) -> Tuple[TradeSignal, str]:
 
     # === 一票否决权：MACD 说不能买 → 绝对不买 ===
     if macd_signals.get('macd_veto', False):
-        return TradeSignal.WATCH, "MACD一票否决：DIF<0且无底背离，不能买"
+        return TradeSignal.WATCH
 
-    # === 金叉空：A股最恶毒的诱多 ===
     if macd_signals.get('is_gold_fake', False):
-        return TradeSignal.S1, "金叉空诱多，主力出货，快跑"
+        return TradeSignal.S1
 
     bbi = calculate_bbi(klines)
     vol_pattern = detect_volume_pattern(today, yesterday)
@@ -1786,25 +2137,19 @@ def detect_trade_signal(klines: List[DailyData]) -> Tuple[TradeSignal, str]:
 
     # S1: 放量阴线（最高优先级）
     if vol_pattern['is_fangliang_yinxian'] and today.pct_chg < -3:
-        return TradeSignal.S1, f"放量阴线S1，跌{today.pct_chg:.2f}%"
+        return TradeSignal.S1
 
-    # 顶背离 → 减仓
     if macd_signals.get('is_top_divergence', False):
-        return TradeSignal.S2, "顶背离，见顶减仓"
+        return TradeSignal.S2
 
-    # ========== 买入信号检测 ==========
-
-    # 底背离 → 反转建仓
     if macd_signals.get('is_bottom_divergence', False):
-        return TradeSignal.B1, "底背离，反转建仓"
+        return TradeSignal.B1
 
-    # 死叉多（空中加油）→ 最强多头信号
     if macd_signals.get('is_dead_fake', False):
-        return TradeSignal.B2, "死叉多（空中加油），最强多头信号"
+        return TradeSignal.B2
 
-    # B1: J < -10 + 缩量回调
     if j < -10 and vol_pattern['is_suoliang']:
-        return TradeSignal.B1, f"B1买点，J={j:.2f}"
+        return TradeSignal.B1
 
     # B2: B1后放量确认
     if j > -10 and j < 55:
@@ -1815,21 +2160,18 @@ def detect_trade_signal(klines: List[DailyData]) -> Tuple[TradeSignal, str]:
 
         if any(pj < -10 for pj in prev_j_list):
             if today.pct_chg > 4 and vol_pattern['is_beidou']:
-                return TradeSignal.B2, f"B2确认，涨{today.pct_chg:.2f}%，量比放大"
+                return TradeSignal.B2
 
-    # SB1: 超级B1（放量跌后缩量+J负值）
     if len(klines) >= 5:
         prev_2 = klines[-3]
         if prev_2.close < prev_2.open and prev_2.vol > klines[-4].vol * 1.5:
             if j < -5 and vol_pattern['is_suoliang']:
-                return TradeSignal.SB1, f"超级B1，J={j:.2f}"
-
-    # ========== 持有判断 ==========
+                return TradeSignal.SB1
 
     if today.close > bbi and j > 0 and today.pct_chg > 0:
-        return TradeSignal.HOLD, f"持有信号，收{today.close:.2f}，BBI={bbi:.2f}，J={j:.2f}"
+        return TradeSignal.HOLD
 
-    return TradeSignal.WATCH, f"观望，J={j:.2f}，MACD={macd_hist:.4f}"
+    return TradeSignal.WATCH
 
 
 def analyze_stock(ts_code: str, days: int = 100) -> IndicatorResult:
@@ -1846,7 +2188,7 @@ def analyze_stock(ts_code: str, days: int = 100) -> IndicatorResult:
     klines = get_kline_data(ts_code, days)
 
     if not klines:
-        return IndicatorResult(ts_code=ts_code, trade_date="", signal_desc="无数据")
+        return IndicatorResult(ts_code=ts_code, trade_date="")
 
     today = klines[-1]
     yesterday = klines[-2] if len(klines) > 1 else None
@@ -1871,7 +2213,7 @@ def analyze_stock(ts_code: str, days: int = 100) -> IndicatorResult:
             result.dea = round(dea_list[-1], 4)
             result.macd_hist = round(macd_list[-1], 4)
 
-            # 语料判断
+    # MACD 语料判断
             macd_signals = detect_macd_signals(klines, dif_list, dea_list, macd_list)
             result.is_dif_positive = macd_signals['is_dif_positive']
             result.is_dif_cross_zero = macd_signals['is_dif_cross_zero']
@@ -1881,9 +2223,7 @@ def analyze_stock(ts_code: str, days: int = 100) -> IndicatorResult:
             result.is_gold_fake = macd_signals['is_gold_fake']
             result.is_dead_fake = macd_signals['is_dead_fake']
             result.is_top_divergence = macd_signals['is_top_divergence']
-            result.top_div_desc = macd_signals.get('top_div_desc', '')
             result.is_bottom_divergence = macd_signals['is_bottom_divergence']
-            result.bottom_div_desc = macd_signals.get('bottom_div_desc', '')
             result.macd_veto = macd_signals['macd_veto']
 
     # 计算 BBI（需要足够历史数据）
@@ -1945,6 +2285,10 @@ def analyze_stock(ts_code: str, days: int = 100) -> IndicatorResult:
         result.rsl_short = rsl_s
         result.rsl_long = rsl_l
         result.is_needle_20 = is_needle
+
+    # ========== 单针下30 ==========
+    if len(klines) >= 22:
+        result.is_needle_30 = detect_needle_30(klines)
 
     # ========== 砖型图系统 ==========
     if len(klines) >= 10:
@@ -2020,7 +2364,6 @@ def analyze_stock(ts_code: str, days: int = 100) -> IndicatorResult:
     if len(klines) >= 20:
         nana = detect_nana_chart(klines)
         result.is_nana = nana['is_nana']
-        result.nana_desc = nana['nana_desc']
 
     # ========== 黄金碗 ==========
     if len(klines) >= 120:
@@ -2039,23 +2382,48 @@ def analyze_stock(ts_code: str, days: int = 100) -> IndicatorResult:
     if len(klines) >= 6:
         sb1 = detect_sb1(klines)
         result.is_sb1 = sb1['is_sb1']
-        result.sb1_desc = sb1['sb1_desc']
+
+    # ========== 超级B1 ==========
+    if len(klines) >= 15:
+        sb1_detail = detect_sb1_detailed(klines)
+        result.is_sb1_detailed = sb1_detail['is_sb1_detailed']
+
+    # ========== 双枪战法 ==========
+    if len(klines) >= 15:
+        dg = detect_double_gun(klines)
+        result.is_double_gun = dg['is_double_gun']
+        result.double_gun_vol1 = dg['double_gun_vol1']
+        result.double_gun_vol2 = dg['double_gun_vol2']
+        result.double_gun_gap_days = dg['double_gun_gap_days']
+
+    # ========== 异动选股法 ==========
+    if len(klines) >= 65:
+        yidong = detect_volume_anomaly(klines)
+        result.is_yidong = yidong['is_yidong']
+        result.yidong_type = yidong['yidong_type']
+        result.yidong_vol_ratio = yidong['yidong_vol_ratio']
+        result.yidong_above_60d = yidong['yidong_above_60d']
 
     # ========== B3买点 ==========
     if len(klines) >= 15:
         b3 = detect_b3(klines)
         result.is_b3 = b3['is_b3']
-        result.b3_desc = b3['b3_desc']
+
+    # ========== 四块砖交易体系 ==========
+    if len(klines) >= 10:
+        brick_sys = detect_four_brick_system(klines)
+        result.brick_consecutive = brick_sys['brick_consecutive']
+        result.brick_action = brick_sys['brick_action']
+        result.brick_action_desc = brick_sys['brick_action_desc']
+        result.is_brick_flip_green = brick_sys['is_brick_flip_green']
 
     # 卖出评分
-    sell_score, sell_reason = calculate_sell_score(klines)
+    sell_score, sell_items = calculate_sell_score(klines)
     result.sell_score = sell_score
-    result.sell_reason = sell_reason
+    result.sell_items = sell_items
 
     # 交易信号
-    signal, signal_desc = detect_trade_signal(klines)
-    result.signal = signal
-    result.signal_desc = signal_desc
+    result.signal = detect_trade_signal(klines)
 
     return result
 
@@ -2169,9 +2537,9 @@ def format_result(result: IndicatorResult) -> str:
         macd_lines.append("  !!! 死叉多（空中加油，强多）")
 
     if result.is_top_divergence:
-        macd_lines.append(f"  !!! 顶背离，见顶减仓 ({result.top_div_desc})")
+        macd_lines.append("  !!! 顶背离，见顶减仓")
     if result.is_bottom_divergence:
-        macd_lines.append(f"  !!! 底背离，反转建仓 ({result.bottom_div_desc})")
+        macd_lines.append("  !!! 底背离，反转建仓")
 
     if result.macd_veto:
         macd_lines.append("  XXX MACD一票否决：不能买！")
@@ -2191,6 +2559,8 @@ def format_result(result: IndicatorResult) -> str:
     lines.append("")
     lines.append(f"[双线战法] 白线={result.zg_white:.2f}  大哥线={result.dg_yellow:.2f}  Gold:{result.is_gold_cross}  Dead:{result.is_dead_cross}")
     lines.append(f"[单针下20] RSL_S={result.rsl_short:.2f}  RSL_L={result.rsl_long:.2f}  Signal:{result.is_needle_20}")
+    if result.is_needle_30:
+        lines.append(f"[单针下30] *** 信号触发 (红>85, 白<30)")
     lines.append("")
 
     # B1/B2 战法检测
@@ -2245,25 +2615,47 @@ def format_result(result: IndicatorResult) -> str:
 
     # 娜娜图/黄金碗/呼吸结构/SB1/B3
     if result.is_nana:
-        lines.append(f"[娜娜图] *** 完美建仓  {result.nana_desc}")
+        lines.append(f"[娜娜图] *** 完美建仓信号")
         lines.append("")
     if result.is_in_bowl:
         lines.append(f"[黄金碗] *** 价格在碗内  上沿={result.bowl_upper:.2f}  下沿={result.bowl_lower:.2f}")
         lines.append("")
-    if result.breath_phase and '无' not in result.breath_phase:
+    if result.breath_phase and result.breath_phase != 'none':
         n_type = " N型结构" if result.breath_n_type else ""
-        lines.append(f"[呼吸结构] {result.breath_phase}{n_type}")
+        phase_label = "呼气" if result.breath_phase == 'exhale' else "吸气"
+        lines.append(f"[呼吸结构] {phase_label}{n_type}")
         lines.append("")
     if result.is_sb1:
-        lines.append(f"[SB1假摔] *** {result.sb1_desc}")
+        lines.append(f"[SB1假摔] *** 假摔信号触发")
+        lines.append("")
+    if result.is_sb1_detailed:
+        lines.append(f"[超级B1] *** 超级B1信号触发")
+        lines.append("")
+    if result.is_double_gun:
+        lines.append(f"[双枪战法] *** 第一枪量比{result.double_gun_vol1:.1f}x 第二枪{result.double_gun_vol2:.1f}x 间隔{result.double_gun_gap_days}天")
+        lines.append("")
+    if result.is_yidong:
+        lines.append(f"[异动选股] *** {result.yidong_type} 量比{result.yidong_vol_ratio:.1f}x 60日线={'上方' if result.yidong_above_60d else '下方'}")
         lines.append("")
     if result.is_b3:
-        lines.append(f"[B3买点] *** {result.b3_desc}")
+        lines.append(f"[B3买点] *** B3信号触发")
         lines.append("")
 
-    lines.append(f"[防卖飞评分] {result.sell_score}/5  ({result.sell_reason})")
+    # 四块砖交易体系
+    if result.brick_action:
+        flip_marker = " *** 红翻绿止损" if result.is_brick_flip_green else ""
+        lines.append(f"[四块砖体系] 连续{result.brick_consecutive}砖 | 操作: {result.brick_action}{flip_marker}")
+        lines.append(f"  {result.brick_action_desc}")
+        lines.append("")
+
+    lines.append(f"[防卖飞评分] {result.sell_score}/5")
+    if result.sell_items:
+        for item_name, passed in result.sell_items.items():
+            lines.append(f"  {item_name}: {'[Y]' if passed else '[N]'}")
+    else:
+        lines.append(f"  (数据不足)")
     lines.append("")
-    lines.append(f"[交易信号] {result.signal.value}  {result.signal_desc}")
+    lines.append(f"[交易信号] {result.signal.value}")
     lines.append(f"{'='*60}")
     return "\n".join(lines)
 

@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-Skill-blueviolet)](https://claude.ai/code)
-[![v2.0.0](https://img.shields.io/badge/version-2.0.0-orange)](CHANGELOG.md)
+[![v2.0-JNB](https://img.shields.io/badge/version-2.0--JNB-red)](CHANGELOG.md)
 
 <br>
 
@@ -15,58 +15,197 @@
 
 <br>
 
-[看效果](#效果示例) · [安装](#安装) · [蒸馏了什么](#蒸馏了什么) · [更新日志](CHANGELOG.md)
+[看效果](#效果示例) · [安装](#安装) · [JNB数据接入](#jnb-数据接入) · [蒸馏了什么](#蒸馏了什么) · [更新日志](CHANGELOG.md)
 
 </div>
 
 ---
 
-## v2.0：Agent 能力升级
+## v2.0-JNB：真实数据，真实战场
 
-Z哥 Skill 已从纯 LLM 升级为具备**实时数据查询能力**的 Agent：
+> **Z哥原话：「你用假数据练出来的全是花架子，上了市场就是被割的命。」**
 
-### 核心能力
+zettaranc 不再是坐在房间里空谈理论的「嘴炮AI」了。v2.0-JNB 版本接入了**真实 Tushare API 数据源**，让 Z 哥的思维框架跑在真实行情之上——这才是真正的曼城阵容。
+
+### 什么叫 JNB 版本？
+
+**JNB** = 具备**实时数据查询能力**的 Agent 形态。从纯 LLM 文字对话，升级为能看行情、读指标、查资金流向的**实战型交易助手**。
 
 | 能力 | 说明 |
 |------|------|
 | **实时行情** | 查股价、涨跌幅、量比、市值 |
 | **K线数据** | 日线 OHLCV 历史走势 |
-| **技术指标** | MACD/KDJ/RSI/布林带/砖形图等 |
+| **技术指标** | MACD/KDJ/RSI/布林带/砖形图/DMI... |
 | **资金流向** | 超大单/大单净流入 |
 | **财务数据** | PE/PB、营收、利润 |
 | **涨停数据** | 当日涨停股列表 |
 | **指标缓存** | SQLite 存储每日指标快照，支持历史回测 |
-
-### 安装配置
-
-```bash
-# 1. 克隆项目
-git clone https://github.com/lululu811/zettaranc-skill.git
-cd zettaranc-skill
-
-# 2. 配置环境变量
-cp .env.example .env
-# 编辑 .env，填入 TUSHARE_TOKEN
-
-# 3. 安装依赖
-pip install tushare python-dotenv pandas
-
-# 4. 初始化数据库
-python -m modules.database
-
-# 5. 同步数据
-python -m modules.data_sync sync --ts_code 000001.SZ
-```
+| **曼城阵容** | 内置 10 只重点股真实数据，开箱即用 |
 
 ### 数据架构
 
 ```
-modules/
-├── tushare_client.py    # Tushare API 封装
-├── database.py          # SQLite 数据库管理
-├── data_sync.py         # 数据同步器
-├── indicators.py        # 技术指标计算
-└── zettaranc_voice.py   # Z哥话术生成
+zettaranc-skill/
+├── modules/
+│   ├── tushare_client.py    # Tushare API 封装（120次/分钟限流）
+│   ├── database.py          # SQLite 数据库管理（7 张表）
+│   ├── data_sync.py         # 数据同步器（增量/全量）
+│   ├── indicators.py        # 技术指标计算引擎（60+ 指标）
+│   ├── screener.py          # 选股器（曼城评分体系）
+│   ├── strategies.py        # 30+ 战法识别引擎
+│   ├── setup_wizard.py      # 初始化配置向导
+│   └── zettaranc_voice.py   # Z哥话术生成
+├── tests/                   # 单元测试（126 个用例）
+│   ├── conftest.py          # 测试基础设施
+│   ├── test_database.py
+│   ├── test_indicators.py
+│   ├── test_screener.py
+│   ├── test_strategies.py
+│   └── test_setup_wizard.py
+└── data/
+    └── stock_data.db        # SQLite 数据库（5510 只股票 + 指标缓存）
+```
+
+---
+
+## 安装
+
+### 第一步：克隆项目
+
+```bash
+# GitHub（主仓库）
+git clone https://github.com/lululu811/zettaranc-skill.git
+cd zettaranc-skill
+
+# Gitee（自动同步镜像）
+git clone https://gitee.com/chenleizzzz/zettaranc-knowledge.git
+cd zettaranc-knowledge
+```
+
+### 第二步：安装依赖
+
+```bash
+pip install -r requirements.txt
+```
+
+### 第三步：配置 Tushare Token
+
+```bash
+cp .env.example .env
+```
+
+编辑 `.env` 文件，填入你的 Tushare Token：
+
+```ini
+DATA_MODE=jnb
+TUSHARE_TOKEN=你的token
+DATA_DIR=data
+DB_PATH=data/stock_data.db
+```
+
+> **没有 Token？** 前往 [Tushare 官网](https://tushare.pro/) 注册获取。本项目使用的是中转 API 服务（tsy.xiaodefa.cn），不需要高级积分。
+
+### 第四步：初始化数据库 & 同步数据
+
+```bash
+# 初始化数据库（创建 7 张表）
+python -m modules.database
+
+# 同步股票基本信息（全量 5510 只）
+python -m modules.data_sync sync
+
+# 同步单只股票 K 线
+python -m modules.data_sync sync --ts_code 000001.SZ --days 365
+
+# 查看同步状态
+python -m modules.data_sync status
+```
+
+### 第五步：验证
+
+```bash
+# 运行测试
+python -m pytest tests/ -v
+
+# 预期结果：125 passed, 1 skipped
+```
+
+---
+
+## JNB 数据接入详解
+
+### 数据模式说明
+
+| 模式 | DATA_MODE | 说明 |
+|------|-----------|------|
+| **JNB 模式** | `jnb` | 走 Tushare API，具备实时数据查询能力 |
+| **普通小万** | `websearch` | 走网络搜索，纯 LLM 对话 |
+
+在 `.env` 中设置 `DATA_MODE=jnb` 即可启用真实数据能力。
+
+### 数据库表结构
+
+| 表名 | 用途 | 字段 |
+|------|------|------|
+| `stock_basic` | 股票基本信息 | ts_code, name, industry, market... |
+| `daily_kline` | 日线 K 线 | open, high, low, close, vol, pct_chg... |
+| `indicator_cache` | 技术指标缓存 | KDJ, MACD, BBI, RSI, WR, 布林带... |
+| `moneyflow` | 资金流向 | 大小单买卖金额, 净流入... |
+| `financial_data` | 财务报表 | PE, PB, 营收, 净利润... |
+| `trade_signals` | 交易信号记录 | signal_type, signal_score... |
+| `sync_log` | 同步日志 | data_type, last_date, status... |
+
+### 内置曼城阵容
+
+项目已预置 10 只重点股真实数据（317 天 K 线 + 120 天技术指标）：
+
+| 代码 | 名称 | 行业 |
+|------|------|------|
+| 600519.SH | 贵州茅台 | 白酒 |
+| 000001.SZ | 平安银行 | 银行 |
+| 000002.SZ | 万科A | 地产 |
+| 300750.SZ | 宁德时代 | 新能源 |
+| 601012.SH | 隆基绿能 | 光伏 |
+| 002594.SZ | 比亚迪 | 汽车 |
+| 600036.SH | 招商银行 | 银行 |
+| 000858.SZ | 五粮液 | 白酒 |
+| 601318.SH | 中国平安 | 保险 |
+| 002415.SZ | 海康威视 | 科技 |
+
+### 同步你自己的股票
+
+```bash
+# 同步单只
+python -c "
+from modules.data_sync import DataSyncer
+syncer = DataSyncer()
+syncer.sync_daily_kline('000001.SZ', start_date='20250101')
+syncer.sync_indicator_cache('000001.SZ', days=120)
+"
+
+# 批量同步（需要先在 stock_basic 中有数据）
+python -c "
+from modules.data_sync import DataSyncer
+syncer = DataSyncer()
+syncer.sync_stock_basic()  # 先同步基本信息
+syncer.sync_all_daily_kline(days=365)  # 批量同步K线
+"
+```
+
+### 命令行工具
+
+```bash
+# 初始化数据库
+python -m modules.data_sync init
+
+# 同步所有股票（基本信息 + K线）
+python -m modules.data_sync sync
+
+# 同步指定股票
+python -m modules.data_sync sync --ts_code 600519.SH --days 365
+
+# 查看状态
+python -m modules.data_sync status
 ```
 
 ---
@@ -78,10 +217,10 @@ modules/
 ```
 zettaranc  ❯ 三天没涨？兄弟，少妇战法的纪律摆在这儿——
              买入后第二天 9:33/9:37 不能拉起来，就得走了。
-             
+
              你犹豫到现在，不是因为这票有多好，
              是因为你不舍得那 3 个点的浮亏。
-             
+
              记住一句话：只输一根 K 线。
              你现在输了几根了？
 ```
@@ -90,14 +229,14 @@ zettaranc  ❯ 三天没涨？兄弟，少妇战法的纪律摆在这儿——
 
 ```
 zettaranc  ❯ 全仓梭哈？你这是少妇还是大爷？
-             
+
              我的原则：三波不做。
              第三波你才进去的——你是去给前面两波人结账的。
-             
+
              全仓一只票？2017 年我管产品的时候，单票仓位上限 10%。
              震荡市 5%，下跌市 2-3%。
              这不是保守，这是活到下一把桌的门票。
-             
+
              记住：宁可错过，不做错。
              错过只是少赚，做错是本金没了。
 ```
@@ -106,12 +245,12 @@ zettaranc  ❯ 全仓梭哈？你这是少妇还是大爷？
 
 ```
 zettaranc  ❯ 辞职全职炒股？兄弟，我劝你慎重。
-             
+
              你以为全职炒股是自由？
              是每天早上 9:15 坐在电脑前，
              周末还要研究政策、财报、行业数据。
              这叫自由？这叫给自己找了个 7×24 的老板。
-             
+
              先兼职做，用闲钱做，把交易系统跑通至少一个牛熊周期。
              选择大于努力。但选择之前，先把基本功练扎实。
 ```
@@ -120,9 +259,9 @@ zettaranc  ❯ 辞职全职炒股？兄弟，我劝你慎重。
 
 ---
 
-## 安装
+## 安装方式
 
-### 方式一：Claude Code Skill 安装
+### Claude Code Skill 安装
 
 ```bash
 npx skills add lululu811/zettaranc-skill
@@ -135,24 +274,6 @@ npx skills add lululu811/zettaranc-skill
 > zettaranc 会怎么看现在的行情？
 > 切换到 Z 哥，帮我制定一个交易计划
 ```
-
-### 方式二：直接克隆使用
-
-**GitHub（主仓库）**：
-
-```bash
-git clone https://github.com/lululu811/zettaranc-skill.git
-```
-
-**Gitee（自动同步镜像）**：
-
-```bash
-git clone https://gitee.com/chenleizzzz/zettaranc-knowledge.git
-```
-
-> **注意**：Gitee 为 GitHub 自动同步镜像，无需手动推送。Gitee 平台对 Skill 类项目有公开限制，因此 Skill 核心文件仅在 GitHub 公开。
-
-克隆后将 `SKILL.md` 文件放入你的 AI 工具（Claude Code / Cursor / 其他支持 Skill 的编辑器）的 skill 目录中。
 
 ---
 
@@ -169,7 +290,7 @@ git clone https://gitee.com/chenleizzzz/zettaranc-knowledge.git
 | **逆向操作 / 反共识** | 人人弃之时买入，人人知能赚钱时出货 |
 | **双线趋势判断** | 白线在黄线上=主力在场，白线死叉黄线=无条件清仓 |
 
-### 12 个能力模块 + 5 个数据模块
+### 模块总览
 
 | 模块 | 内容 |
 |------|------|
@@ -182,7 +303,7 @@ git clone https://gitee.com/chenleizzzz/zettaranc-knowledge.git
 | **trend-lines** | 知行趋势线（白线+黄线）、三道防线、五种玩法、碗的概念、牛绳理论 |
 | **exit-strategies** | S1/S2/S3 逃顶体系、摸顶税、与防卖飞边界 |
 | **key-candles** | 关键K理论、6 种趋势转换、衰竭信号、主力打明牌 |
-| **advanced-patterns** | 长安战法、平行重炮、灾后重建、坑里起好货、四分之三阴量、异动地量、对称 VA、B2/B3 完整体系 |
+| **advanced-patterns** | 长安战法、平行重炮、灾后重建、坑里起好货、四分之三阴量、异动地量、对称 VA |
 | **portfolio-management** | 新曼城 4231、指数贡献、ETF 躺平、开超市、结构化仓位、ABC 建仓、3-2-2 阵型 |
 | **trading-psychology** | 交易免疫系统、斗牛士心法、散户三大魔咒、少妇钝感力、屁胡哲学、空仓哲学 |
 
@@ -190,7 +311,7 @@ git clone https://gitee.com/chenleizzzz/zettaranc-knowledge.git
 
 按场景分组：短线纪律 9 条、中线管理 6 条、双线趋势 5 条、逃顶纪律 4 条、高级战法 6 条、长线与宏观 7 条。
 
-### 最新：MACD 指标之王（2026年4月直播）
+### MACD 指标之王（2026年4月直播）
 
 Z哥2026年4月22日长达4小时MACD专题直播，首次系统披露：
 
@@ -204,17 +325,11 @@ Z哥2026年4月22日长达4小时MACD专题直播，首次系统披露：
 
 ### 仓位管理三层模型
 
-根据市场周期调整仓位策略：
-
 | 层级 | 市场状态 | 策略 |
 |------|---------|------|
 | **第一层** | 牛市（强趋势） | 仓位 > 选股，Beta > Alpha，可以满仓不动 |
 | **第二层** | 震荡市 | 精准 > 分散，5-8支票，单票≤20% |
 | **第三层** | 收拳头期（市场高点） | 只卖不买，半仓甚至更低 |
-
-### 23 条决策启发式
-
-按场景分组：短线纪律 9 条、中线管理 6 条、长线与宏观 8 条。
 
 ### 个股多轮问诊
 
@@ -222,8 +337,6 @@ Z哥2026年4月22日长达4小时MACD专题直播，首次系统披露：
 1. 第一轮：周期 + 状态 + 仓位占比
 2. 第二轮：按场景分流（持仓诊断/买点确认/逃命判断/长线配置）
 3. 全程：散户段位自动识别（6 种类型）
-
-详见 [CHANGELOG.md](CHANGELOG.md) 的 v1.5.0 完整变更记录。
 
 ---
 
@@ -247,37 +360,46 @@ zettaranc-skill/
 ├── SKILL.md                    # 可直接使用的 Skill 文件（核心路由器）
 ├── README.md                   # 本文件
 ├── CHANGELOG.md                # 更新日志
-├── TODO.md                     # 待办清单
-├── CONTRIBUTING.md             # 贡献指南
-├── LICENSE                     # MIT 许可证
-├── .gitignore
-├── .env.example              # 环境变量模板
-├── modules/                    # 能力模块
-│   ├── trading-core.md         # 交易核心引擎（四层结构、少妇战法、B1/B2/B3）
-│   ├── indicators.md           # 指标工具箱（MACD、筹码、麒麟会、沙漏）
-│   ├── sell-discipline.md      # 卖出纪律（防卖飞、出货五式、滴滴、S1/S2/S3）
-│   ├── position-management.md  # 仓位管理（铁律、资金量分级、三层防火墙）
-│   ├── market-macro.md         # 宏观判断（周期、活跃市值、逆向操作、四年周期）
-│   ├── stock-glossary.md       # 个股黑话词典（60+ 代号）
-│   ├── trend-lines.md          # 知行趋势线（双线战法、白线黄线、牛绳理论）
-│   ├── exit-strategies.md      # S1/S2/S3 逃顶体系
-│   ├── key-candles.md          # 关键K理论
-│   ├── advanced-patterns.md    # 高级战法合集（长安、重炮、祖冲之...）
-│   ├── portfolio-management.md # 组合配置体系（新曼城4231、ETF躺平）
-│   └── trading-psychology.md   # 交易心理（免疫系统、斗牛士、屁胡哲学）
+├── .env.example                # 环境变量模板
+├── .env                        # 本地配置（不入库）
+├── .gitignore                  # Git 忽略规则
+├── requirements.txt            # Python 依赖
+├── data/                       # 本地数据（不入库，SQLite/CSV/JSON）
+│   └── stock_data.db           # 指标缓存数据库
+├── modules/                    # Python 代码模块
+│   ├── __init__.py
+│   ├── database.py             # SQLite 数据库管理
+│   ├── data_sync.py            # 数据同步器
+│   ├── indicators.py           # 技术指标计算引擎（纯结构化输出）
+│   ├── screener.py             # 选股器
+│   ├── setup_wizard.py         # 初始化向导
+│   ├── strategies.py           # 策略模板
+│   ├── tushare_client.py       # Tushare API 封装
+│   └── zettaranc_voice.py      # Z哥话术生成
+├── knowledge/                  # 知识文档（交易体系/数据字典）
+│   ├── trading-core.md
+│   ├── sell-discipline.md
+│   ├── position-management.md
+│   ├── market-macro.md
+│   ├── indicators.md
+│   ├── trend-lines.md
+│   ├── exit-strategies.md
+│   ├── key-candles.md
+│   ├── advanced-patterns.md
+│   ├── portfolio-management.md
+│   ├── trading-psychology.md
+│   ├── stock-glossary.md
+│   ├── data_dictionary.md
+│   └── signal_dictionary.md
+├── tests/                      # 单元测试
+│   ├── conftest.py             # 测试基础设施
+│   ├── test_database.py
+│   ├── test_indicators.py
+│   ├── test_screener.py
+│   ├── test_strategies.py
+│   └── test_setup_wizard.py
 └── references/
     └── research/               # 11 份调研报告
-        ├── 01-writings.md      # 文字作品蒸馏
-        ├── 02-conversations.md # 对话/直播蒸馏
-        ├── 03-expression-dna.md# 表达 DNA
-        ├── 04-external-views.md# 外部视角
-        ├── 05-decisions.md     # 决策记录
-        ├── 06-timeline.md      # 时间线
-        ├── 07-xiaocainiao-new.md   # 知行小菜鸟 118 文件新增
-        ├── 08-dafuweng-new.md      # 大富翁小菜鸟 185 文件新增
-        ├── 09-tangoo-new.md        # TANGOO 62 文件新增
-        ├── 10-fupan-new.md         # 复盘专用z 49 文件新增
-        └── 11-kedebiao-new.md      # 知行课代表 53 文件新增
 ```
 
 **注**：出于版权和体积考虑，原始语料（视频 transcript、直播文章等）不包含在本仓库中。
@@ -295,6 +417,9 @@ pip install -r requirements.txt
 ### 常用命令
 
 ```bash
+# 运行测试
+python -m pytest tests/ -v
+
 # 质量检查：验证 SKILL.md 是否符合质量标准
 python scripts/quality_check.py SKILL.md
 
@@ -311,9 +436,23 @@ cd scripts && python batch_transcribe.py
 python scripts/srt_to_transcript.py input.srt > output.txt
 ```
 
-### 版本规范
+### TODO / 下一步
 
-遵循语义化版本：MAJOR（心智模型重构）.MINOR（语料扩展/新增模块）.PATCH（排版修复）。详见 [CHANGELOG.md](CHANGELOG.md)。
+- [ ] **实时行情接入**：盘中等间隔刷新，支持盘中实时问诊
+- [ ] **策略回测引擎**：基于指标缓存做历史回测，验证战法胜率
+- [ ] **自动选股**：曼城评分体系全市场扫描，每日推荐候选
+- [ ] **信号推送**：B1/B2/B3 买点触发时自动通知
+- [ ] **财务报表深度解析**：营收、利润、现金流趋势分析
+- [ ] **可视化看板**：K线 + 指标叠加的图表展示
+- [ ] **多周期共振**：日线/周线/分钟线多周期信号对齐
+- [ ] **增量语料接入**：持续蒸馏新的直播/课内容
+- [ ] **Agent 自进化**：基于真实交易结果的反馈优化
+
+---
+
+## 版本规范
+
+遵循语义化版本：MAJOR（心智模型重构 / 架构升级）.MINOR（语料扩展/新增模块）.PATCH（排版修复）。详见 [CHANGELOG.md](CHANGELOG.md)。
 
 ---
 

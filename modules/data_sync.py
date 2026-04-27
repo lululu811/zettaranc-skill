@@ -312,7 +312,10 @@ class DataSyncer:
 
                     # 获取各项指标
                     k, d, j = calculate_kdj(sub_klines) if len(sub_klines) >= 9 else (50, 50, 50)
-                    dif, dea, macd_hist = calculate_macd(sub_klines) if len(sub_klines) >= 30 else (0, 0, 0)
+                    macd_result = calculate_macd(sub_klines) if len(sub_klines) >= 30 else ([], [], [])
+                    dif = macd_result[0][-1] if macd_result[0] else 0
+                    dea = macd_result[1][-1] if macd_result[1] else 0
+                    macd_hist = macd_result[2][-1] if macd_result[2] else 0
                     bbi = calculate_bbi(sub_klines) if len(sub_klines) >= 24 else 0
 
                     closes = [k.close for k in sub_klines]
@@ -340,8 +343,12 @@ class DataSyncer:
                     is_fanbao = detect_fanbao(sub_klines) if len(sub_klines) >= 4 else False
 
                     vol_pattern = detect_volume_pattern(today, yesterday) if yesterday else {}
-                    sell_score, sell_reason = calculate_sell_score(sub_klines) if len(sub_klines) >= 5 else (3, "数据不足")
-                    signal, signal_desc = detect_trade_signal(sub_klines) if len(sub_klines) >= 30 else ("WATCH", "数据不足")
+                    sell_result = calculate_sell_score(sub_klines) if len(sub_klines) >= 5 else (3, {})
+                    sell_score = sell_result[0]
+                    sell_items = sell_result[1] if isinstance(sell_result[1], dict) else {}
+                    sell_reason = ','.join([k for k, v in sell_items.items() if not v]) if sell_items else '数据不足'
+                    signal = detect_trade_signal(sub_klines) if len(sub_klines) >= 30 else "WATCH"
+                    signal_desc = signal.value if hasattr(signal, 'value') else str(signal)
 
                     dmi_plus, dmi_minus, adx = calculate_dmi(sub_klines) if len(sub_klines) >= 30 else (0, 0, 0)
 
@@ -379,7 +386,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
                         int(vol_pattern.get('is_beidou', 0)), int(vol_pattern.get('is_suoliang', 0)),
                         int(vol_pattern.get('is_jiayin_zhenyang', 0)), int(vol_pattern.get('is_jiayang_zhenyin', 0)),
                         int(vol_pattern.get('is_fangliang_yinxian', 0)),
-                        sell_score, sell_reason, signal.value if hasattr(signal, 'value') else signal, signal_desc,
+                        sell_score, sell_reason, signal_desc, signal_desc,
                         prev_high, prev_low, dmi_plus, dmi_minus, adx,
                         0, 0, None, 0, None, 0, 'NEUTRAL', None
                     ))

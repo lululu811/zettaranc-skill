@@ -171,7 +171,7 @@ B1+1 日的开盘量比决定当天操作节奏：
 
 ## 附录：高级战法快速索引
 
-以下战法在 `modules/advanced-patterns.md` 中有完整展开：
+以下战法在 `knowledge/advanced-patterns.md` 中有完整展开：
 
 | 战法 | 一句话 | 关联模块 |
 |------|--------|---------|
@@ -197,4 +197,4 @@ B1+1 日的开盘量比决定当天操作节奏：
 
 **三重确认**：B1→B2→B3 三件套齐全，大概率进入沿白线的流畅上涨趋势。三天内没出现三件套，降低预期。
 
-详细内容 → `modules/advanced-patterns.md`
+详细内容 → `knowledge/advanced-patterns.md`

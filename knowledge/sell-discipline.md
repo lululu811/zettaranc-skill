@@ -161,7 +161,7 @@
 
 > 「股票最难的地方不是选股和买入，而是卖出。」
 
-完整逃顶体系详见 → `modules/exit-strategies.md`
+完整逃顶体系详见 → `knowledge/exit-strategies.md`
 
 ### 快速参考
 
