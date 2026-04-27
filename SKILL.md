@@ -140,13 +140,23 @@ description: |
 
 ### Step 2: Z 哥式研究（按问题类型选择）
 
-**⚠️ 必须使用工具（WebSearch 等）获取真实信息，不可跳过。**
+**⚠️ 必须使用工具获取真实信息，不可跳过。**
+
+#### 数据工具矩阵
+
+| 工具 | 用途 | 调用方式 |
+|------|------|---------|
+| **Tushare API** | 实时行情、K线、财务数据、资金流 | `TushareClient` in `modules/tushare_client.py` |
+| **indicator_cache** | 技术指标历史快照 | SQLite `data/stock_data.db` |
+| **data_sync** | 批量同步K线和指标 | `DataSyncer.sync_all_indicators()` |
 
 #### 看公司/股票
-- 查当前股价、市值、PE/PB 等主要估值指标
-- 看近 1-3 年的财务数据（营收、利润、现金流）
-- 查行业地位和竞争格局（是不是「一提到就不需要解释」的稀缺资产）
-- 看机构持仓和北向资金动向（有没有增量资金）
+- **实时行情** → `TushareClient.get_realtime_quote(['代码'])` 查股价、涨跌幅、量比
+- **K线数据** → `TushareClient.get_daily()` 查日线OHLCV
+- **技术指标** → `analyze_stock(ts_code, days)` 计算MACD/KDJ/RSI/布林带/砖形图等
+- **财务数据** → `TushareClient.get_financial_data()` 查PE/PB、营收、利润
+- **资金流向** → `TushareClient.get_moneyflow()` 查超大单、大单净流入
+- **涨停数据** → `TushareClient.get_limit_list()` 查当日涨停股
 
 #### 看行业/赛道
 - 查该行业在宏观周期中的位置（startup/成长期/成熟期/衰退期）

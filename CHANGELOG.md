@@ -2,7 +2,31 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## [未发布] - v1.6.0
+## [未发布] - v2.0.0
+
+### 重大更新
+- **Agent 能力升级**：从纯 LLM 升级为具备实时数据查询能力的 Agent
+- **Tushare API 集成**：支持实时行情、K线、财务数据、资金流向
+- **SQLite 指标缓存**：每日技术指标快照存储，支持历史回测
+
+### 新增模块（5 个）
+- **modules/tushare_client.py** — Tushare 中转 API 客户端
+- **modules/database.py** — SQLite 数据库管理
+- **modules/data_sync.py** — 数据同步器（K线、指标批量同步）
+- **modules/indicators.py** — 技术指标计算（MACD/KDJ/RSI/布林带/砖形图等）
+- **modules/zettaranc_voice.py** — Z哥话术生成
+
+### 新增数据能力
+- 实时行情查询（股价、涨跌幅、量比）
+- 日线 K 线数据
+- 技术指标实时计算
+- 资金流向数据
+- 涨停股列表
+- 每日指标快照历史
+
+---
+
+## v1.6.0
 
 ### 重大更新
 - **467 篇原始语料全量解析**：从 29% 覆盖率（136/467）扩展至 **100% 全量解析**，完成 5 个新增语料源的精读提炼

@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-Skill-blueviolet)](https://claude.ai/code)
-[![v1.6.0](https://img.shields.io/badge/version-1.6.0-orange)](CHANGELOG.md)
+[![v2.0.0](https://img.shields.io/badge/version-2.0.0-orange)](CHANGELOG.md)
 
 <br>
 
@@ -18,6 +18,56 @@
 [看效果](#效果示例) · [安装](#安装) · [蒸馏了什么](#蒸馏了什么) · [更新日志](CHANGELOG.md)
 
 </div>
+
+---
+
+## v2.0：Agent 能力升级
+
+Z哥 Skill 已从纯 LLM 升级为具备**实时数据查询能力**的 Agent：
+
+### 核心能力
+
+| 能力 | 说明 |
+|------|------|
+| **实时行情** | 查股价、涨跌幅、量比、市值 |
+| **K线数据** | 日线 OHLCV 历史走势 |
+| **技术指标** | MACD/KDJ/RSI/布林带/砖形图等 |
+| **资金流向** | 超大单/大单净流入 |
+| **财务数据** | PE/PB、营收、利润 |
+| **涨停数据** | 当日涨停股列表 |
+| **指标缓存** | SQLite 存储每日指标快照，支持历史回测 |
+
+### 安装配置
+
+```bash
+# 1. 克隆项目
+git clone https://github.com/lululu811/zettaranc-skill.git
+cd zettaranc-skill
+
+# 2. 配置环境变量
+cp .env.example .env
+# 编辑 .env，填入 TUSHARE_TOKEN
+
+# 3. 安装依赖
+pip install tushare python-dotenv pandas
+
+# 4. 初始化数据库
+python -m modules.database
+
+# 5. 同步数据
+python -m modules.data_sync sync --ts_code 000001.SZ
+```
+
+### 数据架构
+
+```
+modules/
+├── tushare_client.py    # Tushare API 封装
+├── database.py          # SQLite 数据库管理
+├── data_sync.py         # 数据同步器
+├── indicators.py        # 技术指标计算
+└── zettaranc_voice.py   # Z哥话术生成
+```
 
 ---
 
@@ -91,7 +141,7 @@ npx skills add lululu811/zettaranc-skill
 **GitHub（主仓库）**：
 
 ```bash
-git clone https://github.com/lululu811/zettaranc-knowledge.git
+git clone https://github.com/lululu811/zettaranc-skill.git
 ```
 
 **Gitee（自动同步镜像）**：
@@ -119,7 +169,7 @@ git clone https://gitee.com/chenleizzzz/zettaranc-knowledge.git
 | **逆向操作 / 反共识** | 人人弃之时买入，人人知能赚钱时出货 |
 | **双线趋势判断** | 白线在黄线上=主力在场，白线死叉黄线=无条件清仓 |
 
-### 12 个能力模块
+### 12 个能力模块 + 5 个数据模块
 
 | 模块 | 内容 |
 |------|------|
@@ -201,7 +251,8 @@ zettaranc-skill/
 ├── CONTRIBUTING.md             # 贡献指南
 ├── LICENSE                     # MIT 许可证
 ├── .gitignore
-├── modules/                    # 12 个能力模块（v1.6.0 新增）
+├── .env.example              # 环境变量模板
+├── modules/                    # 能力模块
 │   ├── trading-core.md         # 交易核心引擎（四层结构、少妇战法、B1/B2/B3）
 │   ├── indicators.md           # 指标工具箱（MACD、筹码、麒麟会、沙漏）
 │   ├── sell-discipline.md      # 卖出纪律（防卖飞、出货五式、滴滴、S1/S2/S3）
@@ -282,7 +333,7 @@ python scripts/srt_to_transcript.py input.srt > output.txt
 
 | 平台 | 地址 | 说明 |
 |------|------|------|
-| **GitHub** | https://github.com/lululu811/zettaranc-knowledge.git | 主仓库，所有内容在此公开 |
+| **GitHub** | https://github.com/lululu811/zettaranc-skill.git | 主仓库，所有内容在此公开 |
 | **Gitee** | https://gitee.com/chenleizzzz/zettaranc-knowledge.git | 镜像同步，Gitee 对 Skill 类项目有公开限制，部分内容可能受限 |
 
 ---

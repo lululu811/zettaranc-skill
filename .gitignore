@@ -3,6 +3,9 @@ merge_output*.txt
 PHASE2_SYNTHESIS.md
 *.log
 
+# 环境变量（包含敏感信息）
+.env
+
 # 原始语料（体积大、版权问题，仓库中仅保留调研提炼文件和 SKILL.md）
 references/sources/
 
