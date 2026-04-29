@@ -104,11 +104,14 @@ cp .env.example .env
 ```ini
 DATA_MODE=jnb
 TUSHARE_TOKEN=你的token
+# Tushare 中转 API（可选，默认已配置好）
+TUSHARE_API_URL=http://tsy.xiaodefa.cn
+TUSHARE_VERIFY_TOKEN_URL=http://tsy.xiaodefa.cn/dataapi/sdk-event
 DATA_DIR=data
 DB_PATH=data/stock_data.db
 ```
 
-> **没有 Token？** 前往 [Tushare 官网](https://tushare.pro/) 注册获取。本项目使用的是中转 API 服务（tsy.xiaodefa.cn），不需要高级积分。
+> **没有 Token？** 前往 [Tushare 官网](https://tushare.pro/) 注册获取。本项目使用的是中转 API 服务，不需要高级积分。
 
 ### 第四步：初始化数据库 & 同步数据
 
@@ -147,6 +150,18 @@ python -m pytest tests/ -v
 | **普通小万** | `websearch` | 走网络搜索，纯 LLM 对话 |
 
 在 `.env` 中设置 `DATA_MODE=jnb` 即可启用真实数据能力。
+
+### Tushare 中转 API 配置
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `TUSHARE_TOKEN` | Tushare API Token（56位） | 必填 |
+| `TUSHARE_API_URL` | 中转 API 地址 | `http://tsy.xiaodefa.cn` |
+| `TUSHARE_VERIFY_TOKEN_URL` | 实时行情验证地址 | `http://tsy.xiaodefa.cn/dataapi/sdk-event` |
+
+> **使用公共中转服务**：默认配置即可，开箱即用。项目使用 `tsy.xiaodefa.cn` 公共中转服务，不需要 Tushare 高级积分。
+>
+> **自建中转服务**：如需自建中转服务，修改这两个 URL 即可。项目代码与中转服务解耦。
 
 ### 数据库表结构
 
