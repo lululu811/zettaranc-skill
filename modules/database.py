@@ -6,7 +6,38 @@
 import os
 import sqlite3
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict, Any
+from dataclasses import dataclass
+
+
+@dataclass
+class TradeRecord:
+    """交易记录数据类"""
+    ts_code: str
+    trade_date: str
+    action: str
+    price: float
+    quantity: int
+    amount: float
+    reason: str = ""
+    signal_type: str = ""
+    zg_review: str = ""
+    broker: str = ""
+    fee: float = 0
+    tags: str = ""
+    notes: str = ""
+
+
+@dataclass
+class StockInfo:
+    """股票信息数据类"""
+    ts_code: str
+    name: str = ""
+    area: str = ""
+    industry: str = ""
+    market: str = ""
+
+
 from contextlib import contextmanager
 from dotenv import load_dotenv
 
@@ -288,7 +319,36 @@ def init_database():
             ON trade_signals(signal_type, signal_date DESC)
         """)
 
-        # 7. 数据更新日志表
+        # 7. 随堂测试/交易记录表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS trade_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts_code TEXT NOT NULL,
+                trade_date TEXT NOT NULL,
+                action TEXT NOT NULL,
+                price REAL NOT NULL,
+                quantity INTEGER NOT NULL,
+                amount REAL NOT NULL,
+                reason TEXT,
+                signal_type TEXT,
+                zg_review TEXT,
+                broker TEXT,
+                fee REAL DEFAULT 0,
+                tags TEXT,
+                notes TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_trade_code_date
+            ON trade_records(ts_code, trade_date DESC)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_trade_action
+            ON trade_records(action, trade_date DESC)
+        """)
+
+        # 8. 数据更新日志表
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS sync_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -305,6 +365,136 @@ def init_database():
 
         # 删除旧的indicators表（如果存在）
         cursor.execute("DROP TABLE IF EXISTS indicators")
+
+
+# ============== 随堂测试/交易记录操作 ==============
+
+def save_trade_record(record: Dict[str, Any]) -> int:
+    """保存交易记录，返回记录ID"""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO trade_records (
+                ts_code, trade_date, action, price, quantity, amount,
+                reason, signal_type, zg_review, broker, fee, tags, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            record.get("ts_code"),
+            record.get("trade_date"),
+            record.get("action"),
+            record.get("price"),
+            record.get("quantity"),
+            record.get("amount"),
+            record.get("reason", ""),
+            record.get("signal_type", ""),
+            record.get("zg_review", ""),
+            record.get("broker", ""),
+            record.get("fee", 0),
+            record.get("tags", ""),
+            record.get("notes", "")
+        ))
+        return cursor.lastrowid
+
+
+def get_trade_records(
+    ts_code: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    action: str = None,
+    limit: int = 100
+) -> List[Dict]:
+    """查询交易记录"""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        sql = "SELECT * FROM trade_records WHERE 1=1"
+        params = []
+
+        if ts_code:
+            sql += " AND ts_code = ?"
+            params.append(ts_code)
+        if start_date:
+            sql += " AND trade_date >= ?"
+            params.append(start_date)
+        if end_date:
+            sql += " AND trade_date <= ?"
+            params.append(end_date)
+        if action:
+            sql += " AND action = ?"
+            params.append(action)
+
+        sql += " ORDER BY trade_date DESC LIMIT ?"
+        params.append(limit)
+
+        cursor.execute(sql, params)
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_trade_record_by_id(trade_id: int) -> Optional[Dict]:
+    """根据ID获取单条交易记录"""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM trade_records WHERE id = ?", (trade_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def update_trade_record(trade_id: int, updates: Dict[str, Any]) -> bool:
+    """更新交易记录"""
+    allowed_fields = {
+        "reason", "signal_type", "zg_review", "broker", "fee", "tags", "notes"
+    }
+    updates = {k: v for k, v in updates.items() if k in allowed_fields}
+
+    if not updates:
+        return False
+
+    set_clause = ", ".join([f"{k} = ?" for k in updates.keys()])
+    values = list(updates.values()) + [trade_id]
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"UPDATE trade_records SET {set_clause} WHERE id = ?",
+            values
+        )
+        return cursor.rowcount > 0
+
+
+def delete_trade_record(trade_id: int) -> bool:
+    """删除交易记录"""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM trade_records WHERE id = ?", (trade_id,))
+        return cursor.rowcount > 0
+
+
+def get_trade_summary(ts_code: str = None, start_date: str = None, end_date: str = None) -> Dict:
+    """获取交易汇总统计"""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        sql = "SELECT action, COUNT(*) as count, SUM(amount) as total_amount FROM trade_records WHERE 1=1"
+        params = []
+
+        if ts_code:
+            sql += " AND ts_code = ?"
+            params.append(ts_code)
+        if start_date:
+            sql += " AND trade_date >= ?"
+            params.append(start_date)
+        if end_date:
+            sql += " AND trade_date <= ?"
+            params.append(end_date)
+
+        sql += " GROUP BY action"
+        cursor.execute(sql, params)
+
+        result = {"BUY": {}, "SELL": {}}
+        for row in cursor.fetchall():
+            result[row["action"]] = {
+                "count": row["count"],
+                "total_amount": row["total_amount"] or 0
+            }
+        return result
 
 
 def drop_all_tables():

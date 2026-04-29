@@ -195,13 +195,140 @@ python -c "import os; from dotenv import load_dotenv; from pathlib import Path; 
 | **indicator_cache** | 技术指标历史快照 | SQLite `data/stock_data.db` |
 | **data_sync** | 批量同步K线和指标 | `DataSyncer.sync_all_indicators()` |
 
-#### 看公司/股票
-- **实时行情** → `TushareClient.get_realtime_quote(['代码'])` 查股价、涨跌幅、量比
-- **K线数据** → `TushareClient.get_daily()` 查日线OHLCV
-- **技术指标** → `analyze_stock(ts_code, days)` 计算MACD/KDJ/RSI/布林带/砖形图等
-- **财务数据** → `TushareClient.get_financial_data()` 查PE/PB、营收、利润
-- **资金流向** → `TushareClient.get_moneyflow()` 查超大单、大单净流入
-- **涨停数据** → `TushareClient.get_limit_list()` 查当日涨停股
+#### 交割单复盘模块（JNB 模式专属）
+
+> **注意**：此功能需要开启 JNB 模式（`DATA_MODE=jnb`），需要 Tushare Token。
+> 非 JNB 模式下只支持基础的保存和查询，无法获取当时的技术指标。
+
+**架构**：Python 只做数据准备，点评由 LLM 用 Z哥角色生成
+
+**触发词**：
+- "复盘"、"交作业"、"检查这笔操作"
+- "分析交割单"、"点评我的交易"
+- "我今天买了一只票"、"我卖了XX"
+- 用户粘贴买卖记录时自动触发
+
+**JNB 模式价值**：
+- 获取**当时的技术指标**（J值、BBI、MACD等）
+- 计算盈亏（匹配对应买入记录）
+- Z哥点评结合真实数据才有灵魂
+
+**数据准备流程**（Python）：
+1. 解析用户输入的交易描述
+2. 查询当时的 K 线/指标数据（JNB 模式）
+3. 计算盈亏、持仓天数（如果能匹配到对应交易）
+4. 构建 `ReviewContext` 数据包
+
+**点评生成流程**（LLM）：
+准备好的数据以结构化文本呈现给 LLM，LLM 以 Z哥角色输出自然语言点评。
+
+**调用示例**：
+```python
+from modules.trade_reviewer import TradeReviewer, ReviewContext
+
+reviewer = TradeReviewer()
+
+# 1. 解析输入
+result, data = reviewer.parse_input("4月25号买了100股茅台，1800块")
+
+# 2. 准备上下文
+ctx = reviewer.prepare_review_context(data, action_type='BUY')
+ctx = reviewer.enrich_with_indicators(ctx)
+
+# 3. 转换为 LLM 提示
+llm_prompt = ctx.to_llm_prompt()
+# → 输出给 LLM，以 Z哥角色输出点评
+```
+
+**LLM 点评时的角色提示**：
+```
+你以 zettaranc（Z哥）的身份点评用户的交易记录。
+
+风格要求：
+- 直接、犀利、不废话
+- 常用反问句确认用户理解
+- 结尾用金句收尾
+- 可以用黑话：卤煮=落袋为安、建仓=试探仓位、卖飞=卖出后大涨
+
+点评维度：
+- 买点：是否符合战法、时机如何、J值位置、BBI位置
+- 卖点：是否卤煮、是否止损、是否卖飞
+- 完整交易：盈亏、持仓天数、买卖点是否准确
+
+数据呈现格式（供参考）：
+【交易记录】
+股票: 茅台 (600519.SH)
+日期: 2026-04-25
+操作: 买入
+价格: 1800元
+数量: 100股
+金额: 180000元
+原因: 放量突破BBI
+
+【当时技术指标】
+J值: -5.2
+BBI: 1780.5
+信号: WATCH
+
+请以 Z哥的口吻点评这笔交易。
+```
+
+**对话示例**：
+```
+用户: "复盘一下，4月25号买了100股茅台，1800块"
+
+Python: 解析数据，准备上下文（获取当时J值=-5.2，BBI=1780）
+LLM（Z哥角色）: "漂亮！这是标准的B2买点。放量突破BBI次日确认，
+                 J值刚从负值拐头，量能配合也好。
+                 但要注意：茅台当时J值已经在-5了，离B1的-10还有点距离，
+                 你这是追涨，不是抄底。要控制仓位，别一把梭..."
+```
+
+#### 看公司/股票（JNB 模式）
+
+**架构**：Python 做数据准备，LLM 用 Z哥角色输出分析
+
+**数据准备**（Python）：
+1. 获取实时行情：`TushareClient.get_realtime_quote(['代码'])`
+2. 获取 K 线数据：`TushareClient.get_daily()`
+3. 计算技术指标：`analyze_stock(ts_code, days)`
+4. 构建分析上下文
+
+**分析输出**（LLM）：
+准备好的数据以结构化文本呈现，LLM 以 Z哥角色输出判断。
+
+```python
+from modules.indicators import analyze_stock
+from modules.tushare_client import TushareClient
+
+# 数据准备
+client = TushareClient()
+realtime = client.get_realtime_quote(['600519.SH'])
+result = analyze_stock('600519.SH', days=60)
+
+# 构建 LLM 上下文
+context = f"""
+【股票】贵州茅台 (600519.SH)
+【实时】现价: {realtime['close']}元，涨跌幅: {realtime['pct_chg']}%
+【技术指标】
+- J值: {result.j:.1f}
+- KDJ: K={result.k:.1f} D={result.d:.1f}
+- BBI: {result.bbi:.2f}
+- MACD: DIF={result.dif:.4f} DEA={result.dea:.4f}
+- 信号: {result.signal}
+- 防卖飞评分: {result.sell_score}/5
+
+请以 Z哥的口吻分析这只股票。
+"""
+```
+
+**指标工具**：
+- `TushareClient.get_realtime_quote(['代码'])` → 股价、涨跌幅、量比
+- `TushareClient.get_daily()` → 日线 OHLCV
+- `analyze_stock(ts_code, days)` → MACD/KDJ/RSI/布林带/砖形图等
+- `TushareClient.get_financial_data()` → PE/PB、营收、利润
+- `TushareClient.get_moneyflow()` → 超大单、大单净流入
+- `TushareClient.get_limit_list()` → 涨停数据
 
 #### 看行业/赛道
 - 查该行业在宏观周期中的位置（startup/成长期/成熟期/衰退期）

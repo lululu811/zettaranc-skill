@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-Skill-blueviolet)](https://claude.ai/code)
-[![v2.0-JNB](https://img.shields.io/badge/version-2.0--JNB-red)](CHANGELOG.md)
+[![v2.1.0](https://img.shields.io/badge/version-2.1.0-red)](CHANGELOG.md)
 
 <br>
 
@@ -21,11 +21,13 @@
 
 ---
 
-## v2.0-JNB：真实数据，真实战场
+## v2.1.0：真实数据，真实战场
 
 > **Z哥原话：「你用假数据练出来的全是花架子，上了市场就是被割的命。」**
 
-zettaranc 不再是坐在房间里空谈理论的「嘴炮AI」了。v2.0-JNB 版本接入了**真实 Tushare API 数据源**，让 Z 哥的思维框架跑在真实行情之上——这才是真正的曼城阵容。
+zettaranc 不再是坐在房间里空谈理论的「嘴炮AI」了。v2.0-JNB 版本接入了**真实 Tushare API 数据源**，让 Z 哥的思维框架跑在真实行情之上。
+
+**v2.1.0 新增**：随堂测试复盘模块 + Python数据层 + LLM点评层架构
 
 ### 什么叫 JNB 版本？
 
@@ -54,7 +56,10 @@ zettaranc-skill/
 │   ├── screener.py          # 选股器（曼城评分体系）
 │   ├── strategies.py        # 30+ 战法识别引擎
 │   ├── setup_wizard.py      # 初始化配置向导
-│   └── zettaranc_voice.py   # Z哥话术生成
+│   ├── zettaranc_voice.py   # Z哥语料库
+│   ├── trade_parser.py      # 随堂测试解析器（口语化输入）
+│   ├── trade_manager.py     # 交易记录 CRUD
+│   └── trade_reviewer.py    # 随堂测试复盘数据层
 ├── tests/                   # 单元测试（126 个用例）
 │   ├── conftest.py          # 测试基础设施
 │   ├── test_database.py
@@ -211,6 +216,33 @@ python -m modules.data_sync status
 ---
 
 ## 效果示例
+
+### 随堂测试复盘（新增 v2.1.0）
+
+```
+用户 > 复盘一下，4月25号买了100股茅台，1800块
+
+zettaranc ❯ 好，我看看你这笔操作。
+
+         当时买的原因是什么？你当时看到了什么？
+用户 > 前一天放量突破了BBI，感觉要启动
+
+zettaranc ❯ 漂亮！这是标准的B2买点。
+
+         放量突破BBI次日确认，时机不错。
+         但要注意：茅台当时J值已经偏高，
+         追高的风险要控制。建议分批建仓，别一把梭...
+
+         计划是什么？后面还有操作吗？
+用户 > 这是建仓，后面等B2确认再加仓
+
+zettaranc ❯ 好，记下了。建仓仓位控制好，等确认再加。
+
+         确认保存这笔记录吗？
+用户 > 确认
+
+✅ 已保存。记录ID: #1，贵州茅台买入，战法: B2
+```
 
 ### 问：这只票我买了三天没涨，该割吗？
 

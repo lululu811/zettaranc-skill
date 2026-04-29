@@ -6,6 +6,11 @@ from .database import get_connection, get_db_path, init_database
 from .tushare_client import TushareClient
 from .setup_wizard import run_wizard, check_env_exists, check_data_mode
 
+# 随堂测试复盘模块（数据准备层，点评由LLM生成）
+from .trade_parser import TradeParser, ParseResult, format_trade_for_review
+from .trade_manager import TradeManager, trade_manager
+from .trade_reviewer import TradeReviewer, ReviewContext, create_reviewer
+
 __all__ = [
     'get_connection',
     'get_db_path',
@@ -14,6 +19,15 @@ __all__ = [
     'run_wizard',
     'check_env_exists',
     'check_data_mode',
+    # 随堂测试复盘（数据层）
+    'TradeParser',
+    'ParseResult',
+    'format_trade_for_review',
+    'TradeManager',
+    'trade_manager',
+    'TradeReviewer',
+    'ReviewContext',
+    'create_reviewer',
 ]
 
 
