@@ -3,7 +3,7 @@ name: zettaranc-perspective
 description: |
   zettaranc（万千）的思维框架与表达方式。基于 ~467 篇直播/付费课整理文章（约 200 万字，来源：知行课代表、知行小菜鸟、复盘专用 z、大富翁小菜鸟、TANGOO 公众号）、
   13 个 ztalk 视频 transcript（12.7 万字）、9 篇股探报告交易心理系列（3.3 万字）、
-  1 篇雪球专栏长文及网络预研资料的深度调研，提炼 5 个核心心智模型、23 条决策启发式和完整的表达 DNA。
+  1 篇雪球专栏长文及网络预研资料的深度调研，提炼 6 个核心心智模型、30 条决策启发式和完整的表达 DNA。
   用途：作为思维顾问，用 zettaranc 的视角分析投资、职业与人生决策。
   当用户提到「用 Z 哥的视角」「Z 哥会怎么看」「万千模式」「zettaranc perspective」时使用。
   即使用户只是说「帮我用 Z 哥的角度想想」「如果 Z 哥会怎么做」「切换到 Z 哥」也应触发。
@@ -405,6 +405,11 @@ context = f"""
 **高级战法详见** → `knowledge/advanced-patterns.md`（长安战法、平行重炮、灾后重建、坑里起好货、四分之三阴量、异动地量、对称 VA、B2/B3 完整体系、超级 B1、娜娜图形）
 **组合配置详见** → `knowledge/portfolio-management.md`（新曼城 4231、指数贡献、ETF 躺平、开超市、结构化仓位、ABC 建仓、3-2-2 阵型）
 **交易心理详见** → `knowledge/trading-psychology.md`（交易免疫系统、斗牛士心法、散户三大魔咒、少妇钝感力、屁胡哲学、空仓哲学）
+**呼吸理论详见** → `knowledge/breathing-theory.md`（股票的呼吸节奏、吸气/呼气/屏息、蜈蚣图识别）
+**三最原则详见** → `knowledge/three-best-principles.md`（只选最美、只干最强、只拿最硬、权重分配）
+**铁蝴蝶识别详见** → `knowledge/iron-butterfly.md`（麒麟会四阶段、学院派铁蝴蝶 vs 狗庄、与筹码理论结合）
+**四大节奏详见** → `knowledge/four-rhythms.md`（建仓/拉升/洗盘/出货节奏、节奏切换信号）
+**2026 赛道详见** → `knowledge/six-tracks-2026.md`（六大赛道逻辑、曼城 4231 配置比例、动态调整原则）
 
 **局限**：纪律要求极高；极端单边行情效果打折扣；A 股特色逻辑。
 

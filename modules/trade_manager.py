@@ -14,7 +14,100 @@ from .database import (
     get_trade_summary
 )
 from .indicators import analyze_stock
-from .strategies import detect_all_strategies
+from .strategies import detect_all_strategies, StrategySignal
+
+
+def get_indicator_data(ts_code: str, trade_date: str) -> Optional[Dict[str, Any]]:
+    """
+    获取指定日期股票的指标数据
+
+    优先查 indicator_cache 表，无记录则尝试实时计算
+    """
+    try:
+        from .database import get_connection
+    except ImportError:
+        from database import get_connection
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM indicator_cache
+            WHERE ts_code = ? AND trade_date = ?
+        """, (ts_code, trade_date))
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+
+    # 无缓存时实时计算（需要本地有 K 线数据）
+    result = analyze_stock(ts_code, days=100)
+    if result and result.trade_date == trade_date:
+        return result.__dict__
+    return None
+
+
+def get_stock_info(ts_code: str) -> Optional[Dict[str, Any]]:
+    """
+    获取股票基本信息
+    """
+    try:
+        from .database import get_connection
+    except ImportError:
+        from database import get_connection
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT ts_code, name, area, industry, market, list_date
+            FROM stock_basic WHERE ts_code = ?
+        """, (ts_code,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def match_strategy(indicators: Dict[str, Any]) -> Optional[StrategySignal]:
+    """
+    根据指标匹配战法
+
+    从指标中提取股票代码和日期，调用战法检测后返回最近匹配的信号
+    """
+    if not indicators:
+        return None
+
+    ts_code = indicators.get('ts_code')
+    trade_date = indicators.get('trade_date')
+    if not ts_code or not trade_date:
+        return None
+
+    signals = detect_all_strategies(ts_code, days=120)
+    if not signals:
+        return None
+
+    # 匹配交易日期当天或前 5 天内的信号（给一定容错）
+    from datetime import datetime, timedelta
+    for fmt in ('%Y-%m-%d', '%Y%m%d'):
+        try:
+            td = datetime.strptime(trade_date, fmt)
+            break
+        except ValueError:
+            continue
+    else:
+        return None
+
+    for s in signals:
+        for fmt in ('%Y-%m-%d', '%Y%m%d'):
+            try:
+                sd = datetime.strptime(s.trade_date, fmt)
+                break
+            except ValueError:
+                continue
+        else:
+            continue
+
+        delta = (td - sd).days
+        if 0 <= delta <= 5:
+            return s
+
+    return None
 
 
 class TradeManager:

@@ -2,6 +2,114 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [v2.4.0] - 2026-05-28
+
+> **「拆分到原子，组合成系统。」**
+
+### 架构重构
+
+- **`modules/indicators.py` → `modules/indicators/` 包（4 子模块）**
+  - `core.py` — 基础类型 + 数学工具 + 核心指标（MA/EMA/KDJ/MACD/BBI/RSI/WR/布林带/量比/DMI）
+  - `price_patterns.py` — 价格形态（双线/单针/砖型图/B1/B2/B3/图形识别）
+  - `volume_patterns.py` — 量价信号（卖出评分/交易信号/量比异动）
+  - `data_layer.py` — 数据接入（get_kline_data/analyze_stock/缓存层/可视化）
+  - `__init__.py` 兼容层保持外部导入不变
+
+### 新增模块
+
+- **`modules/backtest.py`** — 策略组合回测框架：
+  - `backtest_multi_strategy()` 单股票多策略融合，支持 `position_pct` 仓位控制
+  - `backtest_portfolio()` 多股票组合回测，支持 `max_weight` 单股上限
+  - `PortfolioBacktestResult` 含资金曲线、夏普比率、年化收益、最大回撤
+  - `Position` 持仓记录（A股 100 股为 1 手）
+- **`modules/cli.py`** — 命令行工具：
+  - `python -m modules.cli analyze <ts_code>` 股票分析
+  - `python -m modules.cli backtest <ts_code> --strategy b1` 单策略回测
+  - `python -m modules.cli backtest <ts_code> --strategy all` 多策略组合回测
+  - `python -m modules.cli watchlist` 观察池管理
+  - `python -m modules.cli screener` 选股扫描
+
+### 性能优化
+
+- **`modules/strategies.py` `detect_all_strategies()` 26x 加速**
+  - 原 800ms → 31ms（600487.SH 60 日数据）
+  - 预计算指标序列避免 O(n²) 重复计算
+  - 提前返回 + 缓存复用
+
+### 数据层增强
+
+- **指标缓存层打通**：
+  - `data_sync.py` 新增 `sync_indicator_cache()` / `sync_all_indicators()`
+  - `indicator_cache` 表存储 60+ 字段每日快照（KDJ/MACD/BBI/MA/RSI/WR/布林带/双线/砖形图/DMI/量比/信号）
+  - `get_kline_data()` 优先读缓存，未命中回退到 `daily_kline`
+- **`modules/data_sync.py`** — 增量更新优化、跳过已同步股票、2 天同步间隔保护
+- **`modules/tushare_client.py`** — 移除 URL 硬编码，严格从 `.env` 读取
+
+### Bug 修复
+
+- `modules/cli.py` `watchlist` 命令修复：使用函数导入替代不存在的 `Watchlist` 类
+
+### 测试
+
+- **全量回归测试**：213 passed, 1 skipped
+
+---
+
+## [v2.3.0] - 2026-05-28
+
+> **「框架的完备不是终点，落地执行才是。」**
+
+### 量化引擎补完
+
+- **`modules/trade_manager.py`** — 修复 3 个运行时错误（`get_indicator_data` / `get_stock_info` / `match_strategy`）
+- **`modules/strategies.py`** — 补完 3 个未实现战法：
+  - **平行重炮**（PINGHANG）：两根放量阳线夹阴线，第 2 根量能 ≥ 第 1 根 90%
+  - **坑里起好货**（KENGQI）：放量挖坑 → 缩量填坑 → 回到坑沿 = 最后震仓
+  - **对称 VA**（DUIchen）：时间对称 + 空间对称检测，识别"不守恒"突破点
+- **新增 S1/S2/S3 逃顶检测**：
+  - S1：流畅上涨后出现丑陋大绿帽（放量阴线 + 收盘接近低点）
+  - S2：股价挑战前高但 MACD 顶背离（价格新高 + DIF 未新高）
+  - S3：S1 后反弹至下沿但量能不足，最后逃生窗口
+- **新增麒麟会四阶段分析**（`analyze_kirin_phase`）：吸筹 / 拉升 / 派发 / 回落
+
+### 交互功能扩展
+
+- **新建 `modules/portfolio_diagnosis.py`** — 持股检查端到端模块：
+  - 当前状态扫描（BBI/白线/黄线位置、KDJ、MACD 状态）
+  - 防卖飞评分调用（V1.4）
+  - 出货信号扫描（S1/S2/S3）
+  - 战法匹配（B1/B2/B3/SB1 可买区间）
+  - 止损/止盈位提示
+  - CLI 入口：`python -m modules.portfolio_diagnosis 000001.SZ`
+- **新建 `modules/watchlist.py`** — 自选股观察池：
+  - `add_watch` / `remove_watch` / `list_watch`
+  - `scan_watchlist`：批量扫描 B1/B2 信号、破位预警、异动检测
+  - `generate_daily_report`：每日观察报告自动生成
+  - CLI 入口：`python -m modules.watchlist add 000001.SZ --tags 波段`
+- **`modules/screener.py` 选股增强**：
+  - 解除 50 只限制，默认 500 只性能保护，支持 `--max-stocks 0` 全量扫描
+  - 新增选股策略：`super_b1` / `changan` / `b2_breakout` / `b3_consensus`
+- **`modules/database.py`** — 新增 `watchlist` 表（自选股持久化）
+
+### 内容补完
+
+- **`knowledge/breathing-theory.md`** — 呼吸理论：吸气/呼气/屏息、呼吸紊乱识别、与四块砖法则的关系
+- **`knowledge/three-best-principles.md`** — 三最原则详细展开：只选最美/只干最强/只拿最硬、权重分配
+- **`knowledge/iron-butterfly.md`** — 铁蝴蝶形态：麒麟会四阶段、学院派铁蝴蝶 vs 狗庄、与筹码理论结合
+- **`knowledge/four-rhythms.md`** — 四大核心节奏：建仓/拉升/洗盘/出货的节奏切换信号
+- **`knowledge/six-tracks-2026.md`** — 2026 六大赛道逻辑重构：创新药/AI 算力/新能源/高端制造/消费升级/周期资源
+- **`SKILL.md`** — 版本信息更新（6 个心智模型 / 30 条启发式）、新增 5 篇知识文档引用
+
+### 测试
+
+- 新增 `tests/test_trade_manager.py`（5 个用例）
+- 新增 `tests/test_portfolio_diagnosis.py`（10 个用例）
+- 新增 `tests/test_watchlist.py`（4 个用例）
+- `tests/test_strategies.py` 扩展：平行重炮、坑里起好货、对称VA、S1、麒麟会阶段
+- **全量回归测试**：184 passed, 1 skipped
+
+---
+
 ## [v2.2.0] - 2026-05-23
 
 > **「知识的增量不是加法，是乘法——每新增一个概念，都可能重构整个体系。」**

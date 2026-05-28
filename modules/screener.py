@@ -448,7 +448,7 @@ def analyze_stock(ts_code: str, klines: List[Dict] = None) -> StockScore:
     return score
 
 
-def screen_stocks(criteria: str = "b1") -> List[StockScore]:
+def screen_stocks(criteria: str = "b1", max_stocks: int = 0) -> List[StockScore]:
     """
     选股筛选
 
@@ -457,11 +457,24 @@ def screen_stocks(criteria: str = "b1") -> List[StockScore]:
     - "perfect": 完美图形
     - "breakout": 突破形态
     - "oversold": 超跌反弹
+    - "super_b1": 超级B1（放量下跌+缩量企稳+J负值）
+    - "changan": 长安战法（B1+放量长阳+缩半量）
+    - "b2_breakout": B2突破（涨幅≥4%+放量+J<55+无上影线）
+    - "b3_consensus": B3分歧转一致
+
+    max_stocks: 最大扫描数量，0=全量（默认500只性能保护）
     """
     stocks = get_all_stocks()
+    limit = max_stocks if max_stocks > 0 else 500
     results = []
 
-    for stock in stocks[:50]:  # 限制数量避免超时
+    # 引入战法检测（用于高级选股）
+    try:
+        from .strategies import detect_b1, detect_b2, detect_b3, detect_sb1, detect_changan
+    except ImportError:
+        from strategies import detect_b1, detect_b2, detect_b3, detect_sb1, detect_changan
+
+    for stock in stocks[:limit]:
         ts_code = stock['ts_code']
         klines = get_recent_klines(ts_code, 60)
 
@@ -470,7 +483,7 @@ def screen_stocks(criteria: str = "b1") -> List[StockScore]:
 
         score = analyze_stock(ts_code, klines)
 
-        # 根据条件筛选
+        # 基础选股策略
         if criteria == "b1" and score.b1_score >= 50:
             results.append(score)
         elif criteria == "perfect" and score.score >= 65:
@@ -479,6 +492,35 @@ def screen_stocks(criteria: str = "b1") -> List[StockScore]:
             results.append(score)
         elif criteria == "breakout" and score.volume_score >= 70:
             results.append(score)
+        # 高级选股策略（基于战法检测）
+        elif criteria == "super_b1":
+            for i in range(max(10, len(klines) - 5), len(klines)):
+                sig = detect_sb1(klines, i)
+                if sig:
+                    score.warnings.append(f"超级B1 J={sig.details.get('j', 0):.1f}")
+                    results.append(score)
+                    break
+        elif criteria == "changan":
+            for i in range(max(3, len(klines) - 5), len(klines)):
+                sig = detect_changan(klines, i)
+                if sig:
+                    score.reasons.append(f"长安战法 胜率75%")
+                    results.append(score)
+                    break
+        elif criteria == "b2_breakout":
+            for i in range(max(15, len(klines) - 5), len(klines)):
+                sig = detect_b2(klines, i)
+                if sig:
+                    score.reasons.append(f"B2突破 涨{sig.details.get('pct_chg', 0):.1f}%")
+                    results.append(score)
+                    break
+        elif criteria == "b3_consensus":
+            for i in range(max(20, len(klines) - 5), len(klines)):
+                sig = detect_b3(klines, i)
+                if sig:
+                    score.reasons.append(f"B3分歧转一致")
+                    results.append(score)
+                    break
 
     # 按评分排序
     results.sort(key=lambda x: x.score, reverse=True)
@@ -641,9 +683,11 @@ def main():
                         help="操作: score=单股评分, screen=选股, workflow=每日工作流")
     parser.add_argument("--ts_code", help="股票代码")
     parser.add_argument("--criteria", default="b1",
-                       choices=["b1", "perfect", "breakout", "oversold"],
+                       choices=["b1", "perfect", "breakout", "oversold",
+                                "super_b1", "changan", "b2_breakout", "b3_consensus"],
                        help="选股条件")
     parser.add_argument("--limit", type=int, default=10, help="返回数量")
+    parser.add_argument("--max-stocks", type=int, default=0, help="最大扫描数量(0=全量)")
 
     args = parser.parse_args()
 
@@ -655,7 +699,7 @@ def main():
         print(format_stock_score(score))
 
     elif args.action == "screen":
-        results = screen_stocks(args.criteria)
+        results = screen_stocks(args.criteria, max_stocks=args.max_stocks)
         print(f"\n{'='*60}")
         print(f"选股结果 ({args.criteria}) 共{len(results)}只")
         print(f"{'='*60}")

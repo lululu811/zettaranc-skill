@@ -361,10 +361,79 @@ def init_database():
             )
         """)
 
+        # 9. 自选股观察池表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS watchlist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts_code TEXT NOT NULL UNIQUE,
+                name TEXT,
+                tags TEXT DEFAULT '',
+                added_date TEXT DEFAULT CURRENT_TIMESTAMP,
+                alert_enabled INTEGER DEFAULT 1,
+                notes TEXT DEFAULT '',
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_watchlist_tags
+            ON watchlist(tags)
+        """)
+
         print(f"数据库初始化完成: {get_db_path()}")
 
         # 删除旧的indicators表（如果存在）
         cursor.execute("DROP TABLE IF EXISTS indicators")
+
+
+# ============== 自选股观察池操作 ==============
+
+def add_watchlist_item(ts_code: str, name: str = "", tags: str = "", notes: str = "") -> int:
+    """添加自选股，返回ID"""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT OR REPLACE INTO watchlist (ts_code, name, tags, notes)
+            VALUES (?, ?, ?, ?)
+        """, (ts_code, name, tags, notes))
+        return cursor.lastrowid
+
+
+def remove_watchlist_item(ts_code: str) -> bool:
+    """移除自选股"""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM watchlist WHERE ts_code = ?", (ts_code,))
+        return cursor.rowcount > 0
+
+
+def get_watchlist(tags: str = None) -> List[Dict]:
+    """获取自选股列表"""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        sql = "SELECT * FROM watchlist ORDER BY added_date DESC"
+        params = ()
+        if tags:
+            sql = "SELECT * FROM watchlist WHERE tags LIKE ? ORDER BY added_date DESC"
+            params = (f"%{tags}%",)
+        cursor.execute(sql, params)
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def update_watchlist_item(ts_code: str, updates: Dict[str, Any]) -> bool:
+    """更新自选股信息"""
+    allowed = {"name", "tags", "alert_enabled", "notes"}
+    updates = {k: v for k, v in updates.items() if k in allowed}
+    if not updates:
+        return False
+    set_clause = ", ".join([f"{k} = ?" for k in updates.keys()])
+    values = list(updates.values()) + [ts_code]
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"UPDATE watchlist SET {set_clause}, updated_at = CURRENT_TIMESTAMP WHERE ts_code = ?",
+            values
+        )
+        return cursor.rowcount > 0
 
 
 # ============== 随堂测试/交易记录操作 ==============

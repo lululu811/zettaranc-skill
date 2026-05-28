@@ -24,8 +24,8 @@ load_dotenv(_env_path, override=True)
 
 logger = logging.getLogger(__name__)
 
-TUSHARE_API_URL = os.environ.get("TUSHARE_API_URL", "http://tsy.xiaodefa.cn")
-VERIFY_TOKEN_URL = os.environ.get("TUSHARE_VERIFY_TOKEN_URL", "http://tsy.xiaodefa.cn/dataapi/sdk-event")
+TUSHARE_API_URL = os.environ.get("TUSHARE_API_URL", "")
+VERIFY_TOKEN_URL = os.environ.get("TUSHARE_VERIFY_TOKEN_URL", "")
 TUSHARE_TOKEN = os.environ.get("TUSHARE_TOKEN", "")
 
 

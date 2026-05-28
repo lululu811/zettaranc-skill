@@ -39,8 +39,8 @@ load_dotenv(_env_path)
 # ==================== 配置 ====================
 
 DB_TEST_PATH = "data/db_test.db"
-TUSHARE_API_URL = os.environ.get("TUSHARE_API_URL", "")
-VERIFY_TOKEN_URL = os.environ.get("TUSHARE_VERIFY_TOKEN_URL", "")
+TUSHARE_API_URL = "http://tsy.xiaodefa.cn"
+VERIFY_TOKEN_URL = "http://tsy.xiaodefa.cn/dataapi/sdk-event"
 
 # 限流控制：120次/分钟
 MIN_INTERVAL = 60 / 120

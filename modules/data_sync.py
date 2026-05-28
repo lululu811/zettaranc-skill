@@ -43,6 +43,9 @@ class DataSyncer:
         if not self.token:
             raise ValueError("未设置 TUSHARE_TOKEN")
 
+        if not TUSHARE_API_URL:
+            raise ValueError("未设置 TUSHARE_API_URL，请在 .env 中配置")
+
         # 初始化 Tushare
         ts.set_token(self.token)
         self.pro = ts.pro_api()
@@ -273,7 +276,7 @@ class DataSyncer:
             # 导入指标计算模块
             try:
                 from .indicators import (
-                    get_kline_data, analyze_stock, calculate_kdj, calculate_macd,
+                    get_kline_data, precompute_kdj_sequence, precompute_macd_sequence,
                     calculate_bbi, calculate_ma, calculate_rsi_multi, calculate_wr_multi,
                     calculate_bollinger, calculate_vol_ratio, calculate_zg_white,
                     calculate_dg_yellow, detect_double_line_cross, detect_needle_20,
@@ -283,7 +286,7 @@ class DataSyncer:
                 )
             except ImportError:
                 from indicators import (
-                    get_kline_data, analyze_stock, calculate_kdj, calculate_macd,
+                    get_kline_data, precompute_kdj_sequence, precompute_macd_sequence,
                     calculate_bbi, calculate_ma, calculate_rsi_multi, calculate_wr_multi,
                     calculate_bollinger, calculate_vol_ratio, calculate_zg_white,
                     calculate_dg_yellow, detect_double_line_cross, detect_needle_20,
@@ -297,8 +300,9 @@ class DataSyncer:
             if not klines:
                 return 0
 
-            # 计算所有指标
-            result = analyze_stock(ts_code, days)
+            # 预计算指标序列（避免循环中O(n²)重复计算）
+            kdj_seq = precompute_kdj_sequence(klines) if len(klines) >= 9 else None
+            macd_dif_seq, macd_dea_seq, macd_hist_seq = precompute_macd_sequence(klines) if len(klines) >= 30 else (None, None, None)
 
             # 准备写入数据
             with get_connection() as conn:
@@ -310,12 +314,19 @@ class DataSyncer:
                     today = kline
                     yesterday = sub_klines[-2] if len(sub_klines) > 1 else None
 
-                    # 获取各项指标
-                    k, d, j = calculate_kdj(sub_klines) if len(sub_klines) >= 9 else (50, 50, 50)
-                    macd_result = calculate_macd(sub_klines) if len(sub_klines) >= 30 else ([], [], [])
-                    dif = macd_result[0][-1] if macd_result[0] else 0
-                    dea = macd_result[1][-1] if macd_result[1] else 0
-                    macd_hist = macd_result[2][-1] if macd_result[2] else 0
+                    # 获取各项指标（优先从预计算序列取值）
+                    if kdj_seq:
+                        k, d, j = kdj_seq[i]
+                    else:
+                        k, d, j = 50, 50, 50
+
+                    if macd_dif_seq:
+                        dif = macd_dif_seq[i]
+                        dea = macd_dea_seq[i]
+                        macd_hist = macd_hist_seq[i]
+                    else:
+                        dif, dea, macd_hist = 0, 0, 0
+
                     bbi = calculate_bbi(sub_klines) if len(sub_klines) >= 24 else 0
 
                     closes = [k.close for k in sub_klines]
@@ -526,6 +537,10 @@ def main():
                         help="操作: init=初始化数据库, sync=同步数据, status=查看状态")
     parser.add_argument("--ts_code", help="股票代码，如 000001.SZ")
     parser.add_argument("--days", type=int, default=730, help="同步天数")
+    parser.add_argument("--indicators", action="store_true",
+                        help="同步完成后计算并缓存技术指标（indicator_cache 表）")
+    parser.add_argument("--skip-indicators", action="store_true",
+                        help="跳过指标缓存同步（默认单只股票自动同步，批量需指定 --indicators）")
 
     args = parser.parse_args()
 
@@ -545,10 +560,18 @@ def main():
         if args.ts_code:
             # 同步单只股票
             syncer.sync_daily_kline(args.ts_code)
+            # 单只股票默认同步指标缓存（除非显式跳过）
+            if not args.skip_indicators:
+                print(f"正在同步指标缓存: {args.ts_code} ...")
+                syncer.sync_indicator_cache(args.ts_code, days=args.days)
         else:
             # 批量同步所有股票
             syncer.sync_stock_basic()
             syncer.sync_all_daily_kline(days=args.days)
+            # 批量同步指标缓存（需显式指定 --indicators）
+            if args.indicators and not args.skip_indicators:
+                print("正在批量同步指标缓存...")
+                syncer.sync_all_indicators()
 
         print("同步完成")
         print(syncer.get_sync_status())

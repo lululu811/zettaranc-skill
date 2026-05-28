@@ -8,6 +8,7 @@ PHASE2_SYNTHESIS.md
 
 # 本地数据（SQLite 数据库，体积大且个人化，不入库）
 data/*.db
+data/*.db-journal
 
 # 原始语料（体积大、版权问题，仓库中仅保留调研提炼文件和 SKILL.md）
 references/sources/

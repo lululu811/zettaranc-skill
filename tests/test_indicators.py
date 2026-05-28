@@ -425,11 +425,12 @@ class TestSellScore:
     def test_basic(self):
         klines = make_klines(n=30, base_price=100.0, daily_pct=0.5)
         result = calculate_sell_score(klines)
-        # 实际返回 (score, items) 两个值
-        assert len(result) == 2
-        score, items = result
+        # 返回 (score, desc, items) 三个值
+        assert len(result) == 3
+        score, desc, items = result
         assert isinstance(score, int)
         assert 0 <= score <= 5
+        assert isinstance(desc, str)
         assert isinstance(items, dict)
 
     def test_insufficient_data(self):
