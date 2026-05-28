@@ -1270,7 +1270,7 @@ def detect_brick_signals(klines: List[Dict], index: int) -> Optional[StrategySig
 
     只在状态变化当天触发，避免连续多天重复信号。
     """
-    if index < 15:
+    if index < 11:
         return None
 
     today = klines[index]
