@@ -27,14 +27,7 @@ def get_data_mode() -> str:
     """获取当前数据模式：jnb 或 websearch"""
     return DATA_MODE
 
-_env_path = Path(__file__).parent.parent / ".env"
-_db_path_str = os.getenv("DB_PATH", "data/stock_data.db")
-_db_path = Path(_db_path_str)
-DB_PATH = str(_db_path.resolve())
-DATA_MODE = os.getenv("DATA_MODE", "websearch")
-def get_data_mode() -> str:
-    """获取当前数据模式：jnb 或 websearch"""
-    return DATA_MODE
+
 class TradeSignal(Enum):
     """交易信号"""
     B1 = "B1"           # 买入点1
@@ -45,6 +38,8 @@ class TradeSignal(Enum):
     S2 = "S2"           # 卖出信号2
     HOLD = "HOLD"       # 持有
     WATCH = "WATCH"     # 观望
+
+
 @dataclass
 class DailyData:
     """单日行情数据"""
@@ -146,9 +141,9 @@ class IndicatorResult:
     # 量价信号
     is_beidou: bool = False      # 倍量
     is_suoliang: bool = False    # 缩量
-    is_jiayin_zhenyang: bool = 0  # 假阴真阳
-    is_jiayang_zhenyin: bool = 0  # 假阳真阴
-    is_fangliang_yinxian: bool = 0 # 放量阴线
+    is_jiayin_zhenyang: bool = False  # 假阴真阳
+    is_jiayang_zhenyin: bool = False  # 假阳真阴
+    is_fangliang_yinxian: bool = False  # 放量阴线
 
     # 卖出评分
     sell_score: int = 0         # 0-5分
