@@ -7,14 +7,14 @@ from typing import List, Dict, Any, Optional, Tuple
 try:
     from .core import (
         DailyData, TradeSignal, IndicatorResult,
-        calculate_ma, calculate_ema, calculate_sma_td, calculate_slope,
+        calculate_ma, calculate_ema, calculate_ema_series, calculate_sma_td, calculate_sma_td_series, calculate_slope,
         calculate_kdj, calculate_bbi, calculate_rsi_multi, calculate_wr_multi,
         calculate_bollinger, calculate_vol_ratio,
     )
 except ImportError:
     from core import (
         DailyData, TradeSignal, IndicatorResult,
-        calculate_ma, calculate_ema, calculate_sma_td, calculate_slope,
+        calculate_ma, calculate_ema, calculate_ema_series, calculate_sma_td, calculate_sma_td_series, calculate_slope,
         calculate_kdj, calculate_bbi, calculate_rsi_multi, calculate_wr_multi,
         calculate_bollinger, calculate_vol_ratio,
     )
@@ -165,18 +165,15 @@ def calculate_zg_white(klines: List[DailyData]) -> float:
     """
     计算 Z哥白线 = EMA(EMA(C,10),10)
 
-    双重平滑后的短期动能线
+    通达信公式: EMA(EMA(CLOSE,10),10)
+    正确做法：先对完整收盘价序列算 EMA(C,10)，再对结果序列算 EMA(x,10)
     """
-    if len(klines) < 10:
+    if len(klines) < 19:
         return 0
     closes = [k.close for k in klines]
-    ema1 = calculate_ema(closes, 10)
-    # 再次平滑：用前10天数据计算第二次EMA
-    if len(klines) < 19:
-        return ema1
-    recent_10 = closes[-10:]
-    ema2 = calculate_ema(recent_10, 10)
-    return round(ema2, 2)
+    ema1_series = calculate_ema_series(closes, 10)
+    ema2_series = calculate_ema_series(ema1_series, 10)
+    return round(ema2_series[-1], 2)
 def calculate_dg_yellow(klines: List[DailyData]) -> float:
     """
     计算 大哥线 = (MA14 + MA28 + MA57 + MA114) / 4
@@ -533,7 +530,7 @@ def calculate_dmi(klines: List[DailyData], period: int = 14) -> Tuple[float, flo
     return round(dmi_plus, 2), round(dmi_minus, 2), round(adx, 2)
 def calculate_brick_value(klines: List[DailyData]) -> float:
     """
-    计算砖型图数值（通达信标准公式 - 短期砖型图指标v2026）
+    计算砖型图数值（通达信标准公式，递归 SMA 从数据起点累积）
 
     VAR1A = (HHV(HIGH,4) - CLOSE) / (HHV(HIGH,4) - LLV(LOW,4)) * 100 - 90
     VAR2A = SMA(VAR1A, 4, 1) + 100
@@ -543,76 +540,68 @@ def calculate_brick_value(klines: List[DailyData]) -> float:
     VAR6A = VAR5A - VAR2A
     砖型图 = IF(VAR6A > 4, VAR6A - 4, 0)
     """
-    if len(klines) < 12:
-        return 0
+    brick_list = calculate_brick_series(klines)
+    return brick_list[-1] if brick_list else 0
+
+
+def calculate_brick_series(klines: List[DailyData]) -> List[float]:
+    """
+    计算砖型图完整序列（通达信标准，递归 SMA 从数据起点累积）
+
+    关键：通达信的 SMA(X, N, M) 从序列第一个值开始递归，
+    每一天的结果都参与下一天的计算。不能只取尾部数据。
+
+    Returns: 砖型图值序列（从第4根K线开始有值）
+    """
+    if len(klines) < 4:
+        return []
 
     highs = [k.high for k in klines]
     lows = [k.low for k in klines]
     closes = [k.close for k in klines]
 
-    # 构建 VAR3A 序列（需要至少 6 个值来算 SMA(VAR3A,6,1)）
-    var3a_list = []
-    for i in range(3, len(klines)):  # HHV/LLV 需要 4 天，所以从索引 3 开始
-        hhv4 = max(highs[max(0, i-3):i+1])
-        llv4 = min(lows[max(0, i-3):i+1])
-        if hhv4 == llv4:
-            v3 = 50
-        else:
-            v3 = (closes[i] - llv4) / (hhv4 - llv4) * 100
-        var3a_list.append(v3)
-
-    if len(var3a_list) < 6:
-        return 0
-
-    # VAR4A = SMA(VAR3A, 6, 1)
-    var4a = calculate_sma_td(var3a_list[-6:], 6, 1)
-
-    # 构建 VAR4A 历史序列来算 SMA
-    var4a_list = []
-    for i in range(5, len(var3a_list) + 1):
-        sub = var3a_list[max(0, i-6):i]
-        if len(sub) >= 6:
-            v4 = calculate_sma_td(sub, 6, 1)
-            var4a_list.append(v4)
-
-    if len(var4a_list) < 6:
-        # 数据不足，用已有数据近似
-        var5a = var4a + 100
-    else:
-        # VAR5A = SMA(VAR4A, 6, 1) + 100
-        var5a = calculate_sma_td(var4a_list[-6:], 6, 1) + 100
-
-    # 构建 VAR1A 序列
+    # 计算每个位置的 HHV(4) 和 LLV(4)，从索引 3 开始
     var1a_list = []
+    var3a_list = []
+
     for i in range(3, len(klines)):
-        hhv4 = max(highs[max(0, i-3):i+1])
-        llv4 = min(lows[max(0, i-3):i+1])
+        hhv4 = max(highs[i-3:i+1])
+        llv4 = min(lows[i-3:i+1])
+
         if hhv4 == llv4:
-            v1 = -90
+            var1a_list.append(-90.0)
+            var3a_list.append(50.0)
         else:
             v1 = (hhv4 - closes[i]) / (hhv4 - llv4) * 100 - 90
-        var1a_list.append(v1)
+            v3 = (closes[i] - llv4) / (hhv4 - llv4) * 100
+            var1a_list.append(v1)
+            var3a_list.append(v3)
 
-    if len(var1a_list) < 4:
-        var2a = (var1a_list[-1] if var1a_list else -90) + 100
-    else:
-        # VAR2A = SMA(VAR1A, 4, 1) + 100
-        var2a = calculate_sma_td(var1a_list[-4:], 4, 1) + 100
+    # VAR2A = SMA(VAR1A, 4, 1) + 100 -- 从头递归
+    var2a_series = calculate_sma_td_series(var1a_list, 4, 1)
+    var2a_list = [v + 100 for v in var2a_series]
+
+    # VAR4A = SMA(VAR3A, 6, 1) -- 从头递归
+    var4a_list = calculate_sma_td_series(var3a_list, 6, 1)
+
+    # VAR5A = SMA(VAR4A, 6, 1) + 100 -- 从头递归
+    var5a_series = calculate_sma_td_series(var4a_list, 6, 1)
+    var5a_list = [v + 100 for v in var5a_series]
 
     # VAR6A = VAR5A - VAR2A
-    var6a = var5a - var2a
+    var6a_list = [var5a_list[i] - var2a_list[i] for i in range(len(var5a_list))]
 
     # 砖型图 = IF(VAR6A > 4, VAR6A - 4, 0)
-    brick = var6a - 4 if var6a > 4 else 0
+    brick_list = [round(v - 4, 2) if v > 4 else 0 for v in var6a_list]
 
-    return round(brick, 2)
+    return brick_list
 def calculate_brick_history(klines: List[DailyData], lookback: int = 20) -> Tuple[str, int]:
     """
     计算砖型图趋势（连续红砖/绿砖数量）
 
-    通达信公式逻辑（与官方一致）：
-    - 红砖：今日砖值 >= 昨日砖值（动量上涨）→ COLORRED
-    - 绿砖：今日砖值 < 昨日砖值（动量下跌）→ COLOR00FF00
+    通达信逻辑：
+    - 红砖：今日砖值 >= 昨日砖值（动量上涨）
+    - 绿砖：今日砖值 < 昨日砖值（动量下跌）
 
     Args:
         klines: K线数据
@@ -621,36 +610,34 @@ def calculate_brick_history(klines: List[DailyData], lookback: int = 20) -> Tupl
     Returns:
         (趋势状态: RED/GREEN/NEUTRAL, 连续砖数)
     """
-    if len(klines) < 10:
+    if len(klines) < 5:
         return "NEUTRAL", 0
 
-    # 计算历史砖值序列（对比昨日大小判断红绿）
-    # 1=红(涨), -1=绿(跌), 0=平
-    brick_colors = []
-    prev_brick = None
+    # 一次性计算完整砖值序列
+    brick_list = calculate_brick_series(klines)
 
-    for i in range(8, len(klines) + 1):
-        sub_klines = klines[:i]
-        brick_val = calculate_brick_value(sub_klines)
+    if len(brick_list) < 2:
+        return "NEUTRAL", 0
 
-        if prev_brick is not None:
-            if brick_val >= prev_brick:
-                brick_colors.append(1)   # 红砖 = 上涨
-            else:
-                brick_colors.append(-1)  # 绿砖 = 下跌
-        prev_brick = brick_val
+    # 只取最近 lookback 天
+    brick_list = brick_list[-lookback:]
 
-    if not brick_colors:
+    # 计算红绿：当日砖值 >= 前日砖值 = 红砖
+    colors = []
+    for i in range(1, len(brick_list)):
+        if brick_list[i] >= brick_list[i-1]:
+            colors.append(1)   # 红砖
+        else:
+            colors.append(-1)  # 绿砖
+
+    if not colors:
         return "NEUTRAL", 0
 
     # 从最新往前数连续同色砖
-    current_color = brick_colors[-1]
-    if current_color == 0:
-        return "NEUTRAL", 0
-
+    current_color = colors[-1]
     count = 1
-    for i in range(len(brick_colors) - 2, -1, -1):
-        if brick_colors[i] == current_color:
+    for i in range(len(colors) - 2, -1, -1):
+        if colors[i] == current_color:
             count += 1
         else:
             break
