@@ -256,20 +256,33 @@ def calculate_ma(prices: List[float], period: int) -> float:
         return 0
     return sum(prices[-period:]) / period
 def calculate_ema(prices: List[float], period: int) -> float:
-    """计算指数移动平均"""
-    if len(prices) < period:
-        return 0
+    """计算指数移动平均（返回最新值）"""
+    series = calculate_ema_series(prices, period)
+    return series[-1] if series else 0
+
+
+def calculate_ema_series(prices: List[float], period: int) -> List[float]:
+    """
+    计算指数移动平均完整序列（通达信标准，从第一个值递归）
+
+    EMA[i] = price[i] * k + EMA[i-1] * (1 - k)
+    EMA[0] = price[0]
+
+    Returns: 与 prices 等长的 EMA 序列
+    """
+    if not prices:
+        return []
 
     k = 2 / (period + 1)
-    ema = prices[0]
+    result = [prices[0]]
 
     for price in prices[1:]:
-        ema = price * k + ema * (1 - k)
+        result.append(price * k + result[-1] * (1 - k))
 
-    return ema
+    return result
 def calculate_sma_td(values: List[float], period: int, m: int) -> float:
     """
-    通达信 SMA 函数
+    通达信 SMA 函数（仅取最终值）
 
     公式: SMA = X * M/N + SMA_prev * (1 - M/N)
 
@@ -279,18 +292,39 @@ def calculate_sma_td(values: List[float], period: int, m: int) -> float:
         m: 权重 M
 
     Returns:
-        SMA 值
+        SMA 最终值
     """
-    if len(values) < period:
-        return sum(values) / len(values) if values else 0
+    series = calculate_sma_td_series(values, period, m)
+    return series[-1] if series else 0
+
+
+def calculate_sma_td_series(values: List[float], period: int, m: int) -> List[float]:
+    """
+    通达信标准 SMA 递归函数，返回完整序列
+
+    SMA[i] = X[i] * M/N + SMA[i-1] * (1 - M/N)
+    SMA[0] = X[0]（初始值）
+
+    通达信的 SMA 是从第一个值开始递归累积的，每一天的结果都影响下一天。
+
+    Args:
+        values: 输入序列
+        period: 周期 N
+        m: 权重 M
+
+    Returns:
+        与 values 等长的 SMA 序列
+    """
+    if not values:
+        return []
 
     weight = m / period
-    sma = values[0]
+    result = [values[0]]
 
-    for v in values[1:]:
-        sma = v * weight + sma * (1 - weight)
+    for i in range(1, len(values)):
+        result.append(values[i] * weight + result[-1] * (1 - weight))
 
-    return sma
+    return result
 def calculate_slope(values: List[float], period: int) -> float:
     """
     通达信 SLOPE 函数（线性回归斜率）
