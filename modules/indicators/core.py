@@ -415,114 +415,96 @@ def calculate_kdj(klines: List[DailyData], period: int = 9,
     return round(k, 2), round(d, 2), round(j, 2)
 def precompute_kdj_sequence(klines: List[DailyData], period: int = 9) -> List[Tuple[float, float, float]]:
     """
-    预计算全量 KDJ 序列（增量算法，O(n)）
-
-    返回每一天的 (K, D, J)，避免在循环中重复计算。
+    预计算全量 KDJ 序列（增量算法，O(n)），使用 Pandas 向量化优化。
     """
+    import pandas as pd
     n = len(klines)
     if n < period:
         return [(50.0, 50.0, 50.0)] * n
 
-    result: list[tuple[float, float, float]] = []
-    k = 50.0
-    d = 50.0
+    df = pd.DataFrame({
+        'high': [k.high for k in klines],
+        'low': [k.low for k in klines],
+        'close': [k.close for k in klines]
+    })
 
-    for i in range(n):
-        if i < period - 1:
-            result.append((50.0, 50.0, 50.0))
-            continue
+    low_min = df['low'].rolling(window=period, min_periods=period).min()
+    high_max = df['high'].rolling(window=period, min_periods=period).max()
+    
+    rsv = (df['close'] - low_min) / (high_max - low_min) * 100
+    rsv = rsv.fillna(50.0)
 
-        low_min = min(klines[j].low for j in range(i - period + 1, i + 1))
-        high_max = max(klines[j].high for j in range(i - period + 1, i + 1))
-
-        if high_max == low_min:
-            rsv = 50.0
-        else:
-            rsv = (klines[i].close - low_min) / (high_max - low_min) * 100
-
-        k = (2/3) * k + (1/3) * rsv
-        d = (2/3) * d + (1/3) * k
-        j = 3 * k - 2 * d
-
-        result.append((round(k, 2), round(d, 2), round(j, 2)))
-
-    return result
+    first_valid_idx = period - 1
+    valid_rsv = rsv.iloc[first_valid_idx:]
+    
+    rsv_with_init = pd.concat([pd.Series([50.0]), valid_rsv]).reset_index(drop=True)
+    
+    k = rsv_with_init.ewm(alpha=1/3, adjust=False).mean()
+    d = k.ewm(alpha=1/3, adjust=False).mean()
+    j = 3 * k - 2 * d
+    
+    k = k.iloc[1:].reset_index(drop=True)
+    d = d.iloc[1:].reset_index(drop=True)
+    j = j.iloc[1:].reset_index(drop=True)
+    
+    prefix_k = pd.Series([50.0]*first_valid_idx)
+    prefix_d = pd.Series([50.0]*first_valid_idx)
+    prefix_j = pd.Series([50.0]*first_valid_idx)
+    
+    final_k = pd.concat([prefix_k, k], ignore_index=True).round(2)
+    final_d = pd.concat([prefix_d, d], ignore_index=True).round(2)
+    final_j = pd.concat([prefix_j, j], ignore_index=True).round(2)
+    
+    return list(zip(final_k.tolist(), final_d.tolist(), final_j.tolist()))
 def precompute_bbi_sequence(klines: List[DailyData]) -> List[float]:
     """
-    预计算全量 BBI 序列（增量算法，O(n)）
+    预计算全量 BBI 序列，使用 Pandas 向量化优化。
     """
+    import pandas as pd
     n = len(klines)
     if n < 24:
         return [0.0] * n
 
-    closes = [k.close for k in klines]
-    result = []
-
-    for i in range(n):
-        if i < 23:
-            result.append(0.0)
-        else:
-            sub = closes[:i+1]
-            ma3 = calculate_ma(sub, 3)
-            ma6 = calculate_ma(sub, 6)
-            ma12 = calculate_ma(sub, 12)
-            ma24 = calculate_ma(sub, 24)
-            result.append(round((ma3 + ma6 + ma12 + ma24) / 4, 2))
-
-    return result
+    closes = pd.Series([k.close for k in klines])
+    
+    ma3 = closes.rolling(window=3, min_periods=3).mean()
+    ma6 = closes.rolling(window=6, min_periods=6).mean()
+    ma12 = closes.rolling(window=12, min_periods=12).mean()
+    ma24 = closes.rolling(window=24, min_periods=24).mean()
+    
+    bbi = (ma3 + ma6 + ma12 + ma24) / 4
+    bbi = bbi.fillna(0.0).round(2)
+    
+    return bbi.tolist()
 def precompute_macd_sequence(klines: List[DailyData],
                               fast: int = 12, slow: int = 26, signal: int = 9) -> Tuple[List[float], List[float], List[float]]:
     """
-    预计算全量 MACD 序列（增量算法，O(n)）
-
+    预计算全量 MACD 序列，使用 Pandas 向量化优化。
+    
     返回每一天的 (DIF, DEA, MACD_HIST)。
     对于数据不足的天数，返回 0.0。
     """
+    import pandas as pd
     n = len(klines)
-    dif_seq = [0.0] * n
-    dea_seq = [0.0] * n
-    macd_seq = [0.0] * n
-
     if n < slow:
-        return dif_seq, dea_seq, macd_seq
+        return [0.0] * n, [0.0] * n, [0.0] * n
 
-    closes = [k.close for k in klines]
-
-    # 增量计算 EMA
-    k_fast = 2 / (fast + 1)
-    k_slow = 2 / (slow + 1)
-
-    ema_fast = [closes[0]]
-    ema_slow = [closes[0]]
-
-    for i in range(1, n):
-        ema_fast.append(closes[i] * k_fast + ema_fast[-1] * (1 - k_fast))
-        ema_slow.append(closes[i] * k_slow + ema_slow[-1] * (1 - k_slow))
-
-    # DIF 从 slow-1 开始有效
-    dif_list = []
-    for i in range(slow - 1, n):
-        dif_val = ema_fast[i] - ema_slow[i]
-        dif_list.append(dif_val)
-        dif_seq[i] = dif_val
-
-    if len(dif_list) < signal:
-        return dif_seq, dea_seq, macd_seq
-
-    # 增量计算 DEA (DIF 的 EMA)
-    k_signal = 2 / (signal + 1)
-    dea = [dif_list[0]]
-
-    for i in range(1, len(dif_list)):
-        dea_val = dif_list[i] * k_signal + dea[-1] * (1 - k_signal)
-        dea.append(dea_val)
-
-        dea_idx = slow - 1 + i
-        if dea_idx < n:
-            dea_seq[dea_idx] = dea_val
-            macd_seq[dea_idx] = 2 * (dif_list[i] - dea_val)
-
-    return dif_seq, dea_seq, macd_seq
+    df = pd.DataFrame({'close': [k.close for k in klines]})
+    
+    ema_fast = df['close'].ewm(span=fast, adjust=False).mean()
+    ema_slow = df['close'].ewm(span=slow, adjust=False).mean()
+    dif = ema_fast - ema_slow
+    
+    # Strictly match TDX loop initialization
+    dif_series = dif.copy()
+    dif_series.loc[:slow-2] = 0.0
+    
+    dea_valid = dif_series.iloc[slow-1:].ewm(span=signal, adjust=False).mean()
+    dea_series = pd.concat([pd.Series([0.0]*(slow-1)), dea_valid]).reset_index(drop=True)
+    
+    macd_series = (dif_series - dea_series) * 2
+    
+    return dif_series.tolist(), dea_series.tolist(), macd_series.tolist()
 def calculate_macd(klines: List[DailyData],
                    fast: int = 12, slow: int = 26, signal: int = 9) -> Tuple[List[float], List[float], List[float]]:
     """
