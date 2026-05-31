@@ -166,16 +166,16 @@ def get_kline_data(ts_code: str, days: int = 120) -> List[Dict]:
             'is_jiayin': row['close'] < row['open'] and row['close'] > prev_close,
             'is_yinxian': row['close'] < prev_close,
             'is_fangliang_yinxian': row['close'] < prev_close and row['vol'] > prev_vol * 1.5,
-            
-            # MDC 扩展字段
-            'boll_upper': row['boll_upper'],
-            'boll_mid': row['boll_mid'],
-            'boll_lower': row['boll_lower'],
-            'rsi6': row['rsi6'],
-            'adx': row['adx'],
-            'dmi_plus': row['dmi_plus'],
-            'dmi_minus': row['dmi_minus'],
-            'net_mf': row['net_mf'],
+
+            # MDC 扩展字段（LEFT JOIN 可能为 NULL，统一 fallback）
+            'boll_upper': row['boll_upper'] or 0,
+            'boll_mid': row['boll_mid'] or 0,
+            'boll_lower': row['boll_lower'] or 0,
+            'rsi6': row['rsi6'] or 0,
+            'adx': row['adx'] or 0,
+            'dmi_plus': row['dmi_plus'] or 0,
+            'dmi_minus': row['dmi_minus'] or 0,
+            'net_mf': row['net_mf'] or 0,
             'large_inflow': (row['buy_lg_amount'] or 0) + (row['buy_elg_amount'] or 0),
             'large_outflow': (row['sell_lg_amount'] or 0) + (row['sell_elg_amount'] or 0),
         })

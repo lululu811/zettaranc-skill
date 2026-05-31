@@ -1,6 +1,10 @@
 from typing import List, Dict, Optional
 from .core import StrategyType, StrategySignal, Priority, Action, _calc_kdj, _calc_bbi
 
+def _safe_num(val, default=0):
+    """Return val if it's a real number, otherwise default."""
+    return val if val is not None else default
+
 def detect_b1(klines: List[Dict], index: int, 
               kirin_context: Optional[Dict] = None) -> Optional[StrategySignal]:
     """
@@ -61,19 +65,19 @@ def detect_b1(klines: List[Dict], index: int,
         mdc_details.append("触及布林下轨(超跌)")
 
     # 5. MDC 验证 - 资金流 (主力意图)
-    if today.get('large_inflow', 0) > today.get('large_outflow', 0):
+    if _safe_num(today.get('large_inflow')) > _safe_num(today.get('large_outflow')):
         confidence += 0.10
         mdc_details.append("主力大单净流入")
         
     # 6. MDC 验证 - RSI (极端超卖)
-    if today.get('rsi6', 50) < 25:
+    if (today.get('rsi6') or 50) < 25:
         confidence += 0.05
         mdc_details.append("RSI极端超卖")
 
     # 7. MDC 验证 - DMI (趋势动能)
-    if today.get('adx', 0) > 40:
+    if _safe_num(today.get('adx')) > 40:
         confidence += 0.10
-        mdc_details.append(f"ADX高位动能竭尽({today['adx']:.1f})")
+        mdc_details.append(f"ADX高位动能竭尽({_safe_num(today.get('adx')):.1f})")
 
     confidence = max(0.1, min(confidence, 0.98))
 
@@ -176,13 +180,14 @@ def detect_b2(klines: List[Dict], index: int,
     net_inflow = today.get('large_inflow', 0) - today.get('large_outflow', 0)
     if net_inflow > 0 and total_amount > 0:
         inflow_ratio = net_inflow / total_amount
-        if inflow_ratio > 0.05: # 大单净占比 > 5%
+        if _safe_num(inflow_ratio, 0) > 0.05:
             confidence += 0.15
             mdc_details.append(f"主力大单强力净流入({inflow_ratio*100:.1f}%)")
             
     # 6. MDC 验证 - DMI (金叉验证)
     if today.get('dmi_plus') and yesterday.get('dmi_minus'):
-        if yesterday['dmi_plus'] < yesterday['dmi_minus'] and today['dmi_plus'] > today['dmi_minus']:
+        if (_safe_num(yesterday.get('dmi_plus')) < _safe_num(yesterday.get('dmi_minus'))
+                and _safe_num(today.get('dmi_plus')) > _safe_num(today.get('dmi_minus'))):
             confidence += 0.10
             mdc_details.append("DMI趋势金叉")
 

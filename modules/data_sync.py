@@ -598,6 +598,134 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
         return results
 
 
+    # ==================== 每日估值指标 (PE/PB/PS) ====================
+
+    def ensure_daily_basic_columns(self):
+        """确保 daily_kline 表包含 PE/PB/PS/总市值/流通市值 列"""
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(daily_kline)")
+            existing = {row[1] for row in cursor.fetchall()}
+
+            for col_name, col_type in [
+                ('pe', 'REAL'), ('pe_ttm', 'REAL'), ('pb', 'REAL'),
+                ('ps', 'REAL'), ('ps_ttm', 'REAL'),
+                ('total_mv', 'REAL'), ('circ_mv', 'REAL'),
+            ]:
+                if col_name not in existing:
+                    cursor.execute(f"ALTER TABLE daily_kline ADD COLUMN {col_name} {col_type}")
+                    logger.info(f"Added column {col_name} to daily_kline")
+
+    def sync_daily_basic(self, ts_code: str, start_date: str = "", end_date: str = "") -> int:
+        """
+        同步单只股票的每日估值指标（PE/PB/PS/市值等）
+
+        使用 Tushare daily_basic 接口，数据写入 daily_kline 表对应列。
+
+        Args:
+            ts_code: 股票代码
+            start_date: 起始日期 YYYYMMDD，默认 2 年前
+            end_date: 结束日期 YYYYMMDD，默认今天
+
+        Returns:
+            更新条数
+        """
+        try:
+            self.ensure_daily_basic_columns()
+            self._rate_limit("daily_basic")
+
+            if not start_date:
+                start_date = (datetime.now() - timedelta(days=730)).strftime("%Y%m%d")
+            if not end_date:
+                end_date = datetime.now().strftime("%Y%m%d")
+
+            df = self.pro.daily_basic(
+                ts_code=ts_code,
+                start_date=start_date,
+                end_date=end_date,
+            )
+
+            if df is None or len(df) == 0:
+                return 0
+
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                for row in df.itertuples(index=False):
+                    row_dict = row._asdict()
+                    cursor.execute("""
+                        UPDATE daily_kline SET
+                            pe = ?, pe_ttm = ?, pb = ?, ps = ?, ps_ttm = ?,
+                            total_mv = ?, circ_mv = ?
+                        WHERE ts_code = ? AND trade_date = ?
+                    """, (
+                        row_dict.get('pe'), row_dict.get('pe_ttm'),
+                        row_dict.get('pb'), row_dict.get('ps'), row_dict.get('ps_ttm'),
+                        row_dict.get('total_mv'), row_dict.get('circ_mv'),
+                        row_dict['ts_code'], row_dict['trade_date'],
+                    ))
+
+            self._log_sync("daily_basic", ts_code, end_date, "success")
+            return len(df)
+
+        except Exception as e:
+            logger.error(f"每日估值指标同步失败 {ts_code}: {e}")
+            self._log_sync("daily_basic", ts_code, "", "failed", str(e))
+            return 0
+
+    def sync_all_daily_basic(self, ts_codes: Optional[List[str]] = None,
+                              days: int = 730) -> Dict[str, int]:
+        """
+        批量同步多只股票的每日估值指标（并发执行）
+
+        Args:
+            ts_codes: 股票代码列表，None 表示同步所有有 K 线的股票
+            days: 同步天数，默认 2 年
+
+        Returns:
+            每只股票的更新条数
+        """
+        self.ensure_daily_basic_columns()
+        results = {}
+
+        if ts_codes is None:
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT DISTINCT ts_code FROM daily_kline ORDER BY ts_code")
+                ts_codes = [row[0] for row in cursor.fetchall()]
+
+        logger.info(f"开始批量同步每日估值指标，共 {len(ts_codes)} 只股票...")
+
+        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y%m%d")
+        end_date = datetime.now().strftime("%Y%m%d")
+
+        progress_lock = threading.Lock()
+        completed = 0
+        total = len(ts_codes)
+
+        def sync_single(ts_code):
+            nonlocal completed
+            try:
+                count = self.sync_daily_basic(ts_code, start_date, end_date)
+                with progress_lock:
+                    completed += 1
+                    if completed % 10 == 0:
+                        logger.info(f"进度: {completed}/{total}")
+                return ts_code, count
+            except Exception as e:
+                logger.error(f"估值指标同步失败 {ts_code}: {e}")
+                with progress_lock:
+                    completed += 1
+                return ts_code, 0
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [executor.submit(sync_single, code) for code in ts_codes]
+            for future in concurrent.futures.as_completed(futures):
+                code, count = future.result()
+                results[code] = count
+
+        logger.info(f"批量估值指标同步完成，成功 {sum(1 for v in results.values() if v > 0)}/{len(ts_codes)}")
+        return results
+
     # ==================== 资金流向 ====================
 
     def sync_moneyflow(self, ts_code: str, trade_date: str) -> int:
