@@ -1,0 +1,61 @@
+name: E2E Real Data Regression (Weekly Cron)
+
+# v2.10.0 P2-1：每周一 02:00 UTC 跑一次真实数据回归
+# 用途：作为 PUSH/PR 触发的 test.yml::e2e-realdata 的补充
+#       （test.yml 只在 fork/自己有 secret 时跑，cron 可保证主仓库定期执行）
+
+on:
+  schedule:
+    # 每周一 02:00 UTC（约北京时间 10:00）
+    - cron: "0 2 * * 1"
+  workflow_dispatch:  # 允许手动触发
+    inputs:
+      ts_code:
+        description: "股票代码（默认 600519.SH）"
+        required: false
+        default: "600519.SH"
+
+jobs:
+  realdata-weekly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: ${{ secrets.TUSHARE_TOKEN != '' && secrets.TUSHARE_API_URL != '' }}
+    # 观察期：失败不阻塞（v2.11.0 再决定要不要严格）
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+          pip install -e .
+
+      - name: Run real data regression
+        env:
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+          TUSHARE_API_URL: ${{ secrets.TUSHARE_API_URL }}
+        run: |
+          echo "=== 真实数据回归 (周一 02:00 UTC cron) ==="
+          date -u
+          pytest tests/test_indicators_realdata.py -v --tb=short --junitxml=realdata-regression.xml
+          # 留一份报告供 review
+          if [ -f realdata-regression.xml ]; then
+            echo "=== junit XML summary ==="
+            grep -E 'testsuite|testcase' realdata-regression.xml | head -30
+          fi
+
+      - name: Upload regression report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: realdata-regression-${{ github.run_id }}
+          path: realdata-regression.xml
+          if-no-files-found: ignore
+          retention-days: 30

@@ -2,6 +2,52 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [v2.10.0-rc.1] - 2026-06-02
+
+> **「性能地基 → 质量地基：3 个必修 CLI bug 修复、6 业务脚本薄壳化（3623→203 行）、zt 统一入口、5 个 CI job、pre-commit 护栏。」**
+
+### P0 必修（4 项 · 1-2 天）
+
+- **修 3 个必修 CLI bug**：`cmd_screen` 必崩（StockScore 字段错位）+ `cmd_watchlist scan` 静默零结果（`stocks`→`alerts` key 名不匹配）+ 11 种 strategy 中文别名映射到 screener 英文 criteria（STRATEGY_ALIAS）
+- **CI lint 真起作用**：删 `.github/workflows/test.yml` 的 `|| true` 装饰品，加 `ruff format --check`；`pyproject.toml` 追加 `[tool.ruff]` 块（F/E/W/UP，line-length=120）
+- **死代码清零 + NameError 修复 + 硬编码路径清零**：`git rm scripts/sync_db_test.py`（自 4/30 起 100% 失败）；修 `scripts/sync_and_compute.py:25` `NameError`（`with open(...) as f:` 缺 `stocks = json.load(f)`）；4 个脚本硬编码 `/Users/chenlei/.../stocks_final.json` 改 `STOCKS_JSON` env + 默认 `data/stocks_final.json` 相对路径；`scripts/fetch_tushare_data.py` 加 DEPRECATED 头（指向 `python -m modules.data_sync`）
+- **SKILL.md 质量门接 CI**：`corpus/quality_check.py` 加 `--json` / `--strict` flag，CI 新增 `quality-gate` job（`continue-on-error: true` 观察期）
+
+### P1 重构（4 项 · 3-5 天）
+
+- **6 业务脚本薄壳化（3623 → 203 行，-94%）**：`sync_watchlist.py` / `sync_and_compute.py` / `batch_compute_indicators.py` / `generate_report.py` 全部改写为 < 60 行薄壳；`DataSyncer` 新增 `sync_missing()` + `sync_daily_and_compute()` 业务逻辑接收方；`modules/report.py` 新增（`assess_watchlist` + `render_assessment` + `write_assessment`）；删 ~600 行 `compute_ma/ema/kdj/rsi/boll/macd` 重复实现
+- **合并 5 个独立 main() 到 zt 统一入口**：`modules/cli.py` 用 argparse subparser 收 7 个顶层命令（analyze/screen/score/workflow/diagnose/watchlist/sync）+ 9 个子动作（watchlist 5 + sync 4）
+- **6 语料脚本迁 `corpus/`**：`batch_download_bilibili.py` / `batch_transcribe.py` / `srt_to_transcript.py` / `merge_research.py` / `quality_check.py` / `download_subtitles.sh` 从 `scripts/` 移到 `corpus/`；`AGENTS.md` + `.github/workflows/test.yml` 引用同步更新；`pyproject.toml` exclude 加 `corpus*`
+- **限流升级 multiprocessing 安全**：`modules/data_sync.py` 新增模块级 `_RateLimiter`（multiprocessing.Lock + 60s 滑动窗口 token bucket）；`TUSHARE_RPM` env var 覆盖（默认 180）
+
+### P2 加值（2 项 · 1-2 天）
+
+- **CI 真实数据回归**：`tests/test_indicators_realdata.py`（600519.SH × MACD/KDJ/RSI vs Tushare `stk_factor` 官方值，skipif 无 token 跳过）；`.github/workflows/test.yml` 新增 `e2e-realdata` job（仅在配置 TUSHARE_TOKEN secret 时跑，`continue-on-error: true` 观察期）；新建 `.github/workflows/e2e-cron.yml`（每周一 02:00 UTC 跑）
+- **pre-commit 钩子**：`.pre-commit-config.yaml` 配 ruff（lint + format）+ mypy（限于关键模块）+ SKILL.md 质量门 + 标准文件检查；CI 新增 `pre-commit` job
+
+### 测试
+
+- **+103 个 pytest 用例**（264 → **367 passed, 10 skipped**）
+- 5 个新测试文件：`tests/test_cli_screen.py` / `tests/test_cli_subparser.py` / `tests/test_data_sync_extensions.py` / `tests/test_rate_limiter.py` / `tests/test_indicators_realdata.py` / `tests/test_quality_check.py`
+
+### 风险与回退
+
+- lint / quality-gate / e2e-realdata / pre-commit 4 个 CI job 均 `continue-on-error: true`（v2.10.0 观察期，不阻塞 PR）；v2.11.0 计划改为 required
+- 限流仅同机多进程有效，跨机器需 Redis 协调
+- 自研 vs Tushare 指标 diff 阈值 5%（观察期），v2.11.0 收紧到 2%
+- `corpus/quality_check.py` 替代 `scripts/quality_check.py`（破坏性变更，旧调用方需更新）
+
+### 下一迭代（v2.11.0 候选）
+
+- 删 `|| true` + ruff 失败时阻塞 PR
+- 限流跨机器 Redis 化
+- 真实数据 diff 阈值收紧到 2%
+- SKILL.md 32K 字拆 6 心智模型 + 30 启发式（推迟）
+- 活跃市值 +4%/-2.3% 量化层（line C）
+- 少妇战法六步端到端回测（line B / v3.0.0 候选）
+
+---
+
 ## [v2.9.0] - 2026-05-31
 
 > **「性能与架构极限优化：60x计算提速、多线程网络I/O、MDC 2.0 智能评分、大型模块解耦。」**

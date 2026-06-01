@@ -175,8 +175,7 @@ zettaranc-skill/
 │   ├── batch_download_bilibili.py   # 批量下载 B 站 ztalk 音频
 │   ├── batch_transcribe.py          # 批量音频转写（faster-whisper）
 │   ├── srt_to_transcript.py         # 字幕清洗为纯文本
-│   ├── fetch_tushare_data.py        # Tushare Pro 高权限数据抓取
-│   ├── sync_db_test.py              # db_test 全量数据库同步
+│   ├── fetch_tushare_data.py        # Tushare Pro 高权限数据抓取（v2.10.0 DEPRECATED，迁 modules.data_sync）
 │   ├── merge_research.py            # 合并调研结果
 │   └── quality_check.py             # SKILL.md 质量自动检查（8 项维度）
 └── references/
@@ -260,7 +259,7 @@ python -m modules.data_sync stk-factor --ts_code 600487.SH --days 365
 
 ```bash
 # 验证 SKILL.md 是否符合 8 项质量标准
-python scripts/quality_check.py SKILL.md
+python corpus/quality_check.py SKILL.md
 ```
 
 ### 语料采集脚本

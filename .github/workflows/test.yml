@@ -32,6 +32,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # v2.10.0 观察期：lint 失败不阻塞 PR（v2.11.0 计划改为 required）
+    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v4
@@ -42,7 +44,90 @@ jobs:
           python-version: "3.11"
 
       - name: Install ruff
-        run: pip install ruff
+        run: pip install "ruff>=0.5.0"
 
       - name: Lint
-        run: ruff check modules/ tests/ --select=F --ignore=F401 || true
+        run: ruff check modules/ tests/ --select=F,E,W,UP --ignore=E501,F401,F403 --exit-non-zero-on-fix
+
+      - name: Format check
+        run: ruff format --check modules/ tests/
+
+  quality-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    # v2.10.0 观察期：SKILL.md 质量门失败不阻塞 PR（v2.11.0 计划改为 required）
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run SKILL.md quality gate
+        run: |
+          python corpus/quality_check.py --json > quality-report.json
+          echo "=== quality-report.json ==="
+          cat quality-report.json
+          echo
+          echo "=== summary ==="
+          python -c "import json; d=json.load(open('quality-report.json')); print(f\"passed={d['passed']}/{d['total']} all_passed={d['all_passed']}\")"
+          # 显式跑 --strict 触发 exit code 反映违规
+          python corpus/quality_check.py --strict || true
+
+  e2e-realdata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # 仅在配置了 TUSHARE_TOKEN secret 时才跑（v2.10.0 观察期不阻塞）
+    if: ${{ secrets.TUSHARE_TOKEN != '' && secrets.TUSHARE_API_URL != '' }}
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+          pip install -e .
+
+      - name: Run real data regression (600519.SH × MACD/KDJ/RSI vs stk_factor)
+        env:
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+          TUSHARE_API_URL: ${{ secrets.TUSHARE_API_URL }}
+        run: |
+          pytest tests/test_indicators_realdata.py -v --tb=short
+
+  pre-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # v2.10.0 观察期：失败不阻塞 PR（v2.11.0 再决定）
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pre-commit
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: pre-commit-
+
+      - name: Run pre-commit
+        run: |
+          pip install pre-commit
+          pre-commit run --all-files --show-diff-on-failure

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zettaranc-skill"
-version = "2.9.0"
+version = "2.10.0rc1"
 description = "zettaranc（万千）的思维框架与量化工具"
 readme = "README.md"
 license = {text = "MIT"}
@@ -44,12 +44,28 @@ zt = "modules.cli:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["modules*"]
-exclude = ["tests*", "scripts*", "docs*"]
+exclude = ["tests*", "scripts*", "corpus*", "docs*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-v --tb=short"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+extend-exclude = ["data/", "logs/", "knowledge/"]
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "UP"]
+ignore = ["E501", "F401", "F403"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["F811"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [tool.mypy]
 namespace_packages = true

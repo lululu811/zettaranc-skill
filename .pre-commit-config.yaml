@@ -1,0 +1,55 @@
+# v2.10.0 P2-2：本地 commit 前自动拦截 lint / type 问题
+# 用法：
+#   pip install pre-commit
+#   pre-commit install         # 安装 git hook
+#   pre-commit run --all-files # 手动跑全部钩子
+
+repos:
+  # === ruff (lint + format) ===
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.15
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        # 仅检查 modules/ 和 tests/（脚本/语料/数据/日志排除）
+        files: '^(modules|tests)/.*\.py$'
+      - id: ruff-format
+        files: '^(modules|tests)/.*\.py$'
+
+  # === mypy (类型检查，限于关键模块) ===
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        # 只检查关键路径（避免对所有模块强类型检查，引入 pandas-stubs 依赖）
+        files: '^modules/(screener|indicators/core|strategies|cli|data_sync)/.*\.py$'
+        additional_dependencies:
+          - pandas-stubs
+          - types-requests
+
+  # === SKILL.md 质量门（每次 commit 跑 8 项检查，~5s）===
+  - repo: local
+    hooks:
+      - id: skill-quality-check
+        name: SKILL.md 质量门（8 项）
+        entry: python3 corpus/quality_check.py SKILL.md
+        language: system
+        pass_filenames: false
+        # 仅在 SKILL.md 或 corpus/quality_check.py 改动时跑
+        files: '^(SKILL\.md|corpus/quality_check\.py)$'
+
+  # === 标准文件检查 ===
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-yaml
+        # corpus/quality_check.py 是 Python 脚本，argparse help 文本含大量 -xxx 触发器
+        # 关掉 argparse 误报
+        exclude: ^corpus/quality_check\.py$
+      - id: end-of-file-fixer
+        exclude: '\.md$|\.lock$'
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      # 注意：不挂 mixed-line-ending（SKILL.md 30K+ 字有历史 CRLF/LF 混用，
+      #       auto-fix 会大改文档行尾，v2.10.0 跳过；v2.11.0 一次性 normalize 后再挂）
