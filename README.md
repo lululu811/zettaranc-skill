@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-Skill-blueviolet)](https://claude.ai/code)
-[![v2.10.0-rc.1](https://img.shields.io/badge/version-2.10.0--rc.1-red)](CHANGELOG.md)
+[![v2.10.0](https://img.shields.io/badge/version-2.10.0-green)](docs/CHANGELOG.md)
 
 <br>
 
@@ -492,7 +492,7 @@ zettaranc ❯ 辞职全职炒股？兄弟，我劝你慎重。
 
 | 版本 | 核心变化 |
 |------|---------|
-| **v2.10.0-rc.1** | CLI 3 bug 修复 + zt 统一入口、6 脚本薄壳化（-94%）、5 CI job + pre-commit 护栏、367 测试、代码审查修复 |
+| **v2.10.0** | CLI 3 bug 修复 + zt 统一入口、6 脚本薄壳化（-94%）、5 CI job + pre-commit 护栏、501 测试、代码审查、废弃模块清理 |
 | **v2.9.0** | 60x 指标计算提速（Pandas 向量化）、10x-50x 写入提速（executemany）、多线程并发拉取、模块解耦 |
 | **v2.7.0** | 数据层充实（真实财报/PE/PB/PS/资金流全量入库）、SAT/UAT 测试体系、策略 DB 路径修复、使用手册 |
 | **v2.6.0** | P2 核心模块（三波理论/麒麟会四阶段）、screener 新增选股条件 |

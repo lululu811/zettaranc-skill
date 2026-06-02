@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zettaranc-skill"
-version = "2.10.0rc1"
+version = "2.10.0"
 description = "zettaranc（万千）的思维框架与量化工具"
 readme = "README.md"
 license = {text = "MIT"}

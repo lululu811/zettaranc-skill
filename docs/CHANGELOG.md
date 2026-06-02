@@ -2,6 +2,20 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [v2.10.0] - 2026-06-02
+
+> **「v2.10.0 正式版：501 测试、代码审查修复、废弃模块清理。」**
+
+### 相比 v2.10.0-rc.1 的变更
+
+- **测试覆盖 +134**：trade_parser（53）、tushare_client（27）、report（54）三模块从零覆盖到完整测试
+- **代码审查修复**：异常处理、死代码清理、DRY 重构、imports 清理、.gitignore 补全
+- **源码 bug 修复**：`_fmt_opt` 缺 `sign` 参数 + `render_assessment` f-string 语法错误
+- **移除 `zettaranc_voice.py`**（-492 行）：常量迁移至 `trade_reviewer.py`
+- **文档同步**：README/AGENTS 版本号、测试数、目录树全部对齐
+
+---
+
 ## [v2.10.0-rc.1] - 2026-06-02
 
 > **「性能地基 → 质量地基：3 个必修 CLI bug 修复、6 业务脚本薄壳化（3623→203 行）、zt 统一入口、5 个 CI job、pre-commit 护栏。」**
