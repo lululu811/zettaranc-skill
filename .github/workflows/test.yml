@@ -68,10 +68,8 @@ jobs:
 
       - name: Run SKILL.md quality gate
         run: |
-          pip install -e . > /dev/null
-          python corpus/quality_check.py --json > quality-report.json
-          echo "=== quality-report.json ==="
-          cat quality-report.json
+          pip install -e .
+          python corpus/quality_check.py --json
           echo "=== summary ==="
           python corpus/quality_check.py --strict || true
 
