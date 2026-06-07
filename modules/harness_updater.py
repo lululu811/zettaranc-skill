@@ -177,7 +177,7 @@ class HarnessUpdater:
         except Exception as e:
             return {"success": False, "message": f"生成 Guardrails 更新建议失败: {str(e)}"}
 
-    def apply_guardrails_updates(self, updates: list[Dict[str, Any]]) -> dict[str, Any]:
+    def apply_guardrails_updates(self, updates: list[dict[str, Any]]) -> dict[str, Any]:
         """
         应用 Guardrails 更新
 

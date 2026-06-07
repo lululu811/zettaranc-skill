@@ -120,7 +120,7 @@ class TrackingManager:
             print(f"移除股票失败: {e}")
             return False
 
-    def list_stocks(self, status: str = "active", strategy_tag: str = None) -> list[Dict[str, Any]]:
+    def list_stocks(self, status: str = "active", strategy_tag: str = None) -> list[dict[str, Any]]:
         """
         列出跟踪池中的股票
 

@@ -232,7 +232,7 @@ class ReviewGenerator:
             print(f"分析 {ts_code} 失败: {e}")
             return None
 
-    def _analyze_strategy_performance(self, review_month: str) -> list[Dict[str, Any]]:
+    def _analyze_strategy_performance(self, review_month: str) -> list[dict[str, Any]]:
         """
         分析策略表现
 
@@ -509,7 +509,7 @@ class ReviewGenerator:
             print(f"保存策略表现失败: {e}")
             return False
 
-    def get_historical_reviews(self, limit: int = 12) -> list[Dict[str, Any]]:
+    def get_historical_reviews(self, limit: int = 12) -> list[dict[str, Any]]:
         """
         获取历史复盘记录
 
