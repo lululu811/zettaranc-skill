@@ -51,7 +51,7 @@ class TrackingManager:
                 # 检查是否已存在
                 cursor.execute(
                     """
-                    SELECT id FROM tracking_pool_self 
+                    SELECT id FROM tracking_pool_self
                     WHERE ts_code = ? AND status = 'active'
                 """,
                     (ts_code,),
@@ -99,8 +99,8 @@ class TrackingManager:
                 # 更新状态为 removed
                 cursor.execute(
                     """
-                    UPDATE tracking_pool_self 
-                    SET status = 'removed', 
+                    UPDATE tracking_pool_self
+                    SET status = 'removed',
                         remove_date = ?,
                         updated_at = datetime('now')
                     WHERE ts_code = ? AND status = 'active'
@@ -171,9 +171,9 @@ class TrackingManager:
 
                 cursor.execute(
                     """
-                    SELECT * FROM tracking_pool_self 
-                    WHERE ts_code = ? 
-                    ORDER BY add_date DESC 
+                    SELECT * FROM tracking_pool_self
+                    WHERE ts_code = ?
+                    ORDER BY add_date DESC
                     LIMIT 1
                 """,
                     (ts_code,),
@@ -203,7 +203,7 @@ class TrackingManager:
                 cursor = conn.cursor()
 
                 update_sql = """
-                    UPDATE tracking_pool_self 
+                    UPDATE tracking_pool_self
                     SET status = ?, updated_at = datetime('now')
                 """
                 params = [status]
@@ -242,8 +242,8 @@ class TrackingManager:
 
                 # 统计各状态数量
                 cursor.execute("""
-                    SELECT status, COUNT(*) as count 
-                    FROM tracking_pool_self 
+                    SELECT status, COUNT(*) as count
+                    FROM tracking_pool_self
                     GROUP BY status
                 """)
 
@@ -257,8 +257,8 @@ class TrackingManager:
                 today = datetime.now().strftime("%Y-%m-%d")
                 cursor.execute(
                     """
-                    SELECT COUNT(*) as today_added 
-                    FROM tracking_pool_self 
+                    SELECT COUNT(*) as today_added
+                    FROM tracking_pool_self
                     WHERE add_date = ?
                 """,
                     (today,),
@@ -283,8 +283,8 @@ class TrackingManager:
                 cursor = conn.cursor()
 
                 cursor.execute("""
-                    SELECT strategy_tags 
-                    FROM tracking_pool_self 
+                    SELECT strategy_tags
+                    FROM tracking_pool_self
                     WHERE status = 'active' AND strategy_tags IS NOT NULL
                 """)
 

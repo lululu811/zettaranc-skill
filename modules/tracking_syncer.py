@@ -47,7 +47,7 @@ class TrackingSyncer:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    SELECT id FROM tracking_pool_self 
+                    SELECT id FROM tracking_pool_self
                     WHERE ts_code = ? AND status = 'active'
                 """,
                     (ts_code,),
@@ -65,7 +65,7 @@ class TrackingSyncer:
                 cursor.execute(
                     """
                     SELECT trade_date, open, high, low, close, vol, pct_chg, amount
-                    FROM daily_kline 
+                    FROM daily_kline
                     WHERE ts_code = ? AND trade_date >= ? AND trade_date <= ?
                     ORDER BY trade_date
                 """,
@@ -207,7 +207,7 @@ class TrackingSyncer:
             with get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT ts_code FROM tracking_pool_self 
+                    SELECT ts_code FROM tracking_pool_self
                     WHERE status = 'active'
                 """)
                 active_stocks = [row["ts_code"] for row in cursor.fetchall()]
@@ -255,9 +255,9 @@ class TrackingSyncer:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    SELECT j, k, d, bbi, dif, dea, macd_hist, rsi6, wr5, 
+                    SELECT j, k, d, bbi, dif, dea, macd_hist, rsi6, wr5,
                            boll_upper, boll_mid, boll_lower, vol_ratio
-                    FROM indicator_cache 
+                    FROM indicator_cache
                     WHERE ts_code = ? AND trade_date = ?
                 """,
                     (ts_code, trade_date),

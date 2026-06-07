@@ -44,8 +44,8 @@ class ReviewGenerator:
                 # 获取该月有记录的股票
                 cursor.execute(
                     """
-                    SELECT DISTINCT ts_code 
-                    FROM tracking_records_self 
+                    SELECT DISTINCT ts_code
+                    FROM tracking_records_self
                     WHERE trade_date LIKE ?
                 """,
                     (f"{review_month}%",),
@@ -110,7 +110,7 @@ class ReviewGenerator:
                 # 获取该月的所有记录
                 cursor.execute(
                     """
-                    SELECT * FROM tracking_records_self 
+                    SELECT * FROM tracking_records_self
                     WHERE ts_code = ? AND trade_date LIKE ?
                     ORDER BY trade_date
                 """,
@@ -250,7 +250,7 @@ class ReviewGenerator:
                 cursor.execute(
                     """
                     SELECT signal_type, signal_score, signal_reason, close
-                    FROM tracking_records_self 
+                    FROM tracking_records_self
                     WHERE trade_date LIKE ? AND signal_type IS NOT NULL
                 """,
                     (f"{review_month}%",),
@@ -525,9 +525,9 @@ class ReviewGenerator:
 
                 cursor.execute(
                     """
-                    SELECT DISTINCT review_month 
-                    FROM monthly_reviews_self 
-                    ORDER BY review_month DESC 
+                    SELECT DISTINCT review_month
+                    FROM monthly_reviews_self
+                    ORDER BY review_month DESC
                     LIMIT ?
                 """,
                     (limit,),

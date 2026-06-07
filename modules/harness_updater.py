@@ -43,9 +43,9 @@ class HarnessUpdater:
                 # 获取最新的复盘月份
                 if not review_month:
                     cursor.execute("""
-                        SELECT DISTINCT review_month 
-                        FROM monthly_reviews_self 
-                        ORDER BY review_month DESC 
+                        SELECT DISTINCT review_month
+                        FROM monthly_reviews_self
+                        ORDER BY review_month DESC
                         LIMIT 1
                     """)
                     row = cursor.fetchone()
@@ -57,7 +57,7 @@ class HarnessUpdater:
                 # 分析各策略的表现（从 tracking_pool_self 获取策略标签）
                 cursor.execute(
                     """
-                    SELECT 
+                    SELECT
                         p.strategy_tags,
                         COUNT(*) as stock_count,
                         AVG(r.monthly_return) as avg_return,
