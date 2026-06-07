@@ -111,7 +111,7 @@ def _calc_dif(klines: list[dict]) -> list[float]:
     return dif
 
 
-def detect_s2(klines: list[dict] | None, index: int, dif_list: list[float]) -> StrategySignal | None:
+def detect_s2(klines: list[dict] | None, index: int, dif_list: list[float] = None) -> StrategySignal | None:
     """
     检测 S2 确认逃顶信号（MACD顶背离）
 
