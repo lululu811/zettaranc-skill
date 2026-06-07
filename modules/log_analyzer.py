@@ -56,7 +56,7 @@ class LogAnalyzer:
                     log_date = datetime.fromisoformat(log.get("timestamp", ""))
                     if log_date >= cutoff_date:
                         recent_signals.append(log)
-                except:
+                except Exception:
                     continue
 
             # 统计信号类型分布
@@ -114,7 +114,7 @@ class LogAnalyzer:
                     log_date = datetime.fromisoformat(log.get("timestamp", ""))
                     if log_date >= cutoff_date:
                         recent_signals.append(log)
-                except:
+                except Exception:
                     continue
 
             # 按信号类型统计
@@ -171,7 +171,7 @@ class LogAnalyzer:
                         monthly_stats[month_key]["harness_count"] += 1
                     elif category == "optimization":
                         monthly_stats[month_key]["optimization_count"] += 1
-                except:
+                except Exception:
                     continue
 
             # 转换为列表格式
