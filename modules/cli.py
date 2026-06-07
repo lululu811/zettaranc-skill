@@ -20,10 +20,16 @@ portfolio_diagnosis / watchlist / indicators.data_layer）。
 """
 
 import argparse
+import json
 import sys
 import os
 
 # dotenv 加载已移至 modules/__init__.py（包级别一次性加载）
+
+
+def _json_output(data):
+    """Print data as JSON and exit."""
+    print(json.dumps(data, ensure_ascii=False, indent=2))
 
 
 # CLI 中文别名 → screener 英文 criteria 的统一映射
@@ -54,30 +60,17 @@ def cmd_analyze(args):
     ts_code = args.ts_code
     days = args.days
 
-    print(f"\n{'=' * 60}")
-    print(f"股票分析: {ts_code}")
-    print(f"{'=' * 60}")
-
     # 1. 指标分析
-    print("\n【技术指标】")
     result = analyze_stock(ts_code, days=days)
-    print(f"  日期: {result.trade_date}")
-    print(f"  KDJ:  K={result.k:.2f}  D={result.d:.2f}  J={result.j:.2f}")
-    print(f"  MACD: DIF={result.dif:.4f}  DEA={result.dea:.4f}  柱={result.macd_hist:.4f}")
-    print(f"  BBI:  {result.bbi:.2f}")
-    print(f"  均线: MA5={result.ma5:.2f}  MA10={result.ma10:.2f}  MA20={result.ma20:.2f}")
-    print(f"  RSI:  {result.rsi6:.2f}/{result.rsi12:.2f}/{result.rsi24:.2f}")
-    print(f"  砖型图: {result.brick_trend}({result.brick_count}块)  值={result.brick_value:.2f}")
 
-    # 2. P2 指标：三波理论 + 麒麟会（需要原始 K 线数据）
-    print("\n【主力阶段】")
+    # 2. 主力阶段
+    wave_data = None
+    kirin_data = None
     try:
         from modules.indicators import detect_three_waves, detect_kirin_stage
 
         klines = get_kline_data(ts_code, days=days)
-        if not klines:
-            print("  无 K 线数据，跳过主力阶段分析")
-        else:
+        if klines:
             daily_klines = []
             for i, k in enumerate(klines):
                 prev_close = klines[i - 1].close if i > 0 else k.close
@@ -95,29 +88,104 @@ def cmd_analyze(args):
                         prev_close=prev_close,
                     )
                 )
-            wave = detect_three_waves(daily_klines)
-            kirin = detect_kirin_stage(daily_klines)
-
-            print(f"  三波理论: {wave['wave']} (conf={wave['confidence']}) → {wave['b1_suggestion']}")
-            if wave["stats"]:
-                s = wave["stats"]
-                print(f"    低点→当前: {s['low_price']:.1f}→{s['high_price']:.1f} 涨幅{s['gain_pct']:.1f}%")
-                print(
-                    f"    涨停{s['limit_up_count']}次 阳线占比{s['red_ratio'] * 100:.0f}% 日均{s['avg_daily_gain']:.2f}%"
-                )
-
-            print(f"  麒麟会: {kirin['stage']} (conf={kirin['confidence']}) → {kirin['operation']}")
-            if kirin["sub_type"] != "未知":
-                print(f"    子类型: {kirin['sub_type']}")
-            if kirin.get("scores"):
-                sc = kirin["scores"]
-                print(f"    评分: 吸{sc['xishou']} 拉{sc['lasheng']} 派{sc['paifa']} 落{sc['luoluo']}")
-    except Exception as e:
-        print(f"  检测失败: {e}")
+            wave_data = detect_three_waves(daily_klines)
+            kirin_data = detect_kirin_stage(daily_klines)
+    except Exception:
+        pass
 
     # 3. 策略信号
-    print("\n【战法信号】")
     signals = detect_all_strategies(ts_code, days=days)
+
+    # 4. 诊断
+    diagnosis = diagnose_stock(ts_code, days=days)
+
+    # ── JSON 输出 ──
+    if args.json:
+        json_result = {
+            "ts_code": ts_code,
+            "name": getattr(diagnosis, "name", ts_code),
+            "price": getattr(diagnosis, "price", 0),
+            "indicators": {
+                "kdj": {"k": result.k, "d": result.d, "j": result.j},
+                "macd": {
+                    "dif": result.dif,
+                    "dea": result.dea,
+                    "hist": result.macd_hist,
+                    "veto": getattr(diagnosis, "macd_veto", False),
+                },
+                "bbi": result.bbi,
+                "white_line": getattr(diagnosis, "white_line", 0),
+                "yellow_line": getattr(diagnosis, "yellow_line", 0),
+                "rsi": {"rsi6": result.rsi6, "rsi12": result.rsi12, "rsi24": result.rsi24},
+            },
+            "waves": {
+                "type": wave_data["wave"] if wave_data else "未知",
+                "confidence": wave_data["confidence"] if wave_data else 0,
+            },
+            "kirin": {
+                "phase": kirin_data["stage"] if kirin_data else "未知",
+                "confidence": kirin_data["confidence"] if kirin_data else 0,
+            },
+            "strategies": [
+                {
+                    "strategy": s.strategy.value,
+                    "date": s.trade_date,
+                    "confidence": s.confidence,
+                    "action": s.action,
+                    "description": s.description,
+                }
+                for s in signals[:10]
+            ],
+            "diagnosis": {
+                "price_position": getattr(diagnosis, "price_position", ""),
+                "trend_status": getattr(diagnosis, "trend_status", ""),
+                "sell_score": getattr(diagnosis, "sell_score", 0),
+                "sell_score_desc": getattr(diagnosis, "sell_score_desc", ""),
+                "kirin_phase": getattr(diagnosis, "kirin_phase", ""),
+                "bull_rope": getattr(diagnosis, "bull_rope_status", ""),
+                "sandglass_score": getattr(diagnosis, "sandglass_score", 0),
+                "is_centipede": getattr(diagnosis, "is_centipede", False),
+                "risk_level": getattr(diagnosis, "risk_level", ""),
+                "recommendation": getattr(diagnosis, "recommendation", ""),
+            },
+        }
+        _json_output(json_result)
+        return
+
+    # ── 人类可读输出（保持原样） ──
+    print(f"\n{'=' * 60}")
+    print(f"股票分析: {ts_code}")
+    print(f"{'=' * 60}")
+
+    print("\n【技术指标】")
+    print(f"  日期: {result.trade_date}")
+    print(f"  KDJ:  K={result.k:.2f}  D={result.d:.2f}  J={result.j:.2f}")
+    print(f"  MACD: DIF={result.dif:.4f}  DEA={result.dea:.4f}  柱={result.macd_hist:.4f}")
+    print(f"  BBI:  {result.bbi:.2f}")
+    print(f"  均线: MA5={result.ma5:.2f}  MA10={result.ma10:.2f}  MA20={result.ma20:.2f}")
+    print(f"  RSI:  {result.rsi6:.2f}/{result.rsi12:.2f}/{result.rsi24:.2f}")
+    print(f"  砖型图: {result.brick_trend}({result.brick_count}块)  值={result.brick_value:.2f}")
+
+    print("\n【主力阶段】")
+    if wave_data:
+        print(f"  三波理论: {wave_data['wave']} (conf={wave_data['confidence']}) → {wave_data['b1_suggestion']}")
+        if wave_data["stats"]:
+            s = wave_data["stats"]
+            print(f"    低点→当前: {s['low_price']:.1f}→{s['high_price']:.1f} 涨幅{s['gain_pct']:.1f}%")
+            print(
+                f"    涨停{s['limit_up_count']}次 阳线占比{s['red_ratio'] * 100:.0f}% 日均{s['avg_daily_gain']:.2f}%"
+            )
+    if kirin_data:
+        print(f"  麒麟会: {kirin_data['stage']} (conf={kirin_data['confidence']}) → {kirin_data['operation']}")
+        if kirin_data["sub_type"] != "未知":
+            print(f"    子类型: {kirin_data['sub_type']}")
+        if kirin_data.get("scores"):
+            sc = kirin_data["scores"]
+            print(f"    评分: 吸{sc['xishou']} 拉{sc['lasheng']} 派{sc['paifa']} 落{sc['luoluo']}")
+    if not wave_data and not kirin_data:
+        print("  无 K 线数据，跳过主力阶段分析")
+
+    print("\n【战法信号】")
     if not signals:
         print("  无信号")
     else:
@@ -138,10 +206,10 @@ def cmd_analyze(args):
             for s in observe[:3]:
                 print(f"     {s.trade_date} {s.strategy.value}: {s.description}")
 
-    # 4. 诊断
     print("\n【持仓诊断】")
-    diagnosis = diagnose_stock(ts_code, days=days)
-    print(diagnosis)
+    from modules.portfolio_diagnosis import format_report
+
+    print(format_report(diagnosis))
 
 
 def cmd_screen(args):
@@ -150,19 +218,41 @@ def cmd_screen(args):
 
     criteria = STRATEGY_ALIAS.get(args.strategy, args.strategy)
 
-    print(f"\n{'=' * 60}")
-    print(f"股票筛选 (criteria={criteria}, 上限={args.limit or '全市场'})")
-    print(f"{'=' * 60}")
-
     results = screen_stocks(
         criteria=criteria,
         max_stocks=args.limit if args.limit > 0 else 0,
         use_parallel=not args.no_parallel,
     )
-    print(f"\n扫描完成，命中: {len(results)} 只\n")
 
     # 输出前 limit 只（limit=0 时输出全部 500 上限内的命中）
     output_limit = args.limit if args.limit > 0 else len(results)
+
+    # ── JSON 输出 ──
+    if args.json:
+        json_result = {
+            "criteria": criteria,
+            "count": len(results[:output_limit]),
+            "stocks": [
+                {
+                    "ts_code": r.ts_code,
+                    "name": r.name,
+                    "score": r.score,
+                    "rating": r.rating,
+                    "reasons": getattr(r, "reasons", []) or [],
+                    "warnings": getattr(r, "warnings", []) or [],
+                }
+                for r in results[:output_limit]
+            ],
+        }
+        _json_output(json_result)
+        return
+
+    # ── 人类可读输出（保持原样） ──
+    print(f"\n{'=' * 60}")
+    print(f"股票筛选 (criteria={criteria}, 上限={args.limit or '全市场'})")
+    print(f"{'=' * 60}")
+    print(f"\n扫描完成，命中: {len(results)} 只\n")
+
     for r in results[:output_limit]:
         print(f"  {r.ts_code:<12} {r.name:<8} score={r.score:.1f}  {r.rating}")
         reasons = getattr(r, "reasons", []) or []
@@ -181,6 +271,25 @@ def cmd_score(args):
         print("请指定股票代码: zt score <ts_code>")
         sys.exit(1)
     score = analyze_stock(args.ts_code)
+
+    # ── JSON 输出 ──
+    if args.json:
+        json_result = {
+            "ts_code": score.ts_code,
+            "name": score.name,
+            "score": score.score,
+            "b1_score": score.b1_score,
+            "trend_score": score.trend_score,
+            "volume_score": score.volume_score,
+            "risk_score": score.risk_score,
+            "rating": score.rating,
+            "reasons": score.reasons,
+            "warnings": score.warnings,
+        }
+        _json_output(json_result)
+        return
+
+    # ── 人类可读输出（保持原样） ──
     print(format_stock_score(score))
 
 
@@ -224,6 +333,27 @@ def cmd_watchlist(args):
         result = scan_watchlist()
         alerts = result.get("alerts", [])
         summary = result.get("summary", {})
+
+        # ── JSON 输出 ──
+        if hasattr(args, "json") and args.json:
+            # 按 ts_code 聚合 alerts
+            stock_map = {}
+            for a in alerts:
+                if a.ts_code not in stock_map:
+                    stock_map[a.ts_code] = {"ts_code": a.ts_code, "name": a.name, "signals": [], "alerts": []}
+                stock_map[a.ts_code]["alerts"].append({
+                    "alert_type": a.alert_type,
+                    "level": a.level,
+                    "message": a.message,
+                })
+            json_result = {
+                "count": len(stock_map),
+                "stocks": list(stock_map.values()),
+            }
+            _json_output(json_result)
+            return
+
+        # ── 人类可读输出（保持原样） ──
         print(f"\n扫描自选股 ({summary.get('total', 0)}只):")
         print(
             f"  B1={summary.get('b1_count', 0)}  B2={summary.get('b2_count', 0)}  "
@@ -243,6 +373,15 @@ def cmd_diagnose(args):
 
     ts_code = args.ts_code
     diagnosis = diagnose_stock(ts_code, days=args.days)
+
+    # ── JSON 输出 ──
+    if args.json:
+        from dataclasses import asdict
+
+        _json_output(asdict(diagnosis))
+        return
+
+    # ── 人类可读输出（保持原样） ──
     print(format_report(diagnosis))
 
 
@@ -315,17 +454,21 @@ def main():
         epilog="""
 示例:
   zt analyze 600487.SH
+  zt analyze 600487.SH --json
   zt screen --strategy B1 --limit 20
   zt score 600487.SH
-  zt workflow
+  zt diagnose 600487.SH
   zt watchlist add 600487.SH --tags 通信设备,5G
   zt watchlist scan
-  zt watchlist report
-  zt diagnose 600487.SH
+  zt backtest shaofu 600487.SH --days 250
+  zt backtest multi 600487.SH --strategy b1,b2
+  zt backtest portfolio 600487.SH,601318.SH
+  zt trade add "4月25号买了100股茅台1800块"
+  zt trade list
+  zt trade review
+  zt daily
   zt sync init
   zt sync sync 600487.SH
-  zt sync status
-  zt sync stk-factor 600487.SH
         """,
     )
 
@@ -335,16 +478,19 @@ def main():
     p_analyze = subparsers.add_parser("analyze", help="分析单只股票（指标 + 主力阶段 + 战法信号 + 诊断）")
     p_analyze.add_argument("ts_code", help="股票代码，如 600487.SH")
     p_analyze.add_argument("--days", type=int, default=120, help="分析天数")
+    p_analyze.add_argument("--json", action="store_true", help="JSON输出")
 
     # ── screen ──
     p_screen = subparsers.add_parser("screen", help="批量选股（11 种策略）")
     p_screen.add_argument("--strategy", choices=STRATEGY_CHOICES, default="B1", help="筛选策略（11 种别名）")
     p_screen.add_argument("--limit", type=int, default=20, help="输出数量（0=全市场 500 上限）")
     p_screen.add_argument("--no-parallel", action="store_true", help="禁用多进程并行")
+    p_screen.add_argument("--json", action="store_true", help="JSON输出")
 
     # ── score（来自 screener.py score）──
     p_score = subparsers.add_parser("score", help="单只股票综合评分")
     p_score.add_argument("ts_code", nargs="?", help="股票代码，如 600487.SH")
+    p_score.add_argument("--json", action="store_true", help="JSON输出")
 
     # ── workflow（来自 screener.py workflow）──
     subparsers.add_parser("workflow", help="每日五步工作流")
@@ -353,12 +499,14 @@ def main():
     p_diag = subparsers.add_parser("diagnose", help="持仓诊断")
     p_diag.add_argument("ts_code", help="股票代码")
     p_diag.add_argument("--days", type=int, default=120, help="分析天数")
+    p_diag.add_argument("--json", action="store_true", help="JSON输出")
 
     # ── watchlist（add/remove/list/scan/report）──
     p_wl = subparsers.add_parser("watchlist", help="自选股管理")
     p_wl.add_argument("action", choices=["add", "remove", "list", "scan", "report"], help="操作")
     p_wl.add_argument("ts_code", nargs="?", help="股票代码（add/remove 必填）")
     p_wl.add_argument("--tags", help="标签，逗号分隔")
+    p_wl.add_argument("--json", action="store_true", help="JSON输出（仅 scan 操作）")
 
     # ── sync（init/sync/status/stk-factor）──
     p_sync = subparsers.add_parser("sync", help="数据同步（init/sync/status/stk-factor）")
@@ -379,7 +527,40 @@ def main():
 
     args = parser.parse_args()
 
+    # ── backtest（shaofu / multi / portfolio）──
+    p_bt = subparsers.add_parser("backtest", help="策略回测")
+    p_bt_sub = p_bt.add_subparsers(dest="bt_action", required=True)
+
+    p_bt_shaofu = p_bt_sub.add_parser("shaofu", help="少妇战法六步回测")
+    p_bt_shaofu.add_argument("ts_code", help="股票代码")
+    p_bt_shaofu.add_argument("--days", type=int, default=250, help="回测天数")
+    p_bt_shaofu.add_argument("--json", action="store_true", help="JSON输出")
+
+    p_bt_multi = p_bt_sub.add_parser("multi", help="多策略融合回测")
+    p_bt_multi.add_argument("ts_code", help="股票代码")
+    p_bt_multi.add_argument("--strategy", default="b1,b2", help="策略列表，逗号分隔")
+    p_bt_multi.add_argument("--days", type=int, default=120, help="回测天数")
+    p_bt_multi.add_argument("--json", action="store_true", help="JSON输出")
+
+    p_bt_portfolio = p_bt_sub.add_parser("portfolio", help="多股票组合回测")
+    p_bt_portfolio.add_argument("ts_codes", help="股票代码，逗号分隔")
+    p_bt_portfolio.add_argument("--days", type=int, default=120, help="回测天数")
+    p_bt_portfolio.add_argument("--mode", choices=["shaofu", "multi"], default="shaofu", help="回测模式")
+    p_bt_portfolio.add_argument("--json", action="store_true", help="JSON输出")
+
+    # ── trade（add / list / review / stats）──
+    p_trade = subparsers.add_parser("trade", help="交易记录管理")
+    p_trade.add_argument("trade_action", choices=["add", "list", "review", "stats"], help="操作")
+    p_trade.add_argument("description", nargs="?", help="交易描述（add 必填）")
+    p_trade.add_argument("--json", action="store_true", help="JSON输出")
+
+    # ── daily ──
+    p_daily = subparsers.add_parser("daily", help="每日五步工作流")
+    p_daily.add_argument("--json", action="store_true", help="JSON输出")
+
     # 调度表
+    from modules.cli_commands import cmd_backtest, cmd_trade, cmd_daily
+
     handlers = {
         "analyze": cmd_analyze,
         "screen": cmd_screen,
@@ -388,6 +569,9 @@ def main():
         "diagnose": cmd_diagnose,
         "watchlist": cmd_watchlist,
         "sync": cmd_sync,
+        "backtest": cmd_backtest,
+        "trade": cmd_trade,
+        "daily": cmd_daily,
     }
     handlers[args.command](args)
 
