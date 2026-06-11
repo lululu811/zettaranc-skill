@@ -29,7 +29,7 @@ def test_phase2_keep_revert_cycle(monkeypatch):
     def fake_propose(_old_score: float) -> dict:
         return {"proposed": [], "analysis": {"strategy_stats": []}}
 
-    def fake_score(_proposed: dict) -> float:
+    def fake_score(_proposed: dict, **_kwargs) -> float:
         return 50.0  # 总分低于 baseline 80
 
     monkeypatch.setattr(phase2_hillclimb, "_harness_propose", fake_propose)
@@ -47,7 +47,7 @@ def test_phase2_break_signal(monkeypatch):
     def fake_propose(_old_score: float) -> dict:
         return {"proposed": [], "analysis": {"strategy_stats": []}}
 
-    def fake_score_close(_proposed: dict) -> float:
+    def fake_score_close(_proposed: dict, **_kwargs) -> float:
         # 返回 old_score + 0.5 (连续 delta<2)
         return phase2_hillclimb._last_old + 0.5  # type: ignore[attr-defined]
 
