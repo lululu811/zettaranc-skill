@@ -29,6 +29,14 @@ jobs:
       - name: Run tests
         run: python -m pytest tests/ -v --tb=short
 
+      - name: Self-optimizer unit tests
+        run: source .venv/bin/activate && python -m pytest tests/test_reflex_blacklist.py tests/test_scorer.py tests/test_break_signal.py -v
+        continue-on-error: true  # 观察期
+
+      - name: Self-optimizer integration + E2E
+        run: source .venv/bin/activate && python -m pytest tests/test_self_optimizer_integration.py tests/test_self_optimizer_e2e.py -v --tb=short
+        continue-on-error: true
+
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 5
