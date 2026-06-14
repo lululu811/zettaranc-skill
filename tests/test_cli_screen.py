@@ -12,7 +12,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 
-# 11 个 strategy 中文别名（与 cli.STRATEGY_ALIAS 保持同步）
+# 16 个 strategy 中文别名（与 cli.STRATEGY_ALIAS 保持同步）
 EXPECTED_STRATEGIES = [
     "B1",
     "B2",
@@ -25,6 +25,11 @@ EXPECTED_STRATEGIES = [
     "安全",
     "超跌",
     "突破",
+    "牵牛",
+    "牛绳",
+    "沙漏",
+    "沙漏评分",
+    "量比战法",
 ]
 
 
@@ -62,11 +67,11 @@ def fake_screen_result():
 # ==================== cmd_screen 修复验证 ====================
 
 
-def test_strategy_alias_covers_all_eleven():
-    """STRATEGY_ALIAS 必须覆盖 11 种 strategy"""
+def test_strategy_alias_covers_all_sixteen():
+    """STRATEGY_ALIAS 必须覆盖 16 种 strategy"""
     from modules.cli import STRATEGY_ALIAS
 
-    assert len(STRATEGY_ALIAS) == 11
+    assert len(STRATEGY_ALIAS) == 16
     for name in EXPECTED_STRATEGIES:
         assert name in STRATEGY_ALIAS, f"STRATEGY_ALIAS 缺 {name}"
 
@@ -86,6 +91,11 @@ def test_strategy_alias_mapping_is_correct():
     assert STRATEGY_ALIAS["安全"] == "safe"
     assert STRATEGY_ALIAS["超跌"] == "oversold"
     assert STRATEGY_ALIAS["突破"] == "breakout"
+    assert STRATEGY_ALIAS["牵牛"] == "bull_rope"
+    assert STRATEGY_ALIAS["牛绳"] == "bull_rope"
+    assert STRATEGY_ALIAS["沙漏"] == "sandglass_perfect"
+    assert STRATEGY_ALIAS["沙漏评分"] == "sandglass_perfect"
+    assert STRATEGY_ALIAS["量比战法"] == "volume_ratio_super"
 
 
 def test_strategy_choices_matches_alias_keys():
@@ -145,9 +155,9 @@ def test_screen_calls_screen_stocks_not_self_loop(fake_screen_result, capsys):
     assert mock_screen.called
     # 裸 StockScore 构造（无 K 线参数）不应该被调——这正是 v2.9.0 bug 的触发点
     # 如果未来有人重新引入自写循环，StockScore(ts_code) 会被大量调
-    assert mock_bare_score.call_count == 0, (
-        f"cmd_screen 仍调用 StockScore() 自写循环（{mock_bare_score.call_count} 次）"
-    )
+    assert (
+        mock_bare_score.call_count == 0
+    ), f"cmd_screen 仍调用 StockScore() 自写循环（{mock_bare_score.call_count} 次）"
 
 
 def test_screen_limit_zero_means_full_market(fake_screen_result, capsys):
@@ -230,8 +240,8 @@ def test_watchlist_scan_empty_alerts_does_not_crash():
 # ==================== 端到端 smoke：parser 接受 11 种 ====================
 
 
-def test_help_lists_all_eleven_strategies(capsys):
-    """zt screen --help 应该列出 11 种 strategy"""
+def test_help_lists_all_sixteen_strategies(capsys):
+    """zt screen --help 应该列出 16 种 strategy"""
     from modules.cli import main
 
     with patch.object(sys, "argv", ["zt", "screen", "--help"]):

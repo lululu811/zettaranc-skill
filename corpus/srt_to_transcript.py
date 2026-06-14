@@ -17,24 +17,24 @@ from pathlib import Path
 
 def clean_srt(content: str) -> str:
     """清洗SRT格式字幕"""
-    lines = content.strip().split('\n')
+    lines = content.strip().split("\n")
     texts = []
 
     for line in lines:
         line = line.strip()
         # 跳过序号行（纯数字）
-        if re.match(r'^\d+$', line):
+        if re.match(r"^\d+$", line):
             continue
         # 跳过时间戳行
-        if re.match(r'\d{2}:\d{2}:\d{2}', line):
+        if re.match(r"\d{2}:\d{2}:\d{2}", line):
             continue
         # 跳过空行
         if not line:
             continue
         # 去除HTML标签
-        line = re.sub(r'<[^>]+>', '', line)
+        line = re.sub(r"<[^>]+>", "", line)
         # 去除VTT的position标记
-        line = re.sub(r'align:.*$|position:.*$', '', line).strip()
+        line = re.sub(r"align:.*$|position:.*$", "", line).strip()
         if line:
             texts.append(line)
 
@@ -51,23 +51,23 @@ def clean_srt(content: str) -> str:
     for text in deduped:
         current.append(text)
         # 如果当前累积文本够长或遇到句末标点，形成一个段落
-        joined = ' '.join(current)
-        if len(joined) > 200 or re.search(r'[。！？.!?]$', text):
+        joined = " ".join(current)
+        if len(joined) > 200 or re.search(r"[。！？.!?]$", text):
             result.append(joined)
             current = []
 
     if current:
-        result.append(' '.join(current))
+        result.append(" ".join(current))
 
-    return '\n\n'.join(result)
+    return "\n\n".join(result)
 
 
 def clean_vtt(content: str) -> str:
     """清洗VTT格式字幕（先去掉VTT头部，然后按SRT逻辑处理）"""
     # 去掉WEBVTT头部
-    content = re.sub(r'^WEBVTT.*?\n\n', '', content, flags=re.DOTALL)
+    content = re.sub(r"^WEBVTT.*?\n\n", "", content, flags=re.DOTALL)
     # 去掉NOTE块
-    content = re.sub(r'NOTE.*?\n\n', '', content, flags=re.DOTALL)
+    content = re.sub(r"NOTE.*?\n\n", "", content, flags=re.DOTALL)
     return clean_srt(content)
 
 
@@ -88,21 +88,21 @@ def main():
         output_path = input_path.parent / f"{input_path.stem}_transcript.txt"
 
     # 读取并检测格式
-    content = input_path.read_text(encoding='utf-8')
+    content = input_path.read_text(encoding="utf-8")
 
-    if input_path.suffix.lower() == '.vtt' or content.startswith('WEBVTT'):
+    if input_path.suffix.lower() == ".vtt" or content.startswith("WEBVTT"):
         transcript = clean_vtt(content)
     else:
         transcript = clean_srt(content)
 
-    output_path.write_text(transcript, encoding='utf-8')
+    output_path.write_text(transcript, encoding="utf-8")
 
     # 统计
     word_count = len(transcript)
-    line_count = transcript.count('\n') + 1
+    line_count = transcript.count("\n") + 1
     print(f"✅ 转换完成: {output_path}")
     print(f"   字数: {word_count}  段落数: {line_count}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

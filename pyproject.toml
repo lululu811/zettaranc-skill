@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zettaranc-skill"
-version = "2.10.0"
+version = "3.1.0"
 description = "zettaranc（万千）的思维框架与量化工具"
 readme = "README.md"
 license = {text = "MIT"}
@@ -24,8 +24,6 @@ classifiers = [
 ]
 
 dependencies = [
-    "yt-dlp>=2024.1.0",
-    "faster-whisper>=1.0.0",
     "tushare>=1.4.0",
     "python-dotenv>=1.0.0",
     "pandas>=2.0.0",
@@ -33,6 +31,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+corpus = [
+    "yt-dlp>=2024.1.0",
+    "faster-whisper>=1.0.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",

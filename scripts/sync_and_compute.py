@@ -3,6 +3,7 @@
 [薄壳] 同步自选股清单的 K 线 + 指标缓存（一站式）
 v2.10.0 重构：业务逻辑迁至 modules.data_sync.DataSyncer.sync_daily_and_compute
 """
+
 import argparse
 import sys
 from pathlib import Path

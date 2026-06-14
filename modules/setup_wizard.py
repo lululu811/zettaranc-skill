@@ -40,18 +40,20 @@ def get_mode_display_name(mode: str) -> str:
     return MODE_NAMES.get(mode, mode)
 
 
-def write_env_file(token: str | None = None, mode: str = MODE_NORMAL) -> str:
+def write_env_file(token: str | None = None, mode: str = MODE_NORMAL, env_path: Path | None = None) -> str:
     """
     写入 .env 文件
 
     Args:
         token: Tushare Token，普通小万模式下可为 None
         mode: 数据模式，"jnb" 或 "websearch"
+        env_path: 目标 .env 写入路径（可选，若未指定则写入默认位置）
 
     Returns:
         .env 文件的绝对路径
     """
-    env_path = Path(__file__).parent.parent / ".env"
+    if env_path is None:
+        env_path = Path(__file__).parent.parent / ".env"
     get_mode_display_name(mode)
     lines = [
         "# 数据模式: jnb(JNB模式/走Tushare API) 或 websearch(普通小万模式/走网络搜索)",

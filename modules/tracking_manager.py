@@ -26,7 +26,12 @@ class TrackingManager:
         pass
 
     def add_stock(
-        self, ts_code: str, name: str = None, reason: str = None, strategy_tags: list[str] = None, notes: str = None
+        self,
+        ts_code: str,
+        name: str | None = None,
+        reason: str | None = None,
+        strategy_tags: list[str] | None = None,
+        notes: str | None = None,
     ) -> bool:
         """
         添加股票到跟踪池
@@ -79,7 +84,7 @@ class TrackingManager:
             print(f"添加股票失败: {e}")
             return False
 
-    def remove_stock(self, ts_code: str, reason: str = None) -> bool:
+    def remove_stock(self, ts_code: str, reason: str | None = None) -> bool:
         """
         从跟踪池移除股票
 
@@ -120,7 +125,7 @@ class TrackingManager:
             print(f"移除股票失败: {e}")
             return False
 
-    def list_stocks(self, status: str = "active", strategy_tag: str = None) -> list[dict[str, Any]]:
+    def list_stocks(self, status: str = "active", strategy_tag: str | None = None) -> list[dict[str, Any]]:
         """
         列出跟踪池中的股票
 
@@ -186,7 +191,7 @@ class TrackingManager:
             print(f"查询股票信息失败: {e}")
             return None
 
-    def update_stock_status(self, ts_code: str, status: str, notes: str = None) -> bool:
+    def update_stock_status(self, ts_code: str, status: str, notes: str | None = None) -> bool:
         """
         更新股票状态
 
@@ -288,7 +293,7 @@ class TrackingManager:
                     WHERE status = 'active' AND strategy_tags IS NOT NULL
                 """)
 
-                distribution = {}
+                distribution: dict[str, int] = {}
                 for row in cursor.fetchall():
                     tags = row["strategy_tags"].split(",")
                     for tag in tags:

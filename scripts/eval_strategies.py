@@ -19,6 +19,7 @@ sys.path.insert(0, str(project_root))
 # 加载 .env（modules/__init__.py 也会做，但脚本直接运行时需要手动）
 try:
     from dotenv import load_dotenv
+
     load_dotenv(project_root / ".env")
 except ImportError:
     pass
@@ -33,7 +34,8 @@ def get_test_stocks(limit: int = 20):
     """获取数据充足的测试股票"""
     with get_connection() as conn:
         cur = conn.cursor()
-        cur.execute("""
+        cur.execute(
+            """
             SELECT d.ts_code, s.name, COUNT(*) as cnt
             FROM daily_kline d
             JOIN stock_basic s ON d.ts_code = s.ts_code
@@ -41,7 +43,9 @@ def get_test_stocks(limit: int = 20):
             HAVING cnt >= 250
             ORDER BY cnt DESC
             LIMIT ?
-        """, (limit,))
+        """,
+            (limit,),
+        )
         return cur.fetchall()
 
 
@@ -64,17 +68,19 @@ def run_shaofu_backtests(stocks):
                 f"profit_factor={result.profit_factor:.2f} "
                 f"avg_hold={result.avg_holding_days:.1f}d"
             )
-            results.append({
-                "ts_code": ts_code,
-                "name": name,
-                "total_trades": result.total_trades,
-                "win_rate": result.win_rate,
-                "total_return": result.total_return,
-                "sharpe_ratio": result.sharpe_ratio,
-                "max_drawdown": result.max_drawdown,
-                "profit_factor": result.profit_factor,
-                "avg_holding_days": result.avg_holding_days,
-            })
+            results.append(
+                {
+                    "ts_code": ts_code,
+                    "name": name,
+                    "total_trades": result.total_trades,
+                    "win_rate": result.win_rate,
+                    "total_return": result.total_return,
+                    "sharpe_ratio": result.sharpe_ratio,
+                    "max_drawdown": result.max_drawdown,
+                    "profit_factor": result.profit_factor,
+                    "avg_holding_days": result.avg_holding_days,
+                }
+            )
         except Exception as e:
             print(f"  {ts_code} {name:<8}: ERROR {e}")
             results.append({"ts_code": ts_code, "name": name, "error": str(e)})
@@ -100,16 +106,18 @@ def run_multi_strategy_backtests(stocks):
                 f"max_dd={result.max_drawdown:.1%} "
                 f"profit_factor={result.profit_factor:.2f}"
             )
-            results.append({
-                "ts_code": ts_code,
-                "name": name,
-                "total_trades": result.total_trades,
-                "win_rate": result.win_rate,
-                "total_return": result.total_return,
-                "sharpe_ratio": result.sharpe_ratio,
-                "max_drawdown": result.max_drawdown,
-                "profit_factor": result.profit_factor,
-            })
+            results.append(
+                {
+                    "ts_code": ts_code,
+                    "name": name,
+                    "total_trades": result.total_trades,
+                    "win_rate": result.win_rate,
+                    "total_return": result.total_return,
+                    "sharpe_ratio": result.sharpe_ratio,
+                    "max_drawdown": result.max_drawdown,
+                    "profit_factor": result.profit_factor,
+                }
+            )
         except Exception as e:
             print(f"  {ts_code} {name:<8}: ERROR {e}")
             results.append({"ts_code": ts_code, "name": name, "error": str(e)})
@@ -245,9 +253,9 @@ def summarize(shaofu_results, multi_results, screener_results):
     # Q1: 哪个策略组合胜率最高?
     print("\n  Q1: 哪个策略胜率最高?")
     all_traded = []
-    for r in (traded_shaofu or []):
+    for r in traded_shaofu or []:
         all_traded.append(("少妇战法", r))
-    for r in (traded_multi or []):
+    for r in traded_multi or []:
         all_traded.append(("多策略融合", r))
     if all_traded:
         best = max(all_traded, key=lambda x: x[1]["win_rate"])
@@ -262,9 +270,9 @@ def summarize(shaofu_results, multi_results, screener_results):
     # Q3: 平均最大回撤
     print("\n  Q3: 平均最大回撤?")
     if traded_shaofu:
-        print(f"    少妇战法: {sum(r['max_drawdown'] for r in traded_shaofu)/len(traded_shaofu):.1%}")
+        print(f"    少妇战法: {sum(r['max_drawdown'] for r in traded_shaofu) / len(traded_shaofu):.1%}")
     if traded_multi:
-        print(f"    多策略融合: {sum(r['max_drawdown'] for r in traded_multi)/len(traded_multi):.1%}")
+        print(f"    多策略融合: {sum(r['max_drawdown'] for r in traded_multi) / len(traded_multi):.1%}")
 
     # Q4: 0交易股票数
     print("\n  Q4: 策略未触发(0交易)的股票数?")

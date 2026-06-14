@@ -24,8 +24,9 @@ from .indicators import (
     detect_centipede_pattern,
     detect_bull_rope,
     calculate_sandglass_score,
+    detect_kirin_stage,
 )
-from .strategies import detect_all_strategies, analyze_kirin_phase, StrategyType
+from .strategies import detect_all_strategies, StrategyType
 
 
 @dataclass
@@ -107,7 +108,6 @@ def diagnose_stock(ts_code: str, days: int = 100) -> DiagnosisReport:
 
     # K线数据（用于防卖飞评分和麒麟会阶段）
     klines_daily = get_kline_data(ts_code, days=days)
-    klines_dict = _daily_to_dict(klines_daily)
 
     # 防卖飞评分
     sell_score, sell_desc, sell_details = calculate_sell_score(klines_daily)
@@ -133,7 +133,7 @@ def diagnose_stock(ts_code: str, days: int = 100) -> DiagnosisReport:
             buy_signals.append(sig_dict)
 
     # 麒麟会阶段
-    kirin = analyze_kirin_phase(klines_dict)
+    kirin = detect_kirin_stage(klines_daily)
 
     # 蜈蚣图 / 牛绳 / 沙漏
     centipede = detect_centipede_pattern(klines_daily)
@@ -171,7 +171,7 @@ def diagnose_stock(ts_code: str, days: int = 100) -> DiagnosisReport:
         sell_score_details=sell_details,
         exit_signals=exit_signals[:5],
         buy_signals=buy_signals[:5],
-        kirin_phase=kirin.get("phase", "UNKNOWN"),
+        kirin_phase=kirin.get("stage", "UNKNOWN"),
         kirin_confidence=kirin.get("confidence", 0),
         is_centipede=centipede.get("is_centipede", False),
         centipede_score=centipede.get("score", 0),

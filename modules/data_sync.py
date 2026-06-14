@@ -121,7 +121,7 @@ class DataSyncer:
         # 向后兼容：保留 instance-level attrs（外部可能引用）
         # 但实际限流走模块级 _GLOBAL_LIMITER
         # （v2.11.0 计划移除，改用 @property + DeprecationWarning）
-        self.last_request_time = {}
+        self.last_request_time: dict[str, float] = {}
 
     def _rate_limit(self, api_name: str):
         """线程安全的限流控制（v2.10.0 P1-4 改为调模块级 _GLOBAL_LIMITER）"""
@@ -323,9 +323,10 @@ class DataSyncer:
         missing = [c for c in ts_codes if c not in have]
         logger.info(f"sync_missing: 共 {len(ts_codes)} 只，已有 {len(have)} 只，需补齐 {len(missing)} 只")
 
+        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y%m%d")
         results = {}
         for code in missing:
-            count = self.sync_daily_kline(code, days=days)
+            count = self.sync_daily_kline(code, start_date=start_date)
             results[code] = count
         return results
 

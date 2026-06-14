@@ -1,8 +1,9 @@
 from typing import Optional
-from .core import StrategyType, StrategySignal, Priority, Action, _calc_kdj
+from ..indicators import DailyData
+from .core import StrategyType, StrategySignal, Priority, Action, _get_kdj, _ensure_daily_klines
 
 
-def detect_changan(klines: list[dict], index: int, kirin_context: dict | None = None) -> StrategySignal | None:
+def detect_changan(klines: list[DailyData], index: int, kirin_context: dict | None = None) -> StrategySignal | None:
     """
     检测长安战法（已升级 MDC 验证 + 麒麟背景）
 
@@ -18,17 +19,18 @@ def detect_changan(klines: list[dict], index: int, kirin_context: dict | None = 
     if index < 3:
         return None
 
+    klines = _ensure_daily_klines(klines)
     klines[index - 2]
     day2 = klines[index - 1]
     day3 = klines[index]
 
     # 1. 第一天：B1（J<-13）
-    k1, d1, j1 = _calc_kdj(klines[: index - 1])
+    k1, d1, j1 = _get_kdj(klines, index - 2)
     if j1 >= -13:
         return None
 
     # 2. 第二天：放量长阳，J拐头
-    k2, d2, j2 = _calc_kdj(klines[:index])
+    k2, d2, j2 = _get_kdj(klines, index - 1)
     if not (day2["pct_chg"] >= 4 and day2["is_beidou"] and j2 > j1):
         return None
 
@@ -73,7 +75,7 @@ def detect_changan(klines: list[dict], index: int, kirin_context: dict | None = 
     )
 
 
-def detect_sifen_zhiyi_sanyin(klines: list[dict], index: int) -> StrategySignal | None:
+def detect_sifen_zhiyi_sanyin(klines: list[DailyData], index: int) -> StrategySignal | None:
     """
     检测四分之三阴量战法
 
@@ -82,6 +84,7 @@ def detect_sifen_zhiyi_sanyin(klines: list[dict], index: int) -> StrategySignal 
     if index < 1:
         return None
 
+    klines = _ensure_daily_klines(klines)
     today = klines[index]
     yesterday = klines[index - 1]
 
@@ -116,7 +119,7 @@ def detect_sifen_zhiyi_sanyin(klines: list[dict], index: int) -> StrategySignal 
     return None
 
 
-def detect_nana(klines: list[dict], index: int, kirin_context: dict | None = None) -> StrategySignal | None:
+def detect_nana(klines: list[DailyData], index: int, kirin_context: dict | None = None) -> StrategySignal | None:
     """
     检测娜娜图形（已升级 MDC 验证）
 
@@ -128,6 +131,8 @@ def detect_nana(klines: list[dict], index: int, kirin_context: dict | None = Non
     """
     if index < 10:
         return None
+
+    klines = _ensure_daily_klines(klines)
 
     # 检查连续放量上涨（最近3-5天）
     rise_count = 0
@@ -155,7 +160,7 @@ def detect_nana(klines: list[dict], index: int, kirin_context: dict | None = Non
         return None
 
     # J值负值
-    k, d, j = _calc_kdj(klines[: index + 1])
+    k, d, j = _get_kdj(klines, index)
     if j >= 0:
         return None
 
@@ -190,7 +195,7 @@ def detect_nana(klines: list[dict], index: int, kirin_context: dict | None = Non
     )
 
 
-def detect_yidong_dilian(klines: list[dict], index: int) -> StrategySignal | None:
+def detect_yidong_dilian(klines: list[DailyData], index: int) -> StrategySignal | None:
     """
     检测异动+地量地价战法
 
@@ -201,6 +206,8 @@ def detect_yidong_dilian(klines: list[dict], index: int) -> StrategySignal | Non
     """
     if index < 5:
         return None
+
+    klines = _ensure_daily_klines(klines)
 
     today = klines[index]
 
@@ -228,7 +235,7 @@ def detect_yidong_dilian(klines: list[dict], index: int) -> StrategySignal | Non
         return None
 
     # J值判断
-    k, d, j = _calc_kdj(klines[: index + 1])
+    k, d, j = _get_kdj(klines, index)
 
     return StrategySignal(
         ts_code=today["ts_code"],
@@ -247,7 +254,7 @@ def detect_yidong_dilian(klines: list[dict], index: int) -> StrategySignal | Non
     )
 
 
-def detect_pinghang(klines: list[dict], index: int) -> StrategySignal | None:
+def detect_pinghang(klines: list[DailyData], index: int) -> StrategySignal | None:
     """
     检测平行重炮 / 多门重炮
 
@@ -259,6 +266,8 @@ def detect_pinghang(klines: list[dict], index: int) -> StrategySignal | None:
     """
     if index < 6:
         return None
+
+    klines = _ensure_daily_klines(klines)
 
     # 收集最近7天内的放量阳线索引
     yang_indices = []
@@ -296,7 +305,7 @@ def detect_pinghang(klines: list[dict], index: int) -> StrategySignal | None:
         return None
 
     # J 值 < 55
-    k, d, j = _calc_kdj(klines[: y2 + 1])
+    k, d, j = _get_kdj(klines, y2)
     if j >= 55:
         return None
 
@@ -325,7 +334,7 @@ def detect_pinghang(klines: list[dict], index: int) -> StrategySignal | None:
     )
 
 
-def detect_kengqi(klines: list[dict], index: int) -> StrategySignal | None:
+def detect_kengqi(klines: list[DailyData], index: int) -> StrategySignal | None:
     """
     检测坑里起好货 / 填坑战法
 
@@ -336,6 +345,8 @@ def detect_kengqi(klines: list[dict], index: int) -> StrategySignal | None:
     """
     if index < 15:
         return None
+
+    klines = _ensure_daily_klines(klines)
 
     today = klines[index]
 
@@ -395,7 +406,7 @@ def detect_kengqi(klines: list[dict], index: int) -> StrategySignal | None:
     )
 
 
-def detect_duichen_va(klines: list[dict], index: int) -> StrategySignal | None:
+def detect_duichen_va(klines: list[DailyData], index: int) -> StrategySignal | None:
     """
     检测对称 VA 战法
 
@@ -410,6 +421,8 @@ def detect_duichen_va(klines: list[dict], index: int) -> StrategySignal | None:
     """
     if index < 20:
         return None
+
+    klines = _ensure_daily_klines(klines)
 
     today = klines[index]
 
@@ -444,7 +457,7 @@ def detect_duichen_va(klines: list[dict], index: int) -> StrategySignal | None:
         return None
 
     # 守恒被破坏的标志：当前已企稳（缩量 + J 低位）
-    k, d, j = _calc_kdj(klines[: index + 1])
+    k, d, j = _get_kdj(klines, index)
     is_stable = today["vol"] < klines[index - 1]["vol"] * 0.7 and j < 20
 
     if not is_stable:

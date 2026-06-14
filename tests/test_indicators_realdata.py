@@ -11,22 +11,26 @@ P2-1 真实数据回归测试：自研指标 vs Tushare 官方 stk_factor
 
 import os
 from datetime import datetime, timedelta
-
 import pandas as pd
 import pytest
+from dotenv import load_dotenv
 
-# 整文件 skipif：无 Tushare Token 就跳过
+load_dotenv()
+
+
+# 整文件 skipif：无 Tushare Token 或未设置 RUN_REALDATA=true 时就跳过
 _TUSHARE_TOKEN = os.environ.get("TUSHARE_TOKEN", "")
 _TUSHARE_API_URL = os.environ.get("TUSHARE_API_URL", "")
+_RUN_REALDATA = os.environ.get("RUN_REALDATA", "").lower() == "true"
 pytestmark = pytest.mark.skipif(
-    not (_TUSHARE_TOKEN and _TUSHARE_API_URL),
-    reason="P2-1 需配置 TUSHARE_TOKEN + TUSHARE_API_URL 才能跑真实数据回归",
+    not (_TUSHARE_TOKEN and _TUSHARE_API_URL and _RUN_REALDATA),
+    reason="需配置 TUSHARE_TOKEN + TUSHARE_API_URL 并设置 RUN_REALDATA=true 才能跑真实数据回归",
 )
 
 # 测试范围
 REALDATA_TS_CODE = "600519.SH"
 LOOKBACK_DAYS = 365  # 拉 1 年数据，确保足够样本
-DIFF_TOLERANCE = 0.05  # 5% 阈值（观察期 v2.10.0）
+DIFF_TOLERANCE = 0.02  # 2% 阈值（收紧 v3.2.0）
 
 
 # ==================== Fixtures ====================
@@ -78,10 +82,27 @@ def stk_factor_df(tushare_client, trade_dates) -> pd.DataFrame:
 @pytest.fixture(scope="module")
 def merged(kline_df, stk_factor_df) -> pd.DataFrame:
     """内连接 K 线 + stk_factor（按 trade_date 对齐）"""
+    # 仅从 stk_factor_df 中提取需要的指标字段以避免列名冲突
+    factor_cols = [
+        "trade_date",
+        "macd_dif",
+        "macd_dea",
+        "macd",
+        "kdj_k",
+        "kdj_d",
+        "kdj_j",
+        "rsi_6",
+        "rsi_12",
+        "rsi_24",
+        "boll_upper",
+        "boll_mid",
+        "boll_lower",
+        "cci",
+    ]
+    cols_to_use = [c for c in factor_cols if c in stk_factor_df.columns]
     return kline_df.merge(
-        stk_factor_df,
+        stk_factor_df[cols_to_use],
         on="trade_date",
-        suffixes=("_ours", "_tushare"),
     )
 
 
@@ -117,9 +138,9 @@ def test_macd_dif_vs_stk_factor(merged):
     mean_diff = merged["macd_dif_diff_pct"].mean()
     max_diff = merged["macd_dif_diff_pct"].max()
 
-    assert median_diff < DIFF_TOLERANCE, (
-        f"MACD.dif 中位数 diff {median_diff:.2%} > {DIFF_TOLERANCE:.0%}（mean={mean_diff:.2%} max={max_diff:.2%}）"
-    )
+    assert (
+        median_diff < DIFF_TOLERANCE
+    ), f"MACD.dif 中位数 diff {median_diff:.2%} > {DIFF_TOLERANCE:.0%}（mean={mean_diff:.2%} max={max_diff:.2%}）"
 
 
 def test_macd_dea_vs_stk_factor(merged):
@@ -178,8 +199,8 @@ def test_kdj_k_vs_stk_factor(merged):
     )
 
     median_diff = merged["kdj_k_diff_pct"].median()
-    # KDJ 量纲 0-100，绝对差阈值用 5（5 个百分点）
-    assert median_diff < 5, f"KDJ.k 中位数绝对差 {median_diff:.2f} > 5（百分点）"
+    # KDJ 量纲 0-100，绝对差阈值用 2（2 个百分点）
+    assert median_diff < 2, f"KDJ.k 中位数绝对差 {median_diff:.2f} > 2（百分点）"
 
 
 def test_kdj_d_vs_stk_factor(merged):
@@ -206,7 +227,7 @@ def test_kdj_d_vs_stk_factor(merged):
     merged["kdj_d_diff_pct"] = (merged["kdj_d_ours"] - merged["kdj_d"]).abs()
 
     median_diff = merged["kdj_d_diff_pct"].median()
-    assert median_diff < 5, f"KDJ.d 中位数绝对差 {median_diff:.2f} > 5（百分点）"
+    assert median_diff < 2, f"KDJ.d 中位数绝对差 {median_diff:.2f} > 2（百分点）"
 
 
 # ==================== RSI 对比 ====================
@@ -236,8 +257,8 @@ def test_rsi6_vs_stk_factor(merged):
     merged["rsi_6_diff_pct"] = (merged["rsi_6_ours"] - merged["rsi_6"]).abs()
 
     median_diff = merged["rsi_6_diff_pct"].median()
-    # RSI 0-100 量纲，绝对差阈值 5
-    assert median_diff < 5, f"RSI6 中位数绝对差 {median_diff:.2f} > 5（百分点）"
+    # RSI 0-100 量纲，绝对差阈值 2
+    assert median_diff < 2, f"RSI6 中位数绝对差 {median_diff:.2f} > 2（百分点）"
 
 
 def test_rsi12_vs_stk_factor(merged):
@@ -264,7 +285,7 @@ def test_rsi12_vs_stk_factor(merged):
     merged["rsi_12_diff_pct"] = (merged["rsi_12_ours"] - merged["rsi_12"]).abs()
 
     median_diff = merged["rsi_12_diff_pct"].median()
-    assert median_diff < 5, f"RSI12 中位数绝对差 {median_diff:.2f} > 5（百分点）"
+    assert median_diff < 2, f"RSI12 中位数绝对差 {median_diff:.2f} > 2（百分点）"
 
 
 # ==================== 集成检查 ====================

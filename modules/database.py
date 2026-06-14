@@ -64,11 +64,17 @@ def get_db_path() -> Path:
     return path
 
 
+def get_db_connection() -> sqlite3.Connection:
+    """获取数据库连接（动态读取 DB_PATH 环境变量）"""
+    conn = sqlite3.connect(get_db_path())
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
 @contextmanager
 def get_connection() -> Generator[sqlite3.Connection, None, None]:
     """获取数据库连接的上下文管理器"""
-    conn = sqlite3.connect(get_db_path())
-    conn.row_factory = sqlite3.Row
+    conn = get_db_connection()
     # 开启 WAL 模式以提升并发和写入性能
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
@@ -80,6 +86,165 @@ def get_connection() -> Generator[sqlite3.Connection, None, None]:
         raise
     finally:
         conn.close()
+
+
+def init_tracking_tables(conn: sqlite3.Connection) -> None:
+    """初始化自我改进系统跟踪表（4 张表 + 索引）
+
+    表定义对应 modules/tracking_tables.sql，所有表名以 _self 结尾，
+    与主系统表区分。
+    """
+    cursor = conn.cursor()
+
+    # 1. 跟踪池表：管理跟踪的股票
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tracking_pool_self (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts_code TEXT NOT NULL,
+            name TEXT,
+            add_date TEXT NOT NULL,
+            remove_date TEXT,
+            status TEXT DEFAULT 'active',
+            track_reason TEXT,
+            strategy_tags TEXT,
+            notes TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(ts_code, add_date)
+        )
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_tracking_pool_self_code
+        ON tracking_pool_self(ts_code)
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_tracking_pool_self_status
+        ON tracking_pool_self(status)
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_tracking_pool_self_add_date
+        ON tracking_pool_self(add_date)
+    """)
+
+    # 2. 跟踪记录表：记录每日的行情、指标、信号
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tracking_records_self (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts_code TEXT NOT NULL,
+            trade_date TEXT NOT NULL,
+            open REAL,
+            high REAL,
+            low REAL,
+            close REAL,
+            vol REAL,
+            pct_chg REAL,
+            amount REAL,
+            j_value REAL,
+            k_value REAL,
+            d_value REAL,
+            bbi REAL,
+            macd_dif REAL,
+            macd_dea REAL,
+            macd_hist REAL,
+            rsi_6 REAL,
+            wr_6 REAL,
+            boll_upper REAL,
+            boll_mid REAL,
+            boll_lower REAL,
+            vol_ratio REAL,
+            is_brick_red INTEGER DEFAULT 0,
+            is_brick_green INTEGER DEFAULT 0,
+            brick_count INTEGER DEFAULT 0,
+            is_n_structure INTEGER DEFAULT 0,
+            is_double_gun INTEGER DEFAULT 0,
+            signal_type TEXT,
+            signal_score REAL,
+            signal_reason TEXT,
+            stage TEXT,
+            stage_confidence REAL,
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(ts_code, trade_date)
+        )
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_tracking_records_self_code
+        ON tracking_records_self(ts_code)
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_tracking_records_self_date
+        ON tracking_records_self(trade_date)
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_tracking_records_self_signal
+        ON tracking_records_self(signal_type)
+    """)
+
+    # 3. 月度复盘表：记录每月的复盘结果
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS monthly_reviews_self (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            review_month TEXT NOT NULL,
+            ts_code TEXT NOT NULL,
+            start_price REAL,
+            start_j_value REAL,
+            start_signal TEXT,
+            end_price REAL,
+            end_j_value REAL,
+            end_signal TEXT,
+            monthly_return REAL,
+            max_drawdown REAL,
+            max_gain REAL,
+            buy_signals_count INTEGER,
+            sell_signals_count INTEGER,
+            correct_buy_signals INTEGER,
+            correct_sell_signals INTEGER,
+            review_summary TEXT,
+            lessons_learned TEXT,
+            strategy_adjustments TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(review_month, ts_code)
+        )
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_monthly_reviews_self_month
+        ON monthly_reviews_self(review_month)
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_monthly_reviews_self_code
+        ON monthly_reviews_self(ts_code)
+    """)
+
+    # 4. 策略表现统计表：统计各策略的表现
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS strategy_performance_self (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            strategy_name TEXT NOT NULL,
+            review_month TEXT NOT NULL,
+            total_signals INTEGER,
+            correct_signals INTEGER,
+            accuracy_rate REAL,
+            avg_return REAL,
+            max_return REAL,
+            min_return REAL,
+            win_rate REAL,
+            avg_drawdown REAL,
+            max_drawdown REAL,
+            sharpe_ratio REAL,
+            strengths TEXT,
+            weaknesses TEXT,
+            adjustments TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(strategy_name, review_month)
+        )
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_strategy_performance_self_name
+        ON strategy_performance_self(strategy_name)
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_strategy_performance_self_month
+        ON strategy_performance_self(review_month)
+    """)
 
 
 def init_database() -> None:
@@ -442,6 +607,9 @@ def init_database() -> None:
             CREATE INDEX IF NOT EXISTS idx_llm_log_model
             ON llm_response_log(model, request_date DESC)
         """)
+
+        # 12. 自我改进系统跟踪表（tracking_tables.sql）
+        init_tracking_tables(conn)
 
         print(f"数据库初始化完成: {get_db_path()}")
 

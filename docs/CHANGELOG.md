@@ -2,7 +2,53 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [v3.1.1] - 2026-06-14
+
+
+> **「v3.1.1：策略层数据结构大一统 + 移除猴子补丁 + 逃顶五式联动。」**
+
+### 核心变更
+
+- **数据结构大一统与属性取值**：
+  - 所有公开策略函数（包括买点、卖点、复合策略等）入参统一为 `list[DailyData]`。
+  - 内部数据读取升级为 `k.close` 等标准属性语法，相比原字典 `k["close"]` 访问语法拥有更高的执行效率与更好的可读性。
+  - 在 `core.py` 引入 `_ensure_daily_klines` 防御转换网关，当外界传入 `list[dict]` 时自动无缝兼容包装，保证历史接口 100% 绝对兼容。
+- **彻底告别猴子补丁**：
+  - 移除 `strategies/__init__.py` 中对其他核心模块动态替换与劫持的猴子补丁优化方案，极大改善了代码健壮性。
+  - 升级为指标全量预挂载模式，在一开始为整个 `daily_klines` 节点算好 KDJ/BBI/MACD DIF 指标属性。子判定函数内部通过 `_get_kdj` 等实现 O(1) 指标读取。
+- **逃顶联动共振**：
+  - 重构了 `sell_signals.py` 内所有的判定函数。
+  - 将出货五式量化识别（`detect_chuhuo_wushi`）作为验证因子融入 `detect_s2` 与 `detect_s3` 中，当触发主力高危出货共振时自动增加逃顶信号的置信度。
+- **测试与稳定性**：
+  - 全量 570+ 个测试用例全部 PASSED 通过，之前因字典类型及局部指标计算差异引起报错的策略专用测试均已成功修复。
+
+---
+
+## [v3.1.0] - 2026-06-14
+
+
+> **「v3.1.0 正式版：P3 指标补完 + 工程架构重构优化。」**
+
+### 核心变更
+
+- **P3 指标补完**：
+  - **蜈蚣图识别**：`detect_centipede_pattern()` (基于长上/下影、十字星、量能与价格趋势评分)。
+  - **牛绳理论量化**：`detect_bull_rope()` (基于白线/黄线关系、缺口百分比与趋势判定)。
+  - **量比战法引擎**：`detect_volume_ratio_strategy()` (识别攻击日、出货日、单向拉升等6类场景)。
+  - **沙漏评分 V9**：`calculate_sandglass_score()` (缩量收敛、均线结构等5因子评分，判定完美图形)。
+- **工程质量与 CLI 修复**：
+  - 修复 CLI 中 `backtest`, `trade`, `daily` 子命令因参数解析顺序错误无法执行的致命 Bug。
+  - 数据库补齐交易追踪（tracking）相关的 4 张核心数据表及索引。
+  - 清理 indicators 和 strategies 模块中的死代码、冗余 try/except 以及 `calculate_ma` 重复实现。
+  - 精简 `pyproject.toml` 和 `requirements.txt` 依赖，将 `yt-dlp` 和 `faster-whisper` 等语料处理库移动至 `corpus` 可选依赖中。
+  - 移除 5.8MB 的 actionlint 二进制文件并加入 `.gitignore`。
+  - 提升 `tushare_client.py` 异常处理一致性（出错时统一返回 `None`）。
+  - CI 配置优化，收紧 lint、quality-gate 等 CI Job 的质量关卡。
+
+---
+
 ## [v3.0.0] - 2026-06-03
+
 
 > **「v3.0.0 正式版：编排模式 + 人生/创业蒸馏 + 双维度扩展。」**
 

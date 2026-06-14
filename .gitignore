@@ -33,6 +33,10 @@ env/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.coverage
+htmlcov/
+.python-version
+.ropeproject/
 
 # 系统文件
 .DS_Store
@@ -43,6 +47,9 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+*.bak
+*.backup
+
 
 # 文档转换临时文件
 ~$*.docx
@@ -59,6 +66,9 @@ CLAUDE.md.bak
 # 日志文件（临时文件，不入库）
 logs/*.log
 logs/*.jsonl
+
+# 二进制工具（应通过包管理器安装）
+actionlint
 
 # Darwin self-optimizer artifacts (regenerated each run)
 optimization_drafts/

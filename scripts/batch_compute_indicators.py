@@ -3,6 +3,7 @@
 [薄壳] 批量计算自选股清单的指标缓存（已有 K 线，只算指标）
 v2.10.0 重构：业务逻辑迁至 modules.data_sync.DataSyncer.sync_all_indicators
 """
+
 import argparse
 import sys
 from pathlib import Path

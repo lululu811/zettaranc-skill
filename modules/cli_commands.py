@@ -16,7 +16,7 @@ CLI 扩展命令模块（待集成到 cli.py）
 import json
 import sys
 from datetime import datetime
-from typing import Any
+from typing import Any, NoReturn
 
 
 # ==================== 工具函数 ====================
@@ -27,7 +27,7 @@ def _json_output(data: Any) -> None:
     print(json.dumps(data, ensure_ascii=False, indent=2, default=str))
 
 
-def _error(msg: str) -> None:
+def _error(msg: str) -> NoReturn:
     """打印错误信息到 stderr 并退出"""
     print(f"错误: {msg}", file=sys.stderr)
     sys.exit(1)
@@ -168,17 +168,17 @@ def cmd_backtest(args) -> None:
 
         from .backtest_six_step import backtest_shaofu_single
 
-        result = backtest_shaofu_single(ts_code, days=days)
+        result_sf = backtest_shaofu_single(ts_code, days=days)
 
-        if result.total_trades == 0:
+        if result_sf.total_trades == 0:
             _warn(f"{ts_code} 在 {days} 天内无交易记录（数据不足或无信号触发）")
 
         if use_json:
-            _json_output(_shaofu_result_to_dict(result))
+            _json_output(_shaofu_result_to_dict(result_sf))
         else:
             from .backtest_six_step import summary_text
 
-            print(summary_text(result))
+            print(summary_text(result_sf))
 
     # ── multi: 多策略融合回测 ──
     elif sub == "multi":
@@ -189,15 +189,15 @@ def cmd_backtest(args) -> None:
 
         # --strategy 参数暂不传给底层（底层用全部策略融合）
         # 未来可扩展为按策略过滤
-        result = backtest_multi_strategy(ts_code, days=days)
+        result_multi = backtest_multi_strategy(ts_code, days=days)
 
-        if result.total_trades == 0:
+        if result_multi.total_trades == 0:
             _warn(f"{ts_code} 在 {days} 天内无交易记录")
 
         if use_json:
-            _json_output(_portfolio_result_to_dict(result))
+            _json_output(_portfolio_result_to_dict(result_multi))
         else:
-            print(result.summary())
+            print(result_multi.summary())
 
     # ── portfolio: 组合回测 ──
     elif sub == "portfolio":
@@ -213,31 +213,31 @@ def cmd_backtest(args) -> None:
         if len(ts_codes) == 1:
             from .backtest_six_step import backtest_shaofu_single
 
-            result = backtest_shaofu_single(ts_codes[0], days=days)
+            result_sf_single = backtest_shaofu_single(ts_codes[0], days=days)
             if use_json:
-                _json_output(_shaofu_result_to_dict(result))
+                _json_output(_shaofu_result_to_dict(result_sf_single))
             else:
                 from .backtest_six_step import summary_text
 
-                print(summary_text(result))
+                print(summary_text(result_sf_single))
         else:
             from .backtest_six_step import backtest_shaofu_portfolio
 
-            result = backtest_shaofu_portfolio(ts_codes, days=days)
+            result_port = backtest_shaofu_portfolio(ts_codes, days=days)
             if use_json:
-                _json_output(_shaofu_portfolio_to_dict(result))
+                _json_output(_shaofu_portfolio_to_dict(result_port))
             else:
                 print(f"{'=' * 60}")
                 print("少妇战法组合回测结果")
                 print(f"{'=' * 60}")
                 print(f"股票数量:     {len(ts_codes)}")
-                print(f"总交易次数:   {result['total_trades']}")
-                print(f"整体胜率:     {result['overall_win_rate']:.1%}")
-                print(f"累计收益:     {result['total_return']:+.2%}")
-                print(f"最大回撤:     {result['max_drawdown']:.2%}")
-                print(f"夏普比率:     {result['sharpe_ratio']:.2f}")
+                print(f"总交易次数:   {result_port['total_trades']}")
+                print(f"整体胜率:     {result_port['overall_win_rate']:.1%}")
+                print(f"累计收益:     {result_port['total_return']:+.2%}")
+                print(f"最大回撤:     {result_port['max_drawdown']:.2%}")
+                print(f"夏普比率:     {result_port['sharpe_ratio']:.2f}")
                 print(f"{'=' * 60}")
-                for r in result.get("results", []):
+                for r in result_port.get("results", []):
                     status = "有交易" if r.total_trades > 0 else "无交易"
                     print(f"  {r.ts_code}: {status} {r.total_trades}笔 胜率{r.win_rate:.0%} 收益{r.total_return:+.2%}")
 
@@ -627,10 +627,10 @@ def cmd_daily(args) -> None:
         # 选股
         if isinstance(report["top_picks"], list) and report["top_picks"]:
             print("\n【B1 潜力股 TOP 10】")
-            for i, s in enumerate(report["top_picks"], 1):
+            for i, pick_dict in enumerate(report["top_picks"], 1):
                 print(
-                    f"  {i:2}. {s['ts_code']} {s['name']:<8} "
-                    f"评分:{s['score']:5.1f}  B1:{s['b1_score']:5.1f}  {s['rating']}"
+                    f"  {i:2}. {pick_dict['ts_code']} {pick_dict['name']:<8} "
+                    f"评分:{pick_dict['score']:5.1f}  B1:{pick_dict['b1_score']:5.1f}  {pick_dict['rating']}"
                 )
 
         # 持仓

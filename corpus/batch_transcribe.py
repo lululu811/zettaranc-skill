@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """批量转写已下载的 B 站音频（faster-whisper base 模型）"""
+
 import os
 import glob
 from pathlib import Path

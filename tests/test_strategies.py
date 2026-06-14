@@ -6,9 +6,6 @@ import pytest
 from modules.strategies import (
     StrategyType,
     Priority,
-    calculate_ma,
-    calculate_kdj,
-    calculate_bbi,
     detect_b1,
     detect_b2,
     detect_b3,
@@ -23,7 +20,6 @@ from modules.strategies import (
     detect_s1,
     detect_s2,
     detect_s3,
-    analyze_kirin_phase,
     detect_all_strategies,
     get_latest_signal,
     detect_brick_signals,
@@ -33,6 +29,8 @@ from modules.strategies import (
     detect_top_pinwheel,
 )
 from modules.indicators import detect_volume_attack, DailyData
+from modules.indicators.core import calculate_ma
+from modules.strategies.core import _calc_kdj as calculate_kdj, _calc_bbi as calculate_bbi
 from datetime import datetime, timedelta
 from tests.conftest import make_kline_row, generate_uptrend_klines
 from tests.conftest import generate_downtrend_klines, generate_b1_scenario
@@ -236,20 +234,6 @@ class TestDetectS3:
     def test_insufficient_data(self):
         klines = generate_uptrend_klines(n=10)
         assert detect_s3(klines, 9) is None
-
-
-class TestAnalyzeKirinPhase:
-    def test_insufficient_data(self):
-        klines = generate_uptrend_klines(n=10)
-        result = analyze_kirin_phase(klines)
-        assert result["phase"] == "UNKNOWN"
-
-    def test_uptrend_phase(self):
-        """上升趋势中应判断为拉升或吸筹"""
-        klines = generate_uptrend_klines(n=60, start_price=100.0, daily_pct=1.5)
-        result = analyze_kirin_phase(klines)
-        assert result["phase"] in ("拉升", "吸筹", "UNKNOWN")
-        assert 0 <= result["confidence"] <= 1
 
 
 class TestDetectPinghang:

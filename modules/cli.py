@@ -46,6 +46,11 @@ STRATEGY_ALIAS = {
     "安全": "safe",
     "超跌": "oversold",
     "突破": "breakout",
+    "牵牛": "bull_rope",
+    "牛绳": "bull_rope",
+    "沙漏": "sandglass_perfect",
+    "沙漏评分": "sandglass_perfect",
+    "量比战法": "volume_ratio_super",
 }
 
 STRATEGY_CHOICES = list(STRATEGY_ALIAS.keys())
@@ -719,11 +724,8 @@ def main():
     p_track.add_argument("--notes", help="备注")
     p_track.add_argument("--status", choices=["active", "paused", "removed"], default="active", help="状态筛选")
     p_track.add_argument("--json", action="store_true", help="JSON输出")
-
     # ── self-optimize (darwin self-optimizer) ──
     add_self_optimize_parser(subparsers)
-
-    args = parser.parse_args()
 
     # ── backtest（shaofu / multi / portfolio）──
     p_bt = subparsers.add_parser("backtest", help="策略回测")
@@ -755,6 +757,9 @@ def main():
     # ── daily ──
     p_daily = subparsers.add_parser("daily", help="每日五步工作流")
     p_daily.add_argument("--json", action="store_true", help="JSON输出")
+
+    args = parser.parse_args()
+
     # 调度表
     from modules.cli_commands import cmd_backtest, cmd_trade, cmd_daily
 

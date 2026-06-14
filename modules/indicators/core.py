@@ -2,7 +2,8 @@
 技术指标计算模块 — 核心基础类型与数学工具
 """
 
-from typing import Optional
+from typing import Optional, Any
+
 import os
 import sqlite3
 from dataclasses import dataclass
@@ -11,12 +12,9 @@ from pathlib import Path
 
 # dotenv 加载已移至 modules/__init__.py（包级别一次性加载，override=True）
 
-# 数据库路径：从环境变量读取，支持相对路径和绝对路径
-_db_path_str = os.getenv("DB_PATH", "data/stock_data.db")
-_db_path = Path(_db_path_str)
-if not _db_path.is_absolute():
-    _db_path = Path(__file__).parent.parent.parent / _db_path_str
-DB_PATH = str(_db_path.resolve())
+from modules.database import DB_PATH as _db_path, get_db_connection
+
+DB_PATH = str(_db_path)
 
 # 数据模式
 DATA_MODE = os.getenv("DATA_MODE", "websearch")
@@ -54,6 +52,30 @@ class DailyData:
     amount: float
     pct_chg: float
     prev_close: float = 0
+
+    # 扩展形态与特征字段（供 strategies 策略计算使用）
+    is_rise: bool = False
+    is_beidou: bool = False
+    is_suoliang: bool = False
+    is_jiayin: bool = False
+    is_yinxian: bool = False
+    is_fangliang_yinxian: bool = False
+    kdj_k: float | None = None
+    kdj_d: float | None = None
+    kdj_j: float | None = None
+    bbi: float | None = None
+    macd_dif: float | None = None
+    macd_dea: float | None = None
+    macd_hist: float | None = None
+
+    def __getitem__(self, key: str) -> Any:
+        try:
+            return getattr(self, key)
+        except AttributeError:
+            raise KeyError(key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return getattr(self, key, default)
 
 
 @dataclass
@@ -241,24 +263,6 @@ class IndicatorResult:
     # 市场背景
     market_pct_chg: float = 0
     market_dir: str = "NEUTRAL"
-
-
-def _resolve_db_path() -> Path:
-    """动态解析数据库路径（每次调用时读取环境变量）"""
-    path_str = os.getenv("DB_PATH", "data/stock_data.db")
-    path = Path(path_str)
-    if not path.is_absolute():
-        path = Path(__file__).parent.parent.parent / path_str
-    return path.resolve()
-
-
-def get_db_connection() -> sqlite3.Connection:
-    """获取数据库连接（动态读取 DB_PATH 环境变量）"""
-    db_path = _resolve_db_path()
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    return conn
 
 
 def calculate_ma(prices: list[float], period: int) -> float:

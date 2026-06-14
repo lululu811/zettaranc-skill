@@ -7,7 +7,7 @@
 repos:
   # === ruff (lint + format) ===
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.15
+    rev: v0.8.6
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -22,7 +22,7 @@ repos:
     hooks:
       - id: mypy
         # 只检查关键路径（避免对所有模块强类型检查，引入 pandas-stubs 依赖）
-        files: '^modules/(screener|indicators/core|strategies|cli|data_sync)/.*\.py$'
+        files: '^modules/(screener|cli|data_sync|indicators/core|strategies/.*)\.py$'
         additional_dependencies:
           - pandas-stubs
           - types-requests

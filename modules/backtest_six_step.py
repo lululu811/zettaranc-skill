@@ -333,7 +333,7 @@ if __name__ == "__main__":
         print(summary_text(result))
 
     elif args.command == "portfolio":
-        result = backtest_shaofu_portfolio(
+        port_result = backtest_shaofu_portfolio(
             args.ts_codes,
             days=args.days,
             max_concurrent=args.max_concurrent,
@@ -343,14 +343,14 @@ if __name__ == "__main__":
         print("少妇战法组合回测结果")
         print(f"{'=' * 60}")
         print(f"股票数量:     {len(args.ts_codes)}")
-        print(f"总交易次数:   {result['total_trades']}")
-        print(f"整体胜率:     {result['overall_win_rate']:.1%}")
-        print(f"累计收益:     {result['total_return']:+.2%}")
-        print(f"最大回撤:     {result['max_drawdown']:.2%}")
-        print(f"夏普比率:     {result['sharpe_ratio']:.2f}")
+        print(f"总交易次数:   {port_result['total_trades']}")
+        print(f"整体胜率:     {port_result['overall_win_rate']:.1%}")
+        print(f"累计收益:     {port_result['total_return']:+.2%}")
+        print(f"最大回撤:     {port_result['max_drawdown']:.2%}")
+        print(f"夏普比率:     {port_result['sharpe_ratio']:.2f}")
         print(f"{'=' * 60}")
         print("\n各股明细:")
-        for r in result["results"]:
+        for r in port_result["results"]:
             status = "有交易" if r.total_trades > 0 else "无交易"
             print(f"  {r.ts_code}: {status} {r.total_trades}笔 胜率{r.win_rate:.0%} 收益{r.total_return:+.2%}")
 

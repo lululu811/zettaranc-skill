@@ -130,9 +130,9 @@ def test_thin_shell_has_help(script):
         timeout=15,
     )
     # argparse 默认 --help 退出 0
-    assert result.returncode == 0, (
-        f"{script} --help exit {result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
-    )
+    assert (
+        result.returncode == 0
+    ), f"{script} --help exit {result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
 
 
 @pytest.mark.parametrize("script", SHELL_SCRIPTS)
@@ -181,6 +181,6 @@ def test_thin_shell_uses_stocks_json_env_or_default(script):
     # v2.10.0: _load_watchlist 已提取到 scripts/_common.py，
     # 薄壳脚本通过 from scripts._common import load_watchlist 间接依赖
     common_src = (PROJECT_ROOT / "scripts" / "_common.py").read_text(encoding="utf-8")
-    assert "STOCKS_JSON" in src or ("from scripts._common import" in src and "STOCKS_JSON" in common_src), (
-        f"{script} doesn't support STOCKS_JSON env (directly or via _common)"
-    )
+    assert "STOCKS_JSON" in src or (
+        "from scripts._common import" in src and "STOCKS_JSON" in common_src
+    ), f"{script} doesn't support STOCKS_JSON env (directly or via _common)"

@@ -4,7 +4,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-Skill-blueviolet)](https://claude.ai/code)
-[![v3.1.0](https://img.shields.io/badge/version-3.1.0-green)](docs/CHANGELOG.md)
+[![v3.1.1](https://img.shields.io/badge/version-3.1.1-green)](docs/CHANGELOG.md)
+
 
 <br>
 
@@ -19,7 +20,8 @@
 
 ---
 
-## v3.1.0 能做什么
+## v3.1.1 能做什么
+
 
 > **不只是炒股工具，是多场景智能决策系统。宿主（Claude Code / Cursor）可直接调用 CLI 工具获取真实数据。**
 
@@ -47,7 +49,13 @@
 
 ### 完整功能清单
 
+**策略与架构优化（v3.1.1 升级）**
+- 🛡️ **输入数据大一统**：策略判定函数全面升级为 `list[DailyData]` 强类型输入，并通过智能防御网关实现对字典类型的 100% 向后兼容。
+- 🚀 **彻底清空“猴子补丁”**：移除了针对核心指标模块动态劫持的补丁机制，升级为全量指标属性一次性挂载，各战法读取指标降低为 O(1) 开销。
+- 🎣 **逃顶出货五式联动**：在 S2 (顶背离) / S3 (反弹受阻) 逃顶策略中集成出货五式量化验证，通过出货共振高危过滤大幅优化逃顶准确率。
+
 **性能与架构优化（v2.10.0 新增）**
+
 - ⚡️ **60x 指标计算提速**：全面引入 Pandas 向量化引擎（替换 Python For 循环），严格匹配通达信（TDX）算法精度。
 - 🚀 **10x-50x 写入提速**：SQLite 数据同步全量采用 Batch Insert 并发写入（`executemany`），彻底消除性能瓶颈。
 - 🌐 **多线程网络 I/O**：全市场 5000+ 股票数据并发拉取（`ThreadPoolExecutor`），带线程安全的 Tushare API 防封限流锁。
@@ -125,20 +133,16 @@ cp .env.example .env
 
 ```ini
 DATA_MODE=jnb
-TUSHARE_TOKEN=你...n
-> **数据模式**：`DATA_MODE=jnb` 时必须配置 Tushare Token 和 API URL；`DATA_MODE=websearch` 时可留空。
-> 
-> **Token 获取**：前往 [Tushare 官网](https://tushare.pro/user/token) 注册。
-> 
-> **中转 API**：需要配置中转地址，可从 Tushare 中转服务商获取。
-> 
-> **LLM 配置**：可选，配置 `LLM_API_KEY` 后可使用 LLM 生成回答；未配置时仅显示意图识别结果。
-> 
-> **向量知识库**：默认关闭，设置 `KB_ENABLED=true` 并配置 `KB_API_URL` 可开启 RAG 检索。
+TUSHARE_TOKEN=你的56位token
+TUSHARE_API_URL=中转API地址
+```
 
-> **Token 获取**：前往 [Tushare 官网](https://tushare.pro/user/token) 注册。
-> 
-> **中转 API**：需要配置中转地址，可从 Tushare 中转服务商获取。
+> [!NOTE]
+> * **数据模式**：`DATA_MODE=jnb` 时必须配置 Tushare Token 和 API URL；`DATA_MODE=websearch` 时可留空。
+> * **Token 获取**：前往 [Tushare 官网](https://tushare.pro/user/token) 注册获取 Token。
+> * **中转 API**：可使用中转服务商提供的代理地址。
+> * **LLM 配置**：可选。配置 `LLM_API_KEY` 等参数后可启用小万 LLM 对话及点评功能；未配置时将仅输出命令行分析及意图路由。
+> * **向量知识库**：默认关闭，设置 `KB_ENABLED=true` 并配置对应服务后可开启本地 RAG 知识检索。
 
 ### 3. 初始化
 
@@ -156,7 +160,7 @@ python -m modules.data_sync sync --ts_code 600487.SH --days 120
 ### 4. 验证
 
 ```bash
-# 运行测试（543 passed, 10 skipped）
+# 运行测试（572 passed, 10 skipped）
 python -m pytest tests/ -v
 
 # 分析一只股票
@@ -168,6 +172,7 @@ python -m modules.cli screen --strategy B1 --limit 20
 # 少妇战法回测
 python -m modules.cli backtest shaofu 600487.SH --days 250
 ```
+
 
 ---
 

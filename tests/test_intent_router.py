@@ -56,7 +56,7 @@ def test_rule_match():
             print(f"       命中词: {result.matched_keywords[:5]}")
 
     print(f"\n规则匹配: {passed} passed, {failed} failed")
-    return failed == 0
+    assert failed == 0
 
 
 def test_kb_retrieval():

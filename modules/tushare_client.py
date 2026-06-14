@@ -93,7 +93,7 @@ class TushareClient:
             )
         except Exception as e:
             logger.error(f"get_daily 失败: {e}")
-            return pd.DataFrame()
+            return None
 
     def get_index_daily(self, ts_code: str, start_date: str, end_date: str) -> pd.DataFrame | None:
         """获取指数日线（如沪深300）"""
@@ -102,7 +102,7 @@ class TushareClient:
             return self._pro.index_daily(ts_code=ts_code, start_date=start_date, end_date=end_date)
         except Exception as e:
             logger.error(f"get_index_daily 失败: {e}")
-            return pd.DataFrame()
+            return None
 
     def get_realtime_quote(self, ts_codes: list[str]) -> pd.DataFrame | None:
         """获取 A 股实时行情"""
@@ -112,7 +112,7 @@ class TushareClient:
             return ts.realtime_quote(ts_code=ts_code_str)
         except Exception as e:
             logger.error(f"get_realtime_quote 失败: {e}")
-            return pd.DataFrame()
+            return None
 
     def get_moneyflow(self, ts_code: str, trade_date: str) -> pd.DataFrame | None:
         """获取个股资金流向"""
@@ -121,7 +121,7 @@ class TushareClient:
             return self._pro.moneyflow(ts_code=ts_code, trade_date=trade_date)
         except Exception as e:
             logger.error(f"get_moneyflow 失败: {e}")
-            return pd.DataFrame()
+            return None
 
     def get_stock_basic(self, ts_code: str | None = None, name: str | None = None) -> pd.DataFrame | None:
         """获取股票基本信息"""
@@ -135,7 +135,7 @@ class TushareClient:
             return self._pro.stock_basic(**params)
         except Exception as e:
             logger.error(f"get_stock_basic 失败: {e}")
-            return pd.DataFrame()
+            return None
 
     def get_limit_list(self, trade_date: str) -> pd.DataFrame | None:
         """获取涨跌停列表"""
@@ -144,7 +144,7 @@ class TushareClient:
             return self._pro.limit_list_d(trade_date=trade_date)
         except Exception as e:
             logger.error(f"get_limit_list 失败: {e}")
-            return pd.DataFrame()
+            return None
 
     def get_top_list(self, trade_date: str) -> pd.DataFrame | None:
         """获取龙虎榜数据"""
@@ -153,7 +153,7 @@ class TushareClient:
             return self._pro.top_list(trade_date=trade_date)
         except Exception as e:
             logger.error(f"get_top_list 失败: {e}")
-            return pd.DataFrame()
+            return None
 
     def get_financial_data(self, ts_code: str, start_date: str, end_date: str) -> pd.DataFrame | None:
         """获取财务指标"""
@@ -162,7 +162,7 @@ class TushareClient:
             return self._pro.fina_indicator(ts_code=ts_code, start_date=start_date, end_date=end_date)
         except Exception as e:
             logger.error(f"get_financial_data 失败: {e}")
-            return pd.DataFrame()
+            return None
 
     def get_trade_cal(self, exchange: str = "SSE", start_date: str = "", end_date: str = "") -> pd.DataFrame | None:
         """获取交易日历"""
@@ -176,7 +176,7 @@ class TushareClient:
             return self._pro.trade_cal(**params)
         except Exception as e:
             logger.error(f"get_trade_cal 失败: {e}")
-            return pd.DataFrame()
+            return None
 
     def check_connection(self) -> bool:
         """检查 API 连通性"""

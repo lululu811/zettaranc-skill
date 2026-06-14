@@ -45,9 +45,9 @@ def test_top_level_help_lists_all_seven_commands():
 def test_each_top_command_has_help(cmd):
     """每个顶层 subcommand 必须支持 --help"""
     result = run_zt(cmd, "--help")
-    assert result.returncode == 0, (
-        f"{cmd} --help exit {result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
-    )
+    assert (
+        result.returncode == 0
+    ), f"{cmd} --help exit {result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
 
 
 def test_missing_command_exits_nonzero():

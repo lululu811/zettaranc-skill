@@ -40,8 +40,6 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # v2.10.0 观察期：lint 失败不阻塞 PR（v2.11.0 计划改为 required）
-    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v4
@@ -52,7 +50,8 @@ jobs:
           python-version: "3.11"
 
       - name: Install ruff
-        run: pip install "ruff>=0.5.0"
+        run: pip install "ruff==0.8.6"
+
 
       - name: Lint
         run: ruff check modules/ tests/ --select=F,E,W,UP --ignore=E501,F401,F403 --exit-non-zero-on-fix
@@ -63,8 +62,6 @@ jobs:
   quality-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 3
-    # v2.10.0 观察期：SKILL.md 质量门失败不阻塞 PR（v2.11.0 计划改为 required）
-    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v4
@@ -113,8 +110,6 @@ jobs:
   pre-commit:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # v2.10.0 观察期：失败不阻塞 PR（v2.11.0 再决定）
-    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v4

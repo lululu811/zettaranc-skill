@@ -3,6 +3,7 @@
 [薄壳] 同步自选股清单中"在 daily_kline 表里完全缺失"的股票
 v2.10.0 重构：业务逻辑迁至 modules.data_sync.DataSyncer.sync_missing
 """
+
 import argparse
 import sys
 from pathlib import Path

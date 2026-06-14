@@ -3,6 +3,7 @@
 [薄壳] 生成自选股池的 Z哥量化评估报告（markdown）
 v2.10.0 重构：业务逻辑迁至 modules.report.assess_watchlist + render_assessment
 """
+
 import argparse
 import sys
 from datetime import datetime

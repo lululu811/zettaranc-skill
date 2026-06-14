@@ -19,8 +19,8 @@ import json
 from pathlib import Path
 
 # Fix Windows console encoding for Unicode output
-if sys.stdout.encoding != 'utf-8':
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if sys.stdout.encoding != "utf-8":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 
 def _extract_section(content: str, header_pattern: str) -> str:
@@ -31,16 +31,16 @@ def _extract_section(content: str, header_pattern: str) -> str:
     start = match.end()
     # Find next ## or # header
     remaining = content[start:]
-    next_header = re.search(r'^##\s+', remaining, re.MULTILINE)
+    next_header = re.search(r"^##\s+", remaining, re.MULTILINE)
     if next_header:
-        return remaining[:next_header.start()]
+        return remaining[: next_header.start()]
     return remaining
 
 
 def check_mental_models(content: str) -> tuple[bool, str]:
     """检查心智模型数量（3-9个），并验证每个模型有总结和局限标注"""
     # Find all model headers: ### 模型 N: ...
-    model_headers = list(re.finditer(r'^###\s+模型\s*(\d+)', content, re.MULTILINE))
+    model_headers = list(re.finditer(r"^###\s+模型\s*(\d+)", content, re.MULTILINE))
     if not model_headers:
         return False, "未检测到心智模型section"
 
@@ -59,14 +59,14 @@ def check_mental_models(content: str) -> tuple[bool, str]:
         else:
             # Last model: find next ## header
             remaining = content[start:]
-            next_h2 = re.search(r'^##\s+', remaining, re.MULTILINE)
+            next_h2 = re.search(r"^##\s+", remaining, re.MULTILINE)
             end = start + (next_h2.start() if next_h2 else len(remaining))
 
         section_content = content[start:end]
 
-        if re.search(r'一句话|核心|本质|关键', section_content, re.IGNORECASE):
+        if re.search(r"一句话|核心|本质|关键", section_content, re.IGNORECASE):
             models_with_summary += 1
-        if re.search(r'局限|失效|不适用|盲区|边界', section_content, re.IGNORECASE):
+        if re.search(r"局限|失效|不适用|盲区|边界", section_content, re.IGNORECASE):
             models_with_limitation += 1
 
     has_summaries = models_with_summary >= max(count // 2, 1)
@@ -77,34 +77,36 @@ def check_mental_models(content: str) -> tuple[bool, str]:
     details.append(f"{count}个模型{'✅' if passed_count else '❌ (应为3-7个)'}")
     details.append(f"{models_with_summary}个有总结")
     details.append(f"{models_with_limitation}个有局限标注")
-    return overall, ' '.join(details)
+    return overall, " ".join(details)
 
 
 def check_limitations(content: str) -> tuple[bool, str]:
     """检查每个模型是否有局限性"""
-    has_limitation = bool(re.search(r'局限|失效|不适用|盲区|limitation|blind spot', content, re.IGNORECASE))
+    has_limitation = bool(re.search(r"局限|失效|不适用|盲区|limitation|blind spot", content, re.IGNORECASE))
     return has_limitation, "有局限性标注 ✅" if has_limitation else "❌ 未找到局限性描述"
 
 
 def check_expression_dna(content: str) -> tuple[bool, str]:
     """检查表达DNA辨识度"""
-    dna_section = bool(re.search(r'表达[ ]*DNA|Expression[ ]*DNA|表达风格', content, re.IGNORECASE))
+    dna_section = bool(re.search(r"表达[ ]*DNA|Expression[ ]*DNA|表达风格", content, re.IGNORECASE))
     if not dna_section:
         return False, "❌ 未找到表达DNA section"
 
-    style_markers = len(re.findall(r'句式|词汇|语气|幽默|节奏|确定性|引用|口头禅', content))
+    style_markers = len(re.findall(r"句式|词汇|语气|幽默|节奏|确定性|引用|口头禅", content))
     passed = style_markers >= 3
     return passed, f"表达DNA特征: {style_markers}项 {'✅' if passed else '❌ (应≥3项)'}"
 
 
 def check_honest_boundary(content: str) -> tuple[bool, str]:
     """检查诚实边界（至少3条）"""
-    boundary_match = re.search(r'(?:##\s+.*诚实边界|## Honest Boundary)(.*?)(?=\n##\s|\Z)', content, re.DOTALL | re.IGNORECASE)
+    boundary_match = re.search(
+        r"(?:##\s+.*诚实边界|## Honest Boundary)(.*?)(?=\n##\s|\Z)", content, re.DOTALL | re.IGNORECASE
+    )
     if not boundary_match:
         return False, "❌ 未找到诚实边界section"
 
     boundary_text = boundary_match.group(1)
-    items = re.findall(r'^[-*]\s+', boundary_text, re.MULTILINE)
+    items = re.findall(r"^[-*]\s+", boundary_text, re.MULTILINE)
     count = len(items)
     passed = count >= 3
     return passed, f"诚实边界: {count}条 {'✅' if passed else '❌ (应≥3条)'}"
@@ -112,7 +114,7 @@ def check_honest_boundary(content: str) -> tuple[bool, str]:
 
 def check_tensions(content: str) -> tuple[bool, str]:
     """检查内在张力（至少2对）"""
-    tension_markers = len(re.findall(r'张力|矛盾|tension|paradox|一方面.*另一方面|既.*又', content, re.IGNORECASE))
+    tension_markers = len(re.findall(r"张力|矛盾|tension|paradox|一方面.*另一方面|既.*又", content, re.IGNORECASE))
     passed = tension_markers >= 2
     return passed, f"内在张力: {tension_markers}处 {'✅' if passed else '❌ (应≥2处)'}"
 
@@ -120,18 +122,20 @@ def check_tensions(content: str) -> tuple[bool, str]:
 def check_primary_sources(content: str) -> tuple[bool, str]:
     """检查一手来源占比——直接统计附录中列表项数量"""
     # Find "附录：调研来源" section
-    source_section = re.search(r'##\s+附录：调研来源(.*?)(?=\n##\s|\Z)', content, re.DOTALL)
+    source_section = re.search(r"##\s+附录：调研来源(.*?)(?=\n##\s|\Z)", content, re.DOTALL)
     if not source_section:
         return True, "未找到来源section（跳过检查）"
 
     source_text = source_section.group(1)
 
     # Find list items under "一手来源" and "二手来源"
-    primary_section = re.search(r'###\s+一手来源(.*?)(?=###|\Z)', source_text, re.DOTALL)
-    secondary_section = re.search(r'###\s+二手来源(.*?)(?=###|\Z)', source_text, re.DOTALL)
+    primary_section = re.search(r"###\s+一手来源(.*?)(?=###|\Z)", source_text, re.DOTALL)
+    secondary_section = re.search(r"###\s+二手来源(.*?)(?=###|\Z)", source_text, re.DOTALL)
 
-    primary_count = len(re.findall(r'^[-*]\s+', primary_section.group(1) if primary_section else '', re.MULTILINE))
-    secondary_count = len(re.findall(r'^[-*]\s+', secondary_section.group(1) if secondary_section else '', re.MULTILINE))
+    primary_count = len(re.findall(r"^[-*]\s+", primary_section.group(1) if primary_section else "", re.MULTILINE))
+    secondary_count = len(
+        re.findall(r"^[-*]\s+", secondary_section.group(1) if secondary_section else "", re.MULTILINE)
+    )
 
     total = primary_count + secondary_count
     if total == 0:
@@ -139,13 +143,16 @@ def check_primary_sources(content: str) -> tuple[bool, str]:
 
     ratio = primary_count / total
     passed = ratio >= 0.5  # Changed from > 0.5 to >= 0.5 (50% is acceptable)
-    return passed, f"一手来源: {primary_count}项, 二手: {secondary_count}项, 占比{ratio:.0%} {'✅' if passed else '❌ (应≥50%)'}"
+    return (
+        passed,
+        f"一手来源: {primary_count}项, 二手: {secondary_count}项, 占比{ratio:.0%} {'✅' if passed else '❌ (应≥50%)'}",
+    )
 
 
 def check_sub_tactics(content: str) -> tuple[bool, str]:
     """检查模型3子战法完整性（应有3.1-3.17）"""
     # Match #### 3.X pattern (four-level heading)
-    sub_tactics = re.findall(r'^####\s+3\.(\d+)', content, re.MULTILINE)
+    sub_tactics = re.findall(r"^####\s+3\.(\d+)", content, re.MULTILINE)
     if not sub_tactics:
         return True, "未找到模型3子战法（跳过检查）"
 
@@ -161,7 +168,7 @@ def check_sub_tactics(content: str) -> tuple[bool, str]:
 
 def check_model_completeness(content: str) -> tuple[bool, str]:
     """检查每个模型是否有核心内容（至少包含一句话总结或边界条件）"""
-    model_headers = list(re.finditer(r'^###\s+模型\s*\d+[^\n]*', content, re.MULTILINE))
+    model_headers = list(re.finditer(r"^###\s+模型\s*\d+[^\n]*", content, re.MULTILINE))
     if not model_headers:
         return True, "未找到标准模型格式（跳过检查）"
 
@@ -172,11 +179,11 @@ def check_model_completeness(content: str) -> tuple[bool, str]:
             end = model_headers[i + 1].start()
         else:
             remaining = content[start:]
-            next_h2 = re.search(r'^##\s+', remaining, re.MULTILINE)
+            next_h2 = re.search(r"^##\s+", remaining, re.MULTILINE)
             end = start + (next_h2.start() if next_h2 else len(remaining))
 
         section_content = content[start:end]
-        if re.search(r'一句话|核心|本质|关键|框架|原则|逻辑', section_content, re.IGNORECASE):
+        if re.search(r"一句话|核心|本质|关键|框架|原则|逻辑", section_content, re.IGNORECASE):
             models_with_content += 1
 
     passed = models_with_content >= len(model_headers) * 0.6
@@ -209,7 +216,7 @@ def main():
         _err(f"❌ 文件不存在: {skill_path}")
         sys.exit(1)
 
-    content = skill_path.read_text(encoding='utf-8')
+    content = skill_path.read_text(encoding="utf-8")
 
     checks = [
         ("心智模型数量", check_mental_models),
@@ -225,11 +232,13 @@ def main():
     results = []
     for name, check_fn in checks:
         passed, detail = check_fn(content)
-        results.append({
-            "name": name,
-            "passed": bool(passed),
-            "detail": detail,
-        })
+        results.append(
+            {
+                "name": name,
+                "passed": bool(passed),
+                "detail": detail,
+            }
+        )
 
     passed_count = sum(1 for r in results if r["passed"])
     total = len(results)
@@ -271,5 +280,5 @@ def main():
         sys.exit(0 if passed_count == total else 1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

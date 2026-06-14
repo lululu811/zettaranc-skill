@@ -9,8 +9,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 import os
 
-# 数据库路径
-DB_PATH = "data/stock_data.db"
+from .database import get_connection, get_db_path, get_db_connection
+from .indicators import DailyData, calculate_ma
 
 # 并行化阈值：小于此数量不启用多进程（启动开销不值得）
 _PARALLEL_THRESHOLD = 50
@@ -56,13 +56,6 @@ class MarketStatus:
     reasons: list[str] = field(default_factory=list)
 
 
-def get_db_connection() -> sqlite3.Connection:
-    """获取数据库连接"""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
 def get_all_stocks() -> list[dict]:
     """获取所有股票基本信息"""
     conn = get_db_connection()
@@ -78,7 +71,7 @@ def get_all_stocks() -> list[dict]:
     return stocks
 
 
-def get_recent_klines(ts_code: str, days: int = 60) -> list[dict]:
+def get_recent_klines(ts_code: str, days: int = 60) -> list[DailyData]:
     """获取近期K线数据"""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -101,285 +94,48 @@ def get_recent_klines(ts_code: str, days: int = 60) -> list[dict]:
     for i, row in enumerate(reversed(rows)):
         prev_close = rows[len(rows) - i - 2]["close"] if i < len(rows) - 1 else row["close"]
         data_list.append(
-            {
-                "ts_code": row["ts_code"],
-                "trade_date": row["trade_date"],
-                "open": row["open"],
-                "high": row["high"],
-                "low": row["low"],
-                "close": row["close"],
-                "vol": row["vol"],
-                "pct_chg": row["pct_chg"],
-                "prev_close": prev_close,
-            }
+            DailyData(
+                ts_code=row["ts_code"],
+                trade_date=row["trade_date"],
+                open=row["open"],
+                high=row["high"],
+                low=row["low"],
+                close=row["close"],
+                vol=row["vol"],
+                amount=row["close"] * row["vol"],
+                pct_chg=row["pct_chg"],
+                prev_close=prev_close,
+            )
         )
 
     return data_list
 
 
-def calculate_ma(prices: list[float], period: int) -> float:
-    """计算均线"""
-    if len(prices) < period:
-        return 0
-    return sum(prices[-period:]) / period
-
-
 def calculate_vol_ma(vols: list[float], period: int) -> float:
-    """计算量能均线"""
-    if len(vols) < period:
-        return 0
-    return sum(vols[-period:]) / period
+    """计算量能均线（复用 calculate_ma 逻辑）"""
+    return calculate_ma(vols, period)
 
 
-def calculate_kdj(klines: list[dict], period: int = 9) -> tuple[float, float, float]:
-    """计算KDJ"""
-    if len(klines) < period:
-        return 50, 50, 50
+def calculate_kdj(klines: list, period: int = 9) -> tuple[float, float, float]:
+    """计算 KDJ 指标，支持 DailyData 列表或 dict 列表"""
+    from .indicators import calculate_kdj as canonical_kdj
 
-    rsv_list = []
-    for i in range(period - 1, len(klines)):
-        low_list = [klines[j]["low"] for j in range(i - period + 1, i + 1)]
-        high_list = [klines[j]["high"] for j in range(i - period + 1, i + 1)]
-        low_min = min(low_list)
-        high_max = max(high_list)
-
-        if high_max == low_min:
-            rsv = 50
-        else:
-            rsv = (klines[i]["close"] - low_min) / (high_max - low_min) * 100
-        rsv_list.append(rsv)
-
-    k = d = 50.0
-    for rsv in rsv_list:
-        k = (2 / 3) * k + (1 / 3) * rsv
-        d = (2 / 3) * d + (1 / 3) * k
-
-    j = 3 * k - 2 * d
-    return round(k, 2), round(d, 2), round(j, 2)
+    if klines and isinstance(klines[0], dict):
+        klines = _dict_to_daily(klines)
+    return canonical_kdj(klines, period)
 
 
-def calculate_bbi(klines: list[dict]) -> float:
-    """计算BBI"""
-    if len(klines) < 24:
-        return 0
-    closes = [k["close"] for k in klines]
-    return round(
-        (calculate_ma(closes, 3) + calculate_ma(closes, 6) + calculate_ma(closes, 12) + calculate_ma(closes, 24)) / 4, 2
-    )
+def calculate_bbi(klines: list) -> float:
+    """计算 BBI 指标，支持 DailyData 列表或 dict 列表"""
+    from .indicators import calculate_bbi as canonical_bbi
+
+    if klines and isinstance(klines[0], dict):
+        klines = _dict_to_daily(klines)
+    return canonical_bbi(klines)
 
 
-def is_perfect_pattern(klines: list[dict]) -> tuple[bool, list[str]]:
-    """
-    判断是否完美图形
-
-    完美图形条件:
-    1. BBI之上
-    2. 缩量整理
-    3. 均线多头（可选）
-    4. 非高位
-    """
-    if len(klines) < 30:
-        return False, ["数据不足"]
-
-    today = klines[-1]
-    bbi = calculate_bbi(klines)
-    closes = [k["close"] for k in klines]
-    vols = [k["vol"] for k in klines]
-
-    reasons = []
-    warnings = []
-
-    # 1. BBI之上
-    if today["close"] > bbi:
-        reasons.append("价格在BBI之上")
-    else:
-        warnings.append("价格在BBI下方")
-
-    # 2. 缩量整理
-    ma5_vol = calculate_vol_ma(vols, 5)
-    today_vol = today["vol"]
-    if today_vol < ma5_vol * 0.7:
-        reasons.append("缩量整理")
-    elif today_vol > ma5_vol * 1.5:
-        warnings.append("放量突破，需观察")
-
-    # 3. 均线多头
-    ma5 = calculate_ma(closes, 5)
-    ma10 = calculate_ma(closes, 10)
-    ma20 = calculate_ma(closes, 20)
-    if ma5 > ma10 > ma20:
-        reasons.append("均线多头排列")
-    elif ma5 < ma10:
-        warnings.append("均线空头")
-
-    # 4. 非高位（距历史高点跌幅充分）
-    max_high = max(k["high"] for k in klines[-60:])
-    drop_ratio = (max_high - today["close"]) / max_high
-    if drop_ratio > 0.3:
-        reasons.append(f"相对高点回调{drop_ratio * 100:.0f}%")
-    elif drop_ratio < 0.1:
-        warnings.append("接近历史高位")
-
-    # 综合判断
-    is_perfect = len(reasons) >= 2 and len(warnings) == 0
-
-    return is_perfect, reasons
-
-
-def score_b1_opportunity(klines: list[dict]) -> tuple[float, list[str]]:
-    """
-    评估B1买点机会
-
-    返回: (评分0-100, 原因列表)
-    """
-    if len(klines) < 20:
-        return 0, ["数据不足"]
-
-    today = klines[-1]
-    k, d, j = calculate_kdj(klines)
-    bbi = calculate_bbi(klines)
-    closes = [k["close"] for k in klines]
-    vols = [k["vol"] for k in klines]
-
-    score = 0
-    reasons = []
-
-    # J值评分（核心）
-    if j < -15:
-        score += 35
-        reasons.append(f"J值极低: {j:.2f}")
-    elif j < -10:
-        score += 25
-        reasons.append(f"J值低位: {j:.2f}")
-    elif j < 0:
-        score += 15
-        reasons.append(f"J值: {j:.2f}")
-
-    # 缩量回调加分
-    if today["vol"] < calculate_vol_ma(vols, 5) * 0.6:
-        score += 20
-        reasons.append("缩量回调")
-
-    # BBI下方（低位）
-    if today["close"] < bbi:
-        score += 15
-        reasons.append("BBI下方低位")
-
-    # 价格在合理区间
-    ma20 = calculate_ma(closes, 20)
-    ma60 = calculate_ma(closes, 60)
-    if ma20 < today["close"] < ma60:
-        score += 15
-        reasons.append("中期均线区间")
-
-    # 风险提示
-    if j > 0:
-        score -= 10
-    if today["close"] > bbi * 1.05:
-        score -= 15
-
-    return max(0, min(100, score)), reasons
-
-
-def score_trend(klines: list[dict]) -> tuple[float, str]:
-    """
-    评估趋势
-
-    返回: (评分0-100, 趋势方向)
-    """
-    if len(klines) < 20:
-        return 50, "震荡"
-
-    closes = [k["close"] for k in klines]
-    today = klines[-1]
-    bbi = calculate_bbi(klines)
-
-    ma5 = calculate_ma(closes, 5)
-    ma20 = calculate_ma(closes, 20)
-    ma60 = calculate_ma(closes, 60)
-
-    # 趋势判断
-    if ma5 > ma20 > ma60 and today["close"] > bbi:
-        direction = "上升"
-        score = 80 if today["pct_chg"] > 0 else 70
-    elif ma5 < ma20 < ma60 and today["close"] < bbi:
-        direction = "下降"
-        score = 30
-    else:
-        direction = "震荡"
-        score = 50
-
-    # 短期动能
-    if len(klines) >= 5:
-        recent_pct = sum(k["pct_chg"] for k in klines[-5:])
-        if recent_pct > 10:
-            score += 10
-        elif recent_pct < -10:
-            score -= 10
-
-    # 牛绳理论
-    try:
-        from .indicators import detect_bull_rope
-
-        daily_klines = _dict_to_daily(klines)
-        rope = detect_bull_rope(daily_klines)
-        if rope.get("status") == "牵牛":
-            score = min(100, score + 10)
-            direction += " 牵牛"
-        elif rope.get("status") == "牛绳断":
-            score = max(0, score - 20)
-            direction += " 牛绳断"
-    except Exception:
-        pass
-
-    return max(0, min(100, score)), direction
-
-
-def score_volume_pattern(klines: list[dict]) -> tuple[float, list[str]]:
-    """
-    评估量价形态
-    """
-    if len(klines) < 10:
-        return 50, ["数据不足"]
-
-    today = klines[-1]
-    vols = [k["vol"] for k in klines]
-    vol_ma5 = calculate_vol_ma(vols, 5)
-    calculate_vol_ma(vols, 10)
-
-    score = 50
-    reasons = []
-
-    # 量比
-    vol_ratio = today["vol"] / vol_ma5
-    if vol_ratio >= 2:
-        score += 20
-        reasons.append(f"倍量(量比{vol_ratio:.1f}x)")
-    elif vol_ratio >= 1.5:
-        score += 10
-        reasons.append("放量")
-    elif vol_ratio <= 0.5:
-        score += 10
-        reasons.append("缩量")
-    else:
-        score -= 5
-        reasons.append("量能正常")
-
-    # 涨跌配合
-    if today["pct_chg"] > 3 and vol_ratio > 1.2:
-        score += 15
-        reasons.append("价涨量增(攻击形态)")
-    elif today["pct_chg"] < -3 and vol_ratio > 1.2:
-        score -= 15
-        reasons.append("价跌量增(出货嫌疑)")
-
-    return max(0, min(100, score)), reasons
-
-
-def _dict_to_daily(klines: list[dict]) -> list:
+def _dict_to_daily(klines: list[dict]) -> list[DailyData]:
     """将 dict 格式 K 线转为 DailyData 列表"""
-    from .indicators import DailyData
-
     result = []
     for i, k in enumerate(klines):
         prev_close = klines[i - 1]["close"] if i > 0 else k["close"]
@@ -400,23 +156,249 @@ def _dict_to_daily(klines: list[dict]) -> list:
     return result
 
 
-def score_risk(klines: list[dict]) -> tuple[float, list[str]]:
+def is_perfect_pattern(klines: list) -> tuple[bool, list[str]]:
+    """
+    判断是否完美图形
+
+    完美图形条件:
+    1. BBI之上
+    2. 缩量整理
+    3. 均线多头（可选）
+    4. 非高位
+    """
+    if klines and isinstance(klines[0], dict):
+        klines = _dict_to_daily(klines)
+
+    if len(klines) < 30:
+        return False, ["数据不足"]
+
+    today = klines[-1]
+    bbi = calculate_bbi(klines)
+    closes = [k.close for k in klines]
+    vols = [k.vol for k in klines]
+
+    reasons = []
+    warnings = []
+
+    # 1. BBI之上
+    if today.close > bbi:
+        reasons.append("价格在BBI之上")
+    else:
+        warnings.append("价格在BBI下方")
+
+    # 2. 缩量整理
+    ma5_vol = calculate_vol_ma(vols, 5)
+    today_vol = today.vol
+    if today_vol < ma5_vol * 0.7:
+        reasons.append("缩量整理")
+    elif today_vol > ma5_vol * 1.5:
+        warnings.append("放量突破，需观察")
+
+    # 3. 均线多头
+    ma5 = calculate_ma(closes, 5)
+    ma10 = calculate_ma(closes, 10)
+    ma20 = calculate_ma(closes, 20)
+    if ma5 > ma10 > ma20:
+        reasons.append("均线多头排列")
+    elif ma5 < ma10:
+        warnings.append("均线空头")
+
+    # 4. 非高位（距历史高点跌幅充分）
+    max_high = max(k.high for k in klines[-60:])
+    drop_ratio = (max_high - today.close) / max_high
+    if drop_ratio > 0.3:
+        reasons.append(f"相对高点回调{drop_ratio * 100:.0f}%")
+    elif drop_ratio < 0.1:
+        warnings.append("接近历史高位")
+
+    # 综合判断
+    is_perfect = len(reasons) >= 2 and len(warnings) == 0
+
+    return is_perfect, reasons
+
+
+def score_b1_opportunity(klines: list) -> tuple[float, list[str]]:
+    """
+    评估B1买点机会
+
+    返回: (评分0-100, 原因列表)
+    """
+    if klines and isinstance(klines[0], dict):
+        klines = _dict_to_daily(klines)
+
+    if len(klines) < 20:
+        return 0, ["数据不足"]
+
+    today = klines[-1]
+    k, d, j = calculate_kdj(klines)
+    bbi = calculate_bbi(klines)
+    closes = [k.close for k in klines]
+    vols = [k.vol for k in klines]
+
+    score = 0
+    reasons = []
+
+    # J值评分（核心）
+    if j < -15:
+        score += 35
+        reasons.append(f"J值极低: {j:.2f}")
+    elif j < -10:
+        score += 25
+        reasons.append(f"J值低位: {j:.2f}")
+    elif j < 0:
+        score += 15
+        reasons.append(f"J值: {j:.2f}")
+
+    # 缩量回调加分
+    if today.vol < calculate_vol_ma(vols, 5) * 0.6:
+        score += 20
+        reasons.append("缩量回调")
+
+    # BBI下方（低位）
+    if today.close < bbi:
+        score += 15
+        reasons.append("BBI下方低位")
+
+    # 价格在合理区间
+    ma20 = calculate_ma(closes, 20)
+    ma60 = calculate_ma(closes, 60)
+    if ma20 < today.close < ma60:
+        score += 15
+        reasons.append("中期均线区间")
+
+    # 风险提示
+    if j > 0:
+        score -= 10
+    if today.close > bbi * 1.05:
+        score -= 15
+
+    return max(0, min(100, score)), reasons
+
+
+def score_trend(klines: list) -> tuple[float, str]:
+    """
+    评估趋势
+
+    返回: (评分0-100, 趋势方向)
+    """
+    if klines and isinstance(klines[0], dict):
+        klines = _dict_to_daily(klines)
+
+    if len(klines) < 20:
+        return 50, "震荡"
+
+    closes = [k.close for k in klines]
+    today = klines[-1]
+    bbi = calculate_bbi(klines)
+
+    ma5 = calculate_ma(closes, 5)
+    ma20 = calculate_ma(closes, 20)
+    ma60 = calculate_ma(closes, 60)
+
+    # 趋势判断
+    if ma5 > ma20 > ma60 and today.close > bbi:
+        direction = "上升"
+        score = 80 if today.pct_chg > 0 else 70
+    elif ma5 < ma20 < ma60 and today.close < bbi:
+        direction = "下降"
+        score = 30
+    else:
+        direction = "震荡"
+        score = 50
+
+    # 短期动能
+    if len(klines) >= 5:
+        recent_pct = sum(k.pct_chg for k in klines[-5:])
+        if recent_pct > 10:
+            score += 10
+        elif recent_pct < -10:
+            score -= 10
+
+    # 牛绳理论
+    try:
+        from .indicators import detect_bull_rope
+
+        rope = detect_bull_rope(klines)
+        if rope.get("status") == "牵牛":
+            score = min(100, score + 10)
+            direction += " 牵牛"
+        elif rope.get("status") == "牛绳断":
+            score = max(0, score - 20)
+            direction += " 牛绳断"
+        elif rope.get("status") == "金叉":
+            score = min(100, score + 15)
+            direction += " 牛绳金叉"
+        elif rope.get("status") == "死叉":
+            score = max(0, score - 25)
+            direction += " 牛绳死叉"
+    except Exception:
+        pass
+
+    return max(0, min(100, score)), direction
+
+
+def score_volume_pattern(klines: list) -> tuple[float, list[str]]:
+    """
+    评估量价形态
+    """
+    if klines and isinstance(klines[0], dict):
+        klines = _dict_to_daily(klines)
+
+    if len(klines) < 10:
+        return 50, ["数据不足"]
+
+    today = klines[-1]
+    vols = [k.vol for k in klines]
+    vol_ma5 = calculate_vol_ma(vols, 5)
+
+    score = 50
+    reasons = []
+
+    # 量比
+    vol_ratio = today.vol / vol_ma5
+    if vol_ratio >= 2:
+        score += 20
+        reasons.append(f"倍量(量比{vol_ratio:.1f}x)")
+    elif vol_ratio >= 1.5:
+        score += 10
+        reasons.append("放量")
+    elif vol_ratio <= 0.5:
+        score += 10
+        reasons.append("缩量")
+    else:
+        score -= 5
+        reasons.append("量能正常")
+
+    # 涨跌配合
+    if today.pct_chg > 3 and vol_ratio > 1.2:
+        score += 15
+        reasons.append("价涨量增(攻击形态)")
+    elif today.pct_chg < -3 and vol_ratio > 1.2:
+        score -= 15
+        reasons.append("价跌量增(出货嫌疑)")
+
+    return max(0, min(100, score)), reasons
+
+
+def score_risk(klines: list) -> tuple[float, list[str]]:
     """
     评估风险
     """
+    if klines and isinstance(klines[0], dict):
+        klines = _dict_to_daily(klines)
+
     if len(klines) < 20:
         return 50, ["数据不足"]
 
     today = klines[-1]
     bbi = calculate_bbi(klines)
-    [k["close"] for k in klines]
 
     score = 100  # 初始100分，越高越安全
     warnings = []
 
     # 高位风险
-    max_high = max(k["high"] for k in klines[-60:])
-    drop_ratio = (max_high - today["close"]) / max_high
+    max_high = max(k.high for k in klines[-60:])
+    drop_ratio = (max_high - today.close) / max_high
     if drop_ratio < 0.1:
         score -= 30
         warnings.append("接近历史高位")
@@ -425,7 +407,7 @@ def score_risk(klines: list[dict]) -> tuple[float, list[str]]:
         warnings.append("相对高位")
 
     # 跌破BBI风险
-    if today["close"] < bbi:
+    if today.close < bbi:
         score -= 20
         warnings.append("跌破BBI")
 
@@ -433,13 +415,13 @@ def score_risk(klines: list[dict]) -> tuple[float, list[str]]:
     for i in range(min(5, len(klines) - 1)):
         k = klines[-(i + 1)]
         prev = klines[-(i + 2)] if i < len(klines) - 2 else None
-        if prev and k["close"] < prev["close"] and k["vol"] > prev["vol"] * 1.5:
+        if prev and k.close < prev.close and k.vol > prev.vol * 1.5:
             score -= 10
             warnings.append("近期有放量阴线")
             break
 
     # 连续下跌
-    recent_3_drop = sum(1 for k in klines[-3:] if k["close"] < k["prev_close"])
+    recent_3_drop = sum(1 for k in klines[-3:] if k.close < k.prev_close)
     if recent_3_drop >= 3:
         score -= 15
         warnings.append("连续3天下跌")
@@ -448,23 +430,23 @@ def score_risk(klines: list[dict]) -> tuple[float, list[str]]:
     try:
         from .indicators import detect_centipede_pattern
 
-        daily_klines = _dict_to_daily(klines)
-        centipede = detect_centipede_pattern(daily_klines)
+        centipede = detect_centipede_pattern(klines)
         if centipede.get("is_centipede"):
             score -= 30
             warnings.append(f"蜈蚣图({centipede['score']:.0f}分)")
+            warnings.append("检测到蜈蚣图风险，建议观望")
     except Exception:
         pass
 
     return max(0, min(100, score)), warnings
 
 
-def analyze_stock(ts_code: str, klines: list[dict] | None = None) -> StockScore:
+def analyze_stock(ts_code: str, klines: list[DailyData] | None = None) -> StockScore:
     """
     综合评分单只股票
     """
     if klines is None:
-        klines = get_recent_klines(ts_code)
+        klines = get_recent_klines(ts_code, 150)
 
     if not klines:
         return StockScore(ts_code=ts_code)
@@ -491,8 +473,7 @@ def analyze_stock(ts_code: str, klines: list[dict] | None = None) -> StockScore:
     try:
         from .indicators import detect_three_waves, detect_kirin_stage
 
-        daily_klines = _dict_to_daily(klines)
-        wave = detect_three_waves(daily_klines)
+        wave = detect_three_waves(klines)
         wave_stage = wave["wave"]
         if wave_stage == "建仓波" and wave["confidence"] >= 0.5:
             b1_reasons.append(f"三波·建仓波(conf={wave['confidence']})")
@@ -502,7 +483,7 @@ def analyze_stock(ts_code: str, klines: list[dict] | None = None) -> StockScore:
             risk_warnings.append(f"三波·冲刺波(conf={wave['confidence']})→不看")
             risk_score = max(0, risk_score - 20)
 
-        kirin = detect_kirin_stage(daily_klines)
+        kirin = detect_kirin_stage(klines)
         kirin_stage = kirin["stage"]
         if kirin_stage == "吸筹" and kirin["confidence"] >= 0.5:
             b1_reasons.append(f"麒麟会·吸筹({kirin['sub_type']}, conf={kirin['confidence']})")
@@ -523,8 +504,7 @@ def analyze_stock(ts_code: str, klines: list[dict] | None = None) -> StockScore:
     try:
         from .indicators import calculate_sandglass_score
 
-        daily_klines = _dict_to_daily(klines)
-        sg = calculate_sandglass_score(daily_klines)
+        sg = calculate_sandglass_score(klines)
         sandglass_score = sg.get("score", 0)
         sandglass_is_perfect = sg.get("is_perfect", False)
         if sandglass_is_perfect:
@@ -572,20 +552,50 @@ def analyze_stock(ts_code: str, klines: list[dict] | None = None) -> StockScore:
 # ==================== 并行化 Worker ====================
 
 
-def _analyze_worker(ts_code: str) -> tuple[str, tuple[list[dict], StockScore] | None]:
+def _daily_to_dict(klines: list[DailyData]) -> list[dict]:
+    """将 DailyData 列表转为符合战法检测需要的 dict 格式列表"""
+    result = []
+    for i, k in enumerate(klines):
+        prev_close = klines[i - 1].close if i > 0 else k.close
+        prev_vol = klines[i - 1].vol if i > 0 else k.vol
+
+        result.append(
+            {
+                "ts_code": k.ts_code,
+                "trade_date": k.trade_date,
+                "open": k.open,
+                "high": k.high,
+                "low": k.low,
+                "close": k.close,
+                "vol": k.vol,
+                "amount": k.amount,
+                "pct_chg": k.pct_chg,
+                "prev_close": prev_close,
+                "prev_vol": prev_vol,
+                "is_rise": k.close > prev_close,
+                "is_beidou": k.vol >= prev_vol * 2,
+                "is_suoliang": k.vol <= prev_vol * 0.5 if prev_vol > 0 else False,
+                "is_yinxian": k.close < prev_close,
+                "is_fangliang_yinxian": k.close < prev_close and k.vol > prev_vol * 1.5,
+            }
+        )
+    return result
+
+
+def _analyze_worker(ts_code: str) -> tuple[str, list[DailyData], StockScore] | None:
     """
     并行 worker：评分单只股票
     必须在模块顶层定义，以便 ProcessPoolExecutor 可以 pickle
     返回: (ts_code, klines, score) 或 None
     """
-    klines = get_recent_klines(ts_code, 60)
+    klines = get_recent_klines(ts_code, 150)
     if not klines or len(klines) < 30:
         return None
     score = analyze_stock(ts_code, klines)
     return ts_code, klines, score
 
 
-def _filter_stock(result: tuple[str, list[dict], StockScore], criteria: str) -> bool:
+def _filter_stock(result: tuple[str, list[DailyData], StockScore], criteria: str) -> bool:
     """
     判断单只股票是否满足选股条件
     在主进程串行执行（筛选逻辑快，不需要并行）
@@ -596,8 +606,7 @@ def _filter_stock(result: tuple[str, list[dict], StockScore], criteria: str) -> 
     try:
         from .indicators import detect_centipede_pattern
 
-        daily = _dict_to_daily(klines)
-        cp = detect_centipede_pattern(daily)
+        cp = detect_centipede_pattern(klines)
         if cp.get("is_centipede"):
             return False
     except Exception:
@@ -607,8 +616,7 @@ def _filter_stock(result: tuple[str, list[dict], StockScore], criteria: str) -> 
     try:
         from .indicators import calculate_sandglass_score
 
-        daily = _dict_to_daily(klines)
-        sg = calculate_sandglass_score(daily)
+        sg = calculate_sandglass_score(klines)
         if sg.get("score", 0) < 50:
             return False
     except Exception:
@@ -662,9 +670,8 @@ def _filter_stock(result: tuple[str, list[dict], StockScore], criteria: str) -> 
     elif criteria in ("build_wave", "xishou", "safe"):
         from .indicators import detect_three_waves, detect_kirin_stage
 
-        daily_klines = _dict_to_daily(klines)
-        wave = detect_three_waves(daily_klines)
-        kirin = detect_kirin_stage(daily_klines)
+        wave = detect_three_waves(klines)
+        kirin = detect_kirin_stage(klines)
 
         if criteria == "build_wave" and wave["wave"] == "建仓波" and wave["confidence"] >= 0.5:
             score.reasons.append(f"建仓波(conf={wave['confidence']})")
@@ -676,6 +683,33 @@ def _filter_stock(result: tuple[str, list[dict], StockScore], criteria: str) -> 
             is_safe = wave["wave"] != "冲刺波" and kirin["stage"] not in ("派发", "回落")
             if is_safe:
                 score.reasons.append(f"安全：{wave['wave']}+{kirin['stage']}")
+                return True
+
+    # P3 指标选股策略
+    elif criteria in ("bull_rope", "sandglass_perfect", "volume_ratio_super"):
+        if criteria == "bull_rope":
+            from .indicators import detect_bull_rope
+
+            daily_klines = _dict_to_daily(klines)
+            rope = detect_bull_rope(daily_klines)
+            if rope.get("status") == "牵牛" and rope.get("is_bullish"):
+                score.reasons.append(f"牛绳·牵牛(gap={rope['gap_pct']}%)")
+                return True
+        elif criteria == "sandglass_perfect":
+            from .indicators import calculate_sandglass_score
+
+            daily_klines = _dict_to_daily(klines)
+            sg = calculate_sandglass_score(daily_klines)
+            if sg.get("is_perfect") or sg.get("score", 0) >= 80:
+                score.reasons.append(f"沙漏完美图形({sg['score']}分)")
+                return True
+        elif criteria == "volume_ratio_super":
+            from .indicators import detect_volume_ratio_strategy
+
+            daily_klines = _dict_to_daily(klines)
+            vr = detect_volume_ratio_strategy(daily_klines)
+            if vr.get("action") == "立即买" or vr.get("scenario") in ("超级攻击", "攻击日", "单向拉升"):
+                score.reasons.append(f"量比战法·{vr['scenario']}(量比={vr['vol_ratio']})")
                 return True
 
     return False
@@ -699,6 +733,9 @@ def screen_stocks(
     - "build_wave": 建仓波（三波理论·建仓波）
     - "xishou": 吸筹阶段（麒麟会·吸筹）
     - "safe": 安全选股（非冲刺波 + 非派发/回落）
+    - "bull_rope": 牛绳牵牛形态（白在黄上，且白线向上）
+    - "sandglass_perfect": 沙漏完美图形（评分>=80）
+    - "volume_ratio_super": 量比战法（立即买或强势攻击场景）
 
     max_stocks: 最大扫描数量，0=全量（默认500只性能保护）
     max_workers: 并行进程数，0=自动（CPU核心数）
