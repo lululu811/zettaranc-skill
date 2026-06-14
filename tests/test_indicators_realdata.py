@@ -26,7 +26,7 @@ pytestmark = pytest.mark.skipif(
 # 测试范围
 REALDATA_TS_CODE = "600519.SH"
 LOOKBACK_DAYS = 365  # 拉 1 年数据，确保足够样本
-DIFF_TOLERANCE = 0.05  # 5% 阈值（观察期 v2.10.0）
+DIFF_TOLERANCE = 0.02  # 2% 阈值（收紧 v3.2.0）
 
 
 # ==================== Fixtures ====================
@@ -178,8 +178,8 @@ def test_kdj_k_vs_stk_factor(merged):
     )
 
     median_diff = merged["kdj_k_diff_pct"].median()
-    # KDJ 量纲 0-100，绝对差阈值用 5（5 个百分点）
-    assert median_diff < 5, f"KDJ.k 中位数绝对差 {median_diff:.2f} > 5（百分点）"
+    # KDJ 量纲 0-100，绝对差阈值用 2（2 个百分点）
+    assert median_diff < 2, f"KDJ.k 中位数绝对差 {median_diff:.2f} > 2（百分点）"
 
 
 def test_kdj_d_vs_stk_factor(merged):
@@ -206,7 +206,7 @@ def test_kdj_d_vs_stk_factor(merged):
     merged["kdj_d_diff_pct"] = (merged["kdj_d_ours"] - merged["kdj_d"]).abs()
 
     median_diff = merged["kdj_d_diff_pct"].median()
-    assert median_diff < 5, f"KDJ.d 中位数绝对差 {median_diff:.2f} > 5（百分点）"
+    assert median_diff < 2, f"KDJ.d 中位数绝对差 {median_diff:.2f} > 2（百分点）"
 
 
 # ==================== RSI 对比 ====================
@@ -236,8 +236,8 @@ def test_rsi6_vs_stk_factor(merged):
     merged["rsi_6_diff_pct"] = (merged["rsi_6_ours"] - merged["rsi_6"]).abs()
 
     median_diff = merged["rsi_6_diff_pct"].median()
-    # RSI 0-100 量纲，绝对差阈值 5
-    assert median_diff < 5, f"RSI6 中位数绝对差 {median_diff:.2f} > 5（百分点）"
+    # RSI 0-100 量纲，绝对差阈值 2
+    assert median_diff < 2, f"RSI6 中位数绝对差 {median_diff:.2f} > 2（百分点）"
 
 
 def test_rsi12_vs_stk_factor(merged):
@@ -264,7 +264,7 @@ def test_rsi12_vs_stk_factor(merged):
     merged["rsi_12_diff_pct"] = (merged["rsi_12_ours"] - merged["rsi_12"]).abs()
 
     median_diff = merged["rsi_12_diff_pct"].median()
-    assert median_diff < 5, f"RSI12 中位数绝对差 {median_diff:.2f} > 5（百分点）"
+    assert median_diff < 2, f"RSI12 中位数绝对差 {median_diff:.2f} > 2（百分点）"
 
 
 # ==================== 集成检查 ====================

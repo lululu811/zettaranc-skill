@@ -464,7 +464,7 @@ def analyze_stock(ts_code: str, klines: list[dict] | None = None) -> StockScore:
     综合评分单只股票
     """
     if klines is None:
-        klines = get_recent_klines(ts_code)
+        klines = get_recent_klines(ts_code, 150)
 
     if not klines:
         return StockScore(ts_code=ts_code)
@@ -578,7 +578,7 @@ def _analyze_worker(ts_code: str) -> tuple[str, tuple[list[dict], StockScore] | 
     必须在模块顶层定义，以便 ProcessPoolExecutor 可以 pickle
     返回: (ts_code, klines, score) 或 None
     """
-    klines = get_recent_klines(ts_code, 60)
+    klines = get_recent_klines(ts_code, 150)
     if not klines or len(klines) < 30:
         return None
     score = analyze_stock(ts_code, klines)
@@ -678,6 +678,33 @@ def _filter_stock(result: tuple[str, list[dict], StockScore], criteria: str) -> 
                 score.reasons.append(f"安全：{wave['wave']}+{kirin['stage']}")
                 return True
 
+    # P3 指标选股策略
+    elif criteria in ("bull_rope", "sandglass_perfect", "volume_ratio_super"):
+        if criteria == "bull_rope":
+            from .indicators import detect_bull_rope
+
+            daily_klines = _dict_to_daily(klines)
+            rope = detect_bull_rope(daily_klines)
+            if rope.get("status") == "牵牛" and rope.get("is_bullish"):
+                score.reasons.append(f"牛绳·牵牛(gap={rope['gap_pct']}%)")
+                return True
+        elif criteria == "sandglass_perfect":
+            from .indicators import calculate_sandglass_score
+
+            daily_klines = _dict_to_daily(klines)
+            sg = calculate_sandglass_score(daily_klines)
+            if sg.get("is_perfect") or sg.get("score", 0) >= 80:
+                score.reasons.append(f"沙漏完美图形({sg['score']}分)")
+                return True
+        elif criteria == "volume_ratio_super":
+            from .indicators import detect_volume_ratio_strategy
+
+            daily_klines = _dict_to_daily(klines)
+            vr = detect_volume_ratio_strategy(daily_klines)
+            if vr.get("action") == "立即买" or vr.get("scenario") in ("超级攻击", "攻击日", "单向拉升"):
+                score.reasons.append(f"量比战法·{vr['scenario']}(量比={vr['vol_ratio']})")
+                return True
+
     return False
 
 
@@ -699,6 +726,9 @@ def screen_stocks(
     - "build_wave": 建仓波（三波理论·建仓波）
     - "xishou": 吸筹阶段（麒麟会·吸筹）
     - "safe": 安全选股（非冲刺波 + 非派发/回落）
+    - "bull_rope": 牛绳牵牛形态（白在黄上，且白线向上）
+    - "sandglass_perfect": 沙漏完美图形（评分>=80）
+    - "volume_ratio_super": 量比战法（立即买或强势攻击场景）
 
     max_stocks: 最大扫描数量，0=全量（默认500只性能保护）
     max_workers: 并行进程数，0=自动（CPU核心数）

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- 背景圆 -->
+  <circle cx="60" cy="60" r="58" fill="url(#grad)" stroke="#e6b800" stroke-width="2"/>
+
+  <!-- Z 字母 - 简洁现代风格 -->
+  <path d="M35 40 L85 40 L50 80 L85 80" fill="none" stroke="#e6b800" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- 装饰点 -->
+  <circle cx="85" cy="40" r="3" fill="#e6b800"/>
+  <circle cx="85" cy="80" r="3" fill="#e6b800"/>
+</svg>

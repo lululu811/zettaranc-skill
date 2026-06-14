@@ -23,6 +23,7 @@ import argparse
 import json
 import sys
 import os
+from pathlib import Path
 
 # dotenv 加载已移至 modules/__init__.py（包级别一次性加载）
 
@@ -45,6 +46,11 @@ STRATEGY_ALIAS = {
     "安全": "safe",
     "超跌": "oversold",
     "突破": "breakout",
+    "牵牛": "bull_rope",
+    "牛绳": "bull_rope",
+    "沙漏": "sandglass_perfect",
+    "沙漏评分": "sandglass_perfect",
+    "量比战法": "volume_ratio_super",
 }
 
 STRATEGY_CHOICES = list(STRATEGY_ALIAS.keys())

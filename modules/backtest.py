@@ -87,6 +87,7 @@ def backtest_signals(
     ts_code: str,
     stop_loss_pct: float = 0.07,
     take_profit_pct: float = 0.15,
+    position_pct: float = 1.0,
 ) -> BacktestResult:
     """
     基于策略信号进行回测
@@ -218,8 +219,8 @@ def backtest_signals(
 def backtest_strategy(
     ts_code: str,
     days: int = 240,
-    stop_loss_pct: float = 0.07,
-    take_profit_pct: float = 0.15,
+    stop_loss_pct: float | None = None,
+    take_profit_pct: float | None = None,
 ) -> BacktestResult:
     """
     对单只股票进行策略回测（便捷函数）
@@ -227,8 +228,8 @@ def backtest_strategy(
     Args:
         ts_code: 股票代码
         days: 回测天数
-        stop_loss_pct: 止损比例
-        take_profit_pct: 止盈比例
+        stop_loss_pct: 止损比例（None = 从 registry 读取或默认 7%）
+        take_profit_pct: 止盈比例（None = 默认 15%）
 
     Returns:
         BacktestResult
@@ -237,10 +238,22 @@ def backtest_strategy(
     os.environ["HTTP_PROXY"] = ""
     os.environ["HTTPS_PROXY"] = ""
 
+    try:
+        from modules.self_optimizer.param_registry import get_active_param
+    except ImportError:
+        def get_active_param(s, n, d):
+            return d  # fallback
+
+    if stop_loss_pct is None:
+        stop_loss_pct = get_active_param("stop_loss", "stop_loss_pct", 7.0) / 100.0
+    if take_profit_pct is None:
+        take_profit_pct = 0.15
+
+    position_pct = get_active_param("position", "single_position_pct", 30.0) / 100.0
     klines = get_kline_data(ts_code, days)
     signals = detect_all_strategies(ts_code, days)
 
-    return backtest_signals(signals, klines, ts_code, stop_loss_pct, take_profit_pct)
+    return backtest_signals(signals, klines, ts_code, stop_loss_pct, take_profit_pct, position_pct)
 
 
 # ==================== 策略组合回测 ====================
