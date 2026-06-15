@@ -27,7 +27,7 @@ export default function Button({
 }: ButtonProps) {
   return (
     <button
-      className={`rounded border border-border transition-colors ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+      className={`rounded-lg border border-border/50 font-medium transition-all duration-200 active:scale-95 focus:outline-none focus:ring-2 focus:ring-accent-gold/50 ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
       {...props}
     >
       {children}

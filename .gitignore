@@ -74,3 +74,5 @@ actionlint
 optimization_drafts/
 logs/results.tsv
 logs/self_optimizer_state.json
+
+.worktrees/

@@ -9,8 +9,8 @@ interface CardProps {
 }
 
 export default function Card({ title, children, className = '', highlight = false }: CardProps) {
-  const baseClasses = 'rounded-xl border border-border/40 bg-bg-card/90 backdrop-blur-sm transition-all duration-200 hover:border-border/60';
-  const highlightClasses = 'border-accent-gold/30 bg-gradient-to-br from-bg-card to-bg-secondary shadow-[0_0_30px_-15px_rgba(245,158,11,0.2)]';
+  const baseClasses = 'rounded-xl border border-border/40 bg-bg-card backdrop-blur-xl transition-all duration-300 hover:border-border/80 hover:-translate-y-1 hover:shadow-2xl hover:shadow-black/50';
+  const highlightClasses = 'border-accent-gold/40 bg-gradient-to-br from-bg-card to-[rgba(245,158,11,0.05)] shadow-[0_0_30px_-15px_rgba(245,158,11,0.3)] hover:shadow-[0_0_40px_-15px_rgba(245,158,11,0.4)]';
 
   return (
     <div className={`${baseClasses} ${highlight ? highlightClasses : ''} ${className}`}>

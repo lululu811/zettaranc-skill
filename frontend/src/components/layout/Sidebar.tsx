@@ -32,8 +32,8 @@ export default function Sidebar() {
 
   return (
     <aside
-      className={`flex flex-col border-r border-border bg-bg-secondary overflow-hidden transition-[width] duration-200 ease-out ${
-        collapsed ? 'w-14' : 'w-48'
+      className={`flex flex-col border-r border-border/40 bg-bg-secondary/40 backdrop-blur-xl z-50 overflow-hidden transition-[width] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
+        collapsed ? 'w-16' : 'w-56'
       }`}
     >
       {/* Logo */}

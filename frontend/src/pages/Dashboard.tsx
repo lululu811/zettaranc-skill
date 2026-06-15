@@ -35,20 +35,21 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Hero Search */}
-      <div className="flex flex-col items-center justify-center py-12">
-        <h1 className="text-2xl font-bold text-text-primary mb-2">Z哥量化</h1>
-        <p className="text-sm text-text-muted mb-6">量化交易分析工具</p>
-        <form onSubmit={handleSearch} className="flex items-center gap-3">
+      <div className="flex flex-col items-center justify-center py-16 relative">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-accent-blue/10 via-transparent to-transparent blur-2xl -z-10" />
+        <h1 className="text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-accent-gold via-accent-red to-accent-purple mb-3">Z哥量化终端</h1>
+        <p className="text-sm font-medium text-text-muted mb-8 tracking-wide">用系统化思维，捕捉确定性利润</p>
+        <form onSubmit={handleSearch} className="flex items-center gap-3 relative z-10 w-full max-w-lg">
           <input
             type="text"
             value={searchCode}
             onChange={(e) => setSearchCode(e.target.value)}
             placeholder="输入股票代码开始分析，如 600487"
-            className="w-96 rounded-lg border border-border bg-bg-secondary px-4 py-3 text-sm text-text-primary placeholder-text-muted outline-none focus:border-accent-gold transition-colors"
+            className="w-full rounded-xl border border-border/60 bg-bg-secondary/80 backdrop-blur-md px-5 py-4 text-base text-text-primary placeholder-text-muted outline-none focus:border-accent-gold/70 focus:ring-4 focus:ring-accent-gold/10 transition-all shadow-xl"
           />
           <button
             type="submit"
-            className="rounded-lg bg-accent-gold/20 px-6 py-3 text-sm font-medium text-accent-gold hover:bg-accent-gold/30 transition-colors"
+            className="rounded-xl bg-gradient-to-r from-accent-gold to-accent-red px-8 py-4 text-sm font-bold text-white hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-accent-red/20"
           >
             分析
           </button>

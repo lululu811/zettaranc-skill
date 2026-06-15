@@ -89,7 +89,6 @@ def get_kline_chart_data(ts_code: str, days: int = 120) -> dict[str, Any]:
     )
     from modules.indicators.price_patterns import (
         calculate_zg_white, calculate_dg_yellow,
-        precompute_white_yellow_sequence,
     )
     from modules.strategies import detect_all_strategies
 
@@ -167,15 +166,25 @@ def get_kline_chart_data(ts_code: str, days: int = 120) -> dict[str, Any]:
     overlays["boll_upper"] = boll_upper
     overlays["boll_lower"] = boll_lower
 
-    # 白线 / 黄线（双线战法）- 用全量历史数据计算，再截取展示段
+    # 白线 / 黄线（双线战法）
     try:
-        white_full, yellow_full = precompute_white_yellow_sequence(all_klines)
-        overlays["white_line"] = white_full[-days:]
-        overlays["yellow_line"] = yellow_full[-days:]
+        white_line = []
+        yellow_line = []
+        for i in range(len(all_klines) - days, len(all_klines)):
+            try:
+                white_val = calculate_zg_white(all_klines, i)
+                yellow_val = calculate_dg_yellow(all_klines, i)
+                white_line.append(round(white_val, 2) if white_val else None)
+                yellow_line.append(round(yellow_val, 2) if yellow_val else None)
+            except Exception:
+                white_line.append(None)
+                yellow_line.append(None)
+        overlays["white_line"] = white_line
+        overlays["yellow_line"] = yellow_line
     except Exception:
         logger.warning("白线/黄线计算失败: %s", ts_code, exc_info=True)
-        overlays["white_line"] = [None] * n
-        overlays["yellow_line"] = [None] * n
+        overlays["white_line"] = [None] * days
+        overlays["yellow_line"] = [None] * days
 
     # ── KDJ 时间序列 ── 用全量历史数据计算
     kdj_k: list[float | None] = [None] * n
@@ -219,14 +228,24 @@ def get_kline_chart_data(ts_code: str, days: int = 120) -> dict[str, Any]:
     except Exception:
         pass
 
-    # ─ 砖型图时间序列 ── 用全量历史数据计算
+    # ─ 砖型图时间序列
     brick_values: list[float | None] = [None] * n
     brick_colors: list[int | None] = [None] * n
     try:
-        from modules.indicators.price_patterns import precompute_brick_sequence
-        brick_full_values, brick_full_colors = precompute_brick_sequence(all_klines)
-        brick_values = brick_full_values[-days:]
-        brick_colors = brick_full_colors[-days:]
+        from modules.indicators.price_patterns import calculate_brick_value
+        for i in range(n):
+            idx = len(all_klines) - days + i
+            sub_klines = all_klines[:idx + 1]
+            try:
+                val = calculate_brick_value(sub_klines)
+                brick_values[i] = round(val, 2) if val else None
+                # 判断红绿：大于等于前一天为红(1)，小于为绿(-1)
+                if i > 0 and brick_values[i] is not None and brick_values[i - 1] is not None:
+                    brick_colors[i] = 1 if brick_values[i] >= brick_values[i - 1] else -1
+                else:
+                    brick_colors[i] = 1 # 默认红色
+            except Exception:
+                pass
     except Exception:
         logger.warning("砖型图计算失败: %s", ts_code, exc_info=True)
 
