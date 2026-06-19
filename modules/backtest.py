@@ -246,8 +246,8 @@ def backtest_strategy(
         from modules.self_optimizer.param_registry import get_active_param
     except ImportError:
 
-        def get_active_param(s, n, d):
-            return d  # fallback
+        def get_active_param(strategy: str, name: str, default: Any = None) -> Any:
+            return default  # fallback
 
     if stop_loss_pct is None:
         stop_loss_pct = get_active_param("stop_loss", "stop_loss_pct", 7.0) / 100.0

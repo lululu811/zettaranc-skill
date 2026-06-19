@@ -1,4 +1,5 @@
-from typing import Optional
+from typing import Any, Optional
+from collections.abc import Callable
 
 """
 技术指标数据层模块
@@ -569,7 +570,7 @@ def _step_sell_score(klines, result):
 
 
 # 计算管道：(最小K线数, 计算函数)
-_PIPELINE: list[tuple[int, callable]] = [
+_PIPELINE: list[tuple[int, Callable[[Any, Any], None]]] = [
     (0, _step_kdj),
     (30, _step_macd),
     (24, _step_bbi),

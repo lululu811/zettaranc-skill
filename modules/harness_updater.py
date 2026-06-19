@@ -19,7 +19,7 @@ class HarnessUpdater:
         """初始化 Harness 更新器"""
         self.logger = ImprovementLogger()
 
-    def analyze_strategy_performance(self, review_month: str = None) -> dict[str, Any]:
+    def analyze_strategy_performance(self, review_month: str | None = None) -> dict[str, Any]:
         """
         分析策略表现
 
@@ -207,7 +207,7 @@ class HarnessUpdater:
         except Exception as e:
             return {"success": False, "message": f"应用 Guardrails 更新失败: {str(e)}"}
 
-    def run_harness_update(self, review_month: str = None) -> dict[str, Any]:
+    def run_harness_update(self, review_month: str | None = None) -> dict[str, Any]:
         """
         运行 Harness 更新流程
 

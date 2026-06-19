@@ -68,8 +68,8 @@ class SelfOptimizer:
 
     def run(
         self,
-        scorer: object | None = None,
-        mutator: object | None = None,
+        scorer: BacktestScorer | None = None,
+        mutator: ParamMutator | None = None,
     ) -> dict:
         """Phase 1 → 2 → 3 完整跑一次.
 

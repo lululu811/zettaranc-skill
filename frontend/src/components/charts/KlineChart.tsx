@@ -561,4 +561,3 @@ export default function KlineChart({ data, height = 820 }: Props) {
     </div>
   );
 }
-

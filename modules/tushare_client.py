@@ -72,7 +72,7 @@ class TushareClient:
             pass
 
         self.min_request_interval = 0.55
-        self.last_request_time = 0
+        self.last_request_time = 0.0
 
     def _rate_limit(self, api_name: str = ""):
         elapsed = time.time() - self.last_request_time

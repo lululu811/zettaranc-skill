@@ -17,7 +17,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 class ImprovementLogger:
     """自我改进日志记录器"""
 
-    def __init__(self, log_dir: str = None):
+    def __init__(self, log_dir: str | None = None):
         """
         初始化日志记录器
 
@@ -134,7 +134,7 @@ class ImprovementLogger:
         Returns:
             是否记录成功
         """
-        accuracy_rate = 0
+        accuracy_rate = 0.0
         if buy_signals > 0:
             accuracy_rate = correct_buy_signals / buy_signals * 100
 
@@ -273,13 +273,13 @@ class ImprovementLogger:
             logs = self.get_recent_logs(limit=1000)
 
             # 统计各分类数量
-            category_counts = {}
+            category_counts: dict[str, int] = {}
             for log in logs:
                 category = log.get("category", "unknown")
                 category_counts[category] = category_counts.get(category, 0) + 1
 
             # 统计各状态数量
-            status_counts = {}
+            status_counts: dict[str, int] = {}
             for log in logs:
                 status = log.get("status", "unknown")
                 status_counts[status] = status_counts.get(status, 0) + 1
