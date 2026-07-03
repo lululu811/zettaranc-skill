@@ -2,6 +2,34 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [v3.3.1] - 2026-07-04
+
+
+> **「v3.3.1：SKILL.md 拆分 + 工程清理 — 首屏加载压力 -61%。」**
+
+### 核心变更
+
+- **SKILL.md 拆分（Phase 3 重校准）**：
+  - 1534 行 → 598 行（-61%），消除 Agent 首屏加载压力
+  - `knowledge/workflow.md`（393 行）：回答工作流 Step 1/1.5/2/3 完整 SOP（问题分类、个股问诊、Z哥式研究、Z哥式回答）
+  - `knowledge/harness.md`（510 行）：Harness 六大部分（Guardrails / Feedback Loop / Error Recovery / Context Management / 执行流程 / 价值）
+  - `knowledge/improvement-system.md`（203 行）：跟踪池 + 月度复盘 + 策略优化闭环
+  - 每个新文件含 `<!-- Skill-Runtime -->` 元数据头部（加载时机 / 用途 / 大小 / 依赖）
+  - SKILL.md 保留核心人格（角色规则 + 表达 DNA + 心智模型 + 诚实边界）+ V2 schema + 每个被抽取章节的"何时读 + 速查表 + 跨文件引用"
+- **P0 工程清理**：
+  - 删除 `prompts/` 残留目录（6 个不相关 openclaw/playwright 文件）
+  - `pyproject.toml` 注册 `@pytest.mark.slow` 标记，消除 `PytestUnknownMarkWarning`
+- **运行时资源索引扩展**：3 个新 knowledge 文件进入 SKILL.md 运行时边界表（按需加载）
+- **核心人格内容零变更**：心智模型（9 个）、决策启发式、表达 DNA、人物时间线全部保留在 SKILL.md
+
+### 验证
+
+- `corpus/quality_check.py`：12/12 通过（无需修改）
+- `pytest tests/`：723 passed, 11 skipped（无回归）
+- 测试耗时：88.79s（与 v3.3.0 一致）
+
+---
+
 ## [v3.3.0] - 2026-06-20
 
 

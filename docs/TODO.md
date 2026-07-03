@@ -1,9 +1,26 @@
 # TODO
 
 > Zettaranc Skill 待办清单
-> 更新日期：2026-06-20
-> 当前版本：v3.3.0
+> 更新日期：2026-07-04
+> 当前版本：v3.3.1
 > 状态：✅ 已完成 / ⏳ 进行中 / 📋 待规划
+
+---
+
+## ✅ 已完成（v3.3.1 SKILL.md 拆分 + 工程清理）
+
+- [x] **SKILL.md 拆分（Phase 3 重校准）**：
+  - 1534 行 → 598 行（-61%），三段大块 SOP 抽到 knowledge/
+  - `knowledge/workflow.md`（393 行）：Step 1/1.5/2/3 完整工作流
+  - `knowledge/harness.md`（510 行）：Harness 六大部分
+  - `knowledge/improvement-system.md`（203 行）：跟踪池 + 复盘 + 优化闭环
+  - 每个新文件含 Skill-Runtime 元数据头部
+  - 心智模型 / 决策启发式 / 表达 DNA 全部保留在 SKILL.md
+- [x] **P0 工程清理**：
+  - 删除 `prompts/` 残留目录（6 个不相关 openclaw/playwright 文件）
+  - 注册 `@pytest.mark.slow` 标记，消除 PytestUnknownMarkWarning
+- [x] **运行时资源索引扩展**：3 个新 knowledge 文件进入 SKILL.md 运行时边界表
+- [x] **质量门 + 测试验证**：12/12 通过，723 passed / 11 skipped 无回归
 
 ---
 

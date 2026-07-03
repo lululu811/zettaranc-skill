@@ -54,6 +54,9 @@ exclude = ["tests*", "scripts*", "corpus*", "docs*"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-v --tb=short"
+markers = [
+    "slow: 慢速端到端测试（如 self_optimizer 跑多轮），默认不在常规 CI 中跑",
+]
 
 [tool.ruff]
 line-length = 120
