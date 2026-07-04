@@ -5,6 +5,8 @@
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
+from dataclasses import asdict
+
 import pytest
 
 from modules.indicators import DailyData
@@ -19,7 +21,7 @@ from modules.simulator import (
 )
 from modules.simulator.execution_engine import execute_buy, execute_sell
 from modules.simulator.exit_manager import check_exit
-from modules.simulator.market_context import MarketContext, max_positions_allowed
+from modules.simulator.market_context import MarketContext, get_market_context, max_positions_allowed
 from modules.simulator.position_sizer import build_position, calculate_position_size
 from modules.simulator.signal_filter import SignalScore, SignalVerdict, filter_signals
 from modules.simulator.simulator import _build_result, _portfolio_value, _run_single_day
@@ -50,6 +52,32 @@ def _make_klines(n=60, ts_code="600519.SH", start_price=100.0, trend=0.01):
         )
         dt += timedelta(days=1)
     return klines
+
+
+def _make_mock_breadth_conn(limit_up=50, limit_down=3, turnover_up=True):
+    """构造模拟的 SQLite 连接，用于市场环境测试。"""
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_conn.cursor.return_value = mock_cursor
+
+    # 构造 40 个交易日成交额：递增表示趋势向上，递减表示趋势向下
+    base_date = datetime(2024, 1, 1)
+    turnover_rows = []
+    for i in range(40):
+        date_str = (base_date + timedelta(days=i)).strftime("%Y%m%d")
+        factor = 1 + i * 0.01 if turnover_up else 1 - i * 0.01
+        turnover_rows.append({"trade_date": date_str, "total_amount": 1e10 * factor})
+
+    def fake_execute(sql, params):
+        if "pct_chg" in sql:
+            mock_cursor.fetchone.return_value = {"limit_up": limit_up, "limit_down": limit_down}
+        elif "SUM(amount)" in sql:
+            # 查询结果按 trade_date DESC 返回
+            mock_cursor.fetchall.return_value = list(reversed(turnover_rows))
+        return mock_cursor
+
+    mock_cursor.execute.side_effect = fake_execute
+    return mock_conn
 
 
 def test_simulation_config_default_fields():
@@ -223,6 +251,42 @@ class TestMarketContext:
     def test_max_positions_neutral(self):
         ctx = MarketContext(date="20260101", regime=MarketRegime.NEUTRAL, index_trend=50, breadth=0, moneyflow_score=50)
         assert max_positions_allowed(ctx, config_max=5, weak_max=1) == 4
+
+    @patch("modules.simulator.market_context.get_datasource")
+    @patch("modules.simulator.market_context.get_connection")
+    def test_market_context_includes_breadth_notes(self, mock_get_conn, mock_get_ds):
+        raw_klines = [asdict(k) for k in _make_klines(n=70, ts_code="000001.SH", trend=0.01)]
+        mock_ds = MagicMock()
+        mock_ds.get_kline_dicts.return_value = raw_klines
+        mock_get_ds.return_value = mock_ds
+
+        mock_conn = _make_mock_breadth_conn(limit_up=50, limit_down=3, turnover_up=True)
+        cm = MagicMock()
+        cm.__enter__ = MagicMock(return_value=mock_conn)
+        cm.__exit__ = MagicMock(return_value=False)
+        mock_get_conn.return_value = cm
+
+        ctx = get_market_context("20240115")
+        assert any("涨停" in n or "跌停" in n for n in ctx.notes)
+        assert any("情绪贪婪" in n for n in ctx.notes)
+
+    @patch("modules.simulator.market_context.get_datasource")
+    @patch("modules.simulator.market_context.get_connection")
+    def test_market_context_panic_downgrades_strong(self, mock_get_conn, mock_get_ds):
+        raw_klines = [asdict(k) for k in _make_klines(n=70, ts_code="000001.SH", trend=0.01)]
+        mock_ds = MagicMock()
+        mock_ds.get_kline_dicts.return_value = raw_klines
+        mock_get_ds.return_value = mock_ds
+
+        mock_conn = _make_mock_breadth_conn(limit_up=10, limit_down=50, turnover_up=False)
+        cm = MagicMock()
+        cm.__enter__ = MagicMock(return_value=mock_conn)
+        cm.__exit__ = MagicMock(return_value=False)
+        mock_get_conn.return_value = cm
+
+        ctx = get_market_context("20240115")
+        assert any("情绪恐慌" in n for n in ctx.notes)
+        assert ctx.regime in (MarketRegime.NEUTRAL, MarketRegime.WEAK)
 
 
 class TestSignalFilter:

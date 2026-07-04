@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from ..database import get_connection
 from ..datasource import DataSource, get_datasource
 from ..indicators import DailyData, calculate_zg_white, calculate_dg_yellow, calculate_ma
 from . import MarketContext, MarketRegime
@@ -72,6 +73,61 @@ def _moneyflow_score(klines: list[DailyData]) -> float:
     return max(0.0, min(100.0, score))
 
 
+def _fetch_breadth(trade_date: str) -> tuple[int, int]:
+    """查询当日涨跌停家数（基于 pct_chg 启发式阈值）。"""
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT
+                    COALESCE(SUM(CASE WHEN pct_chg >= 9.5 THEN 1 ELSE 0 END), 0) AS limit_up,
+                    COALESCE(SUM(CASE WHEN pct_chg <= -9.5 THEN 1 ELSE 0 END), 0) AS limit_down
+                FROM daily_kline
+                WHERE trade_date = ?
+                """,
+                (trade_date,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return 0, 0
+            return int(row["limit_up"]), int(row["limit_down"])
+    except Exception:
+        return 0, 0
+
+
+def _fetch_turnover_trend(trade_date: str) -> float | None:
+    """
+    计算全市场成交额趋势：最近 20 个交易日总成交额 / 前 20 个交易日总成交额。
+
+    返回 None 表示数据不足或查询失败。
+    """
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT trade_date, SUM(amount) AS total_amount
+                FROM daily_kline
+                WHERE trade_date <= ?
+                GROUP BY trade_date
+                ORDER BY trade_date DESC
+                LIMIT 40
+                """,
+                (trade_date,),
+            )
+            rows = cursor.fetchall()
+            if len(rows) < 40:
+                return None
+            recent = sum(float(r["total_amount"]) for r in rows[:20])
+            previous = sum(float(r["total_amount"]) for r in rows[20:40])
+            if previous <= 0:
+                return None
+            return recent / previous
+    except Exception:
+        return None
+
+
 def get_market_context(
     trade_date: str,
     index_code: str = _DEFAULT_INDEX_CODE,
@@ -89,7 +145,8 @@ def get_market_context(
         MarketContext
     """
     ds = datasource or get_datasource()
-    raw_klines = ds.get_kline_dicts(index_code, days=120, end_date=trade_date.replace("-", ""))
+    normalized_date = trade_date.replace("-", "")
+    raw_klines = ds.get_kline_dicts(index_code, days=120, end_date=normalized_date)
 
     if not raw_klines:
         return MarketContext(
@@ -115,7 +172,23 @@ def get_market_context(
     else:
         regime = MarketRegime.NEUTRAL
 
+    limit_up, limit_down = _fetch_breadth(normalized_date)
+    turnover_trend = _fetch_turnover_trend(normalized_date)
+    turnover_up = turnover_trend is not None and turnover_trend > 1.0
+    panic_greed_ratio = limit_up / max(limit_down, 1)
+
     notes = [f"大盘趋势得分 {trend:.0f}", f"涨跌广度 {breadth:+.2f}", f"资金得分 {mf:.0f}"]
+
+    if limit_up > 0 or limit_down > 0:
+        notes.append(f"涨停{limit_up}家/跌停{limit_down}家")
+
+    if panic_greed_ratio > 10 and turnover_up:
+        notes.append("情绪贪婪")
+    elif panic_greed_ratio < 0.5 or limit_down > 100:
+        notes.append("情绪恐慌")
+        if regime == MarketRegime.STRONG:
+            # 技术面强势但情绪极端恐慌时，保守降级
+            regime = MarketRegime.WEAK if limit_down > 100 else MarketRegime.NEUTRAL
 
     return MarketContext(
         date=trade_date,
