@@ -1,11 +1,11 @@
 """选股数据获取层（支持 DataSource 注入）。"""
 
 from ..database import get_db_connection
-from ..datasource import get_datasource
+from ..datasource import DataSource, get_datasource
 from ..indicators import DailyData
 
 
-def get_all_stocks(datasource=None) -> list[dict]:
+def get_all_stocks(datasource: DataSource | None = None) -> list[dict]:
     """
     获取所有股票基本信息
 
@@ -33,7 +33,7 @@ def get_all_stocks(datasource=None) -> list[dict]:
     return stocks
 
 
-def get_recent_klines(ts_code: str, days: int = 60, datasource=None) -> list[DailyData]:
+def get_recent_klines(ts_code: str, days: int = 60, datasource: DataSource | None = None) -> list[DailyData]:
     """
     获取近期 K 线数据
 

@@ -4,6 +4,7 @@ import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from ..database import get_db_connection
+from ..datasource import DataSource
 from ..indicators import DailyData
 from .criteria import _CRITERIA_REGISTRY, _check_centipede, _check_sandglass_min
 from .data import get_all_stocks, get_recent_klines
@@ -21,12 +22,12 @@ from .scoring import (
 _PARALLEL_THRESHOLD = 50
 
 
-def analyze_stock(ts_code: str, klines: list[DailyData] | None = None) -> StockScore:
+def analyze_stock(ts_code: str, klines: list[DailyData] | None = None, datasource: DataSource | None = None) -> StockScore:
     """
     综合评分单只股票
     """
     if klines is None:
-        klines = get_recent_klines(ts_code, 150)
+        klines = get_recent_klines(ts_code, 150, datasource=datasource)
 
     if not klines:
         return StockScore(ts_code=ts_code)
@@ -157,16 +158,16 @@ def _daily_to_dict(klines: list[DailyData]) -> list[dict]:
     return result
 
 
-def _analyze_worker(ts_code: str) -> tuple[str, list[DailyData], StockScore] | None:
+def _analyze_worker(ts_code: str, datasource: DataSource | None = None) -> tuple[str, list[DailyData], StockScore] | None:
     """
     并行 worker：评分单只股票
     必须在模块顶层定义，以便 ProcessPoolExecutor 可以 pickle
     返回: (ts_code, klines, score) 或 None
     """
-    klines = get_recent_klines(ts_code, 150)
+    klines = get_recent_klines(ts_code, 150, datasource=datasource)
     if not klines or len(klines) < 30:
         return None
-    score = analyze_stock(ts_code, klines)
+    score = analyze_stock(ts_code, klines, datasource=datasource)
     return ts_code, klines, score
 
 
@@ -189,7 +190,7 @@ def _filter_stock(result: tuple[str, list, StockScore], criteria: str) -> bool:
 
 
 def screen_stocks(
-    criteria: str = "b1", max_stocks: int = 0, max_workers: int = 0, use_parallel: bool = True
+    criteria: str = "b1", max_stocks: int = 0, max_workers: int = 0, use_parallel: bool = True, datasource: DataSource | None = None
 ) -> list[StockScore]:
     """
     选股筛选（支持多进程并行）
@@ -216,7 +217,7 @@ def screen_stocks(
 
     返回：满足条件的 StockScore 列表（按评分降序）
     """
-    stocks = get_all_stocks()
+    stocks = get_all_stocks(datasource=datasource)
     limit = max_stocks if max_stocks > 0 else 500
     stocks = stocks[:limit]
 
@@ -226,7 +227,7 @@ def screen_stocks(
     if not use_parallel or len(stocks) < _PARALLEL_THRESHOLD:
         # 串行模式
         for stock in stocks:
-            result = _analyze_worker(stock["ts_code"])
+            result = _analyze_worker(stock["ts_code"], datasource=datasource)
             if result and _filter_stock(result, criteria):
                 results.append(result[2])
     else:
@@ -236,7 +237,7 @@ def screen_stocks(
             ts_codes = [s["ts_code"] for s in stocks]
 
             with ProcessPoolExecutor(max_workers=workers) as executor:
-                future_map = {executor.submit(_analyze_worker, ts_code): ts_code for ts_code in ts_codes}
+                future_map = {executor.submit(_analyze_worker, ts_code, datasource): ts_code for ts_code in ts_codes}
                 for future in as_completed(future_map):
                     result = future.result()
                     if result and _filter_stock(result, criteria):
@@ -244,7 +245,7 @@ def screen_stocks(
         except Exception:
             # 并行失败回退到串行
             for stock in stocks:
-                result = _analyze_worker(stock["ts_code"])
+                result = _analyze_worker(stock["ts_code"], datasource=datasource)
                 if result and _filter_stock(result, criteria):
                     results.append(result[2])
 
