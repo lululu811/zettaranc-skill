@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from ..database import get_connection, get_db_path
-from ..datasource import DataSource, TushareDataSource, get_datasource
+from ..datasource import DataSource, TushareDataSource
 from .rate_limiter import _rate_limit_global, _MAX_SYNC_WORKERS
 from .indicator_cache import (
     _get_indicator_funcs,
@@ -381,8 +381,9 @@ class DataSyncer:
             else:
                 macd_dif_seq = macd_dea_seq = macd_hist_seq = None
 
+            cols = [c.strip() for c in _INDICATOR_INSERT_COLUMNS.split(",")]
             insert_sql = (
-                f"INSERT OR REPLACE INTO indicator_cache ({_INDICATOR_INSERT_COLUMNS}) VALUES ({','.join(['?'] * 60)})"
+                f"INSERT OR REPLACE INTO indicator_cache ({_INDICATOR_INSERT_COLUMNS}) VALUES ({','.join(['?'] * len(cols))})"
             )
 
             with get_connection() as conn:
