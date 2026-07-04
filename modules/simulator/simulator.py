@@ -40,6 +40,7 @@ from .exit_manager import check_exit
 from .market_context import get_market_context, max_positions_allowed
 from .position_sizer import build_position
 from .signal_filter import filter_signals, evaluate_stock
+from .metrics import calculate_metrics
 
 
 @dataclass
@@ -51,12 +52,35 @@ class _SimulatorState:
     positions: list[Position] = field(default_factory=list)
     trades: list[TradeRecord] = field(default_factory=list)
     equity_curve: list[dict[str, Any]] = field(default_factory=list)
+    benchmark_curve: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _available_dates(ts_code: str, days: int, datasource: DataSource) -> list[str]:
     """获取某只股票回测区间内的所有交易日。"""
     raw = datasource.get_kline_dicts(ts_code, days=days)
     return [k["trade_date"] for k in raw]
+
+
+def _load_benchmark_curve(
+    dates: list[str], benchmark_code: str, datasource: DataSource
+) -> list[dict[str, Any]]:
+    """加载基准指数在回测区间内的收盘价曲线。"""
+    if not dates or not benchmark_code:
+        return []
+    try:
+        df = datasource.get_index_daily(benchmark_code, dates[0], dates[-1])
+        if df is None or getattr(df, "empty", True):
+            return []
+        records = df.to_dict("records")
+        date_set = set(dates)
+        curve = []
+        for row in sorted(records, key=lambda x: x.get("trade_date", "")):
+            date = row.get("trade_date", "")
+            if date in date_set:
+                curve.append({"date": date, "close": float(row.get("close", 0))})
+        return curve
+    except Exception:
+        return []
 
 
 def _portfolio_value(state: _SimulatorState, date: str, klines_map: dict[str, list[DailyData]]) -> float:
@@ -233,7 +257,11 @@ def run_simulation(
     if not klines_map:
         return SimulationResult(config=config, initial_capital=config.initial_capital)
 
-    state = _SimulatorState(cash=config.initial_capital, equity=config.initial_capital)
+    state = _SimulatorState(
+        cash=config.initial_capital,
+        equity=config.initial_capital,
+        benchmark_curve=_load_benchmark_curve(dates, config.benchmark_code, ds),
+    )
 
     for date in dates:
         # 市场环境
@@ -339,6 +367,15 @@ def _build_result(state: _SimulatorState, config: SimulationConfig) -> Simulatio
                 holding_days.append((d2 - d1).days)
         if holding_days:
             result.avg_holding_days = sum(holding_days) / len(holding_days)
+
+    # 基准曲线与专业绩效指标
+    benchmark_curve = getattr(state, "benchmark_curve", None) or []
+    if not isinstance(benchmark_curve, list):
+        benchmark_curve = []
+    result.benchmark_curve = benchmark_curve
+    result.metrics = calculate_metrics(
+        result.equity_curve, benchmark_curve, result.trades
+    )
 
     return result
 
