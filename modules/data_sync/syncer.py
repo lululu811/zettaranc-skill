@@ -402,7 +402,7 @@ class DataSyncer:
                         macd_hist_seq,
                         i,
                     )
-                    row = _build_indicator_row(ts_code, ind)
+                    row = _build_indicator_row(ts_code, kline.trade_date, ind)
                     cursor.execute(insert_sql, row)
 
             self._log_sync("indicator_cache", ts_code, klines[-1].trade_date, "success")

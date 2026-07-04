@@ -233,7 +233,7 @@ _INDICATOR_INSERT_COLUMNS = (
 )
 
 
-def _build_indicator_row(ts_code: str, ind: dict[str, Any]) -> tuple:
+def _build_indicator_row(ts_code: str, trade_date: str, ind: dict[str, Any]) -> tuple:
     """从 _compute_day_indicators 返回的 dict 构建 INSERT 行 tuple。
 
     列顺序与 _INDICATOR_INSERT_COLUMNS 保持一致。
@@ -241,6 +241,7 @@ def _build_indicator_row(ts_code: str, ind: dict[str, Any]) -> tuple:
     """
     return (
         ts_code,
+        trade_date,
         ind["close"],
         ind["open"],
         ind["high"],
