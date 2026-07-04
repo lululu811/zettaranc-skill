@@ -13,6 +13,8 @@ CLI 扩展命令模块（待集成到 cli.py）
     python -m modules.cli_commands daily --json
 """
 
+from __future__ import annotations
+
 import json
 import sys
 from datetime import datetime
@@ -724,13 +726,6 @@ def cmd_simulate(args) -> None:
     if use_json:
         metrics_dict = asdict(result.metrics) if result.metrics else None
 
-        def _sample_curve(curve, max_points=30):
-            """等间隔采样，最多 max_points 个点"""
-            if not curve:
-                return []
-            step = max(1, (len(curve) + max_points - 1) // max_points)
-            return curve[::step]
-
         _json_output(
             {
                 "initial_capital": result.initial_capital,
@@ -758,7 +753,7 @@ def cmd_simulate(args) -> None:
                 ],
                 "equity_curve_sample": result.equity_curve[:: max(1, len(result.equity_curve) // 30)],
                 "metrics": metrics_dict,
-                "benchmark_curve_sample": _sample_curve(result.benchmark_curve),
+                "benchmark_curve_sample": result.benchmark_curve[:: max(1, len(result.benchmark_curve) // 30)],
             }
         )
     else:

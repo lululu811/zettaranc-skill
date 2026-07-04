@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-Skill-blueviolet)](https://claude.ai/code)
-[![v3.3.2](https://img.shields.io/badge/version-3.3.2-green)](docs/CHANGELOG.md)
+[![v3.4.0](https://img.shields.io/badge/version-3.4.0-green)](docs/CHANGELOG.md)
 
 
 <br>
@@ -20,7 +20,7 @@
 
 ---
 
-## v3.3.2 能做什么
+## v3.4.0 能做什么
 
 
 > **不只是炒股工具，是多场景智能决策系统。宿主（Claude Code / Cursor）可直接调用 CLI 工具获取真实数据。**
@@ -288,6 +288,13 @@ python -m modules.cli backtest portfolio 600487.SH,601318.SH
 
 # JSON 输出
 python -m modules.cli backtest shaofu 600487.SH --json
+```
+
+### 交易模拟器
+
+```bash
+# A 股真实约束模拟（T+1、涨跌停、真实成本、ATR 仓位）
+zt simulate 000001.SZ --days 250 --atr-sizing --max-position-pct 0.15 --json
 ```
 
 ### 交易记录
