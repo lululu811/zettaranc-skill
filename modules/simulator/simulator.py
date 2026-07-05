@@ -25,6 +25,7 @@ from typing import Any
 from . import (
     MarketRegime,
     Position,
+    ResonanceScore,
     SimulationConfig,
     SimulationResult,
     TradeRecord,
@@ -55,6 +56,7 @@ class _SimulatorState:
     equity_curve: list[dict[str, Any]] = field(default_factory=list)
     benchmark_curve: list[dict[str, Any]] = field(default_factory=list)
     rejected_entries: list[dict[str, Any]] = field(default_factory=list)
+    resonance_scores: list[ResonanceScore] = field(default_factory=list)
 
 
 def _available_dates(ts_code: str, days: int, datasource: DataSource) -> list[str]:
@@ -250,6 +252,8 @@ def _run_single_day(
         state.trades.append(trade)
         state.cash -= trade.shares * trade.price + trade.fee
         state.positions.append(pos)
+        if sig.resonance is not None:
+            state.resonance_scores.append(sig.resonance)
 
 
 def run_simulation(
@@ -413,6 +417,30 @@ def _build_result(state: _SimulatorState, config: SimulationConfig) -> Simulatio
     result.benchmark_curve = benchmark_curve
     result.rejected_entries = getattr(state, "rejected_entries", None) or []
     result.metrics = calculate_metrics(result.equity_curve, benchmark_curve, result.trades)
+
+    # 战法共振统计摘要
+    resonance_scores = getattr(state, "resonance_scores", None)
+    if not isinstance(resonance_scores, list):
+        resonance_scores = []
+    if resonance_scores:
+        result.resonance_summary = {
+            "mode": result.config.strategy_mode,
+            "total_signals_evaluated": len(resonance_scores),
+            "matched_strategies": sorted(list(set(
+                s for r in resonance_scores for s in r.matched_strategies
+            )))[:20],
+            "conflicts": sorted(list(set(
+                c for r in resonance_scores for c in r.conflicts
+            )))[:20],
+            "avg_buy_score": round(
+                sum(r.buy_score for r in resonance_scores) / len(resonance_scores), 4
+            ),
+            "avg_risk_score": round(
+                sum(r.risk_score for r in resonance_scores) / len(resonance_scores), 4
+            ),
+        }
+    else:
+        result.resonance_summary = {"mode": result.config.strategy_mode}
 
     return result
 

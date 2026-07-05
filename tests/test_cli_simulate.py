@@ -4,7 +4,11 @@
 
 from __future__ import annotations
 
+import json
+from unittest.mock import MagicMock, patch
+
 from modules.cli import build_parser
+from modules.cli_commands import cmd_simulate
 
 
 def test_cli_simulate_arguments_parsed():
@@ -87,3 +91,54 @@ def test_cli_simulate_t1_lock_explicit():
     parser = build_parser()
     args = parser.parse_args(["simulate", "000001.SZ", "--t1-lock"])
     assert args.t1_lock is True
+
+
+def test_cli_resonance_details_keys(capsys):
+    """JSON 输出中 resonance_details 必须包含聚合共振统计字段。"""
+    parser = build_parser()
+    args = parser.parse_args(["simulate", "000001.SZ", "--strategy-mode", "resonance", "--days", "30", "--json"])
+
+    mock_result = MagicMock()
+    mock_result.initial_capital = 1_000_000.0
+    mock_result.final_value = 1_050_000.0
+    mock_result.total_return = 0.05
+    mock_result.max_drawdown = 0.03
+    mock_result.sharpe_ratio = 1.2
+    mock_result.total_trades = 5
+    mock_result.win_rate = 0.6
+    mock_result.profit_factor = 2.0
+    mock_result.avg_holding_days = 5.0
+    mock_result.positions = []
+    mock_result.trades = []
+    mock_result.equity_curve = [{"date": "20260101", "equity": 1_000_000.0}]
+    mock_result.metrics = None
+    mock_result.benchmark_curve = []
+    mock_result.config.strategy_mode = "resonance"
+    mock_result.resonance_summary = {
+        "mode": "resonance",
+        "total_signals_evaluated": 12,
+        "matched_strategies": ["B1", "B2"],
+        "conflicts": ["三波冲刺"],
+        "avg_buy_score": 0.72,
+        "avg_risk_score": 0.18,
+    }
+
+    with patch("modules.simulator.simulator.run_simulation", return_value=mock_result):
+        cmd_simulate(args)
+
+    captured = capsys.readouterr()
+    output = json.loads(captured.out)
+    details = output["resonance_details"]
+    required_keys = {
+        "mode",
+        "total_signals_evaluated",
+        "matched_strategies",
+        "conflicts",
+        "avg_buy_score",
+        "avg_risk_score",
+    }
+    assert required_keys.issubset(set(details.keys()))
+    assert details["mode"] == "resonance"
+    assert details["total_signals_evaluated"] == 12
+    assert "B1" in details["matched_strategies"]
+    assert details["avg_buy_score"] == 0.72

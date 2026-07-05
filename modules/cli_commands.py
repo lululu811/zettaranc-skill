@@ -757,14 +757,7 @@ def cmd_simulate(args) -> None:
                 "equity_curve_sample": result.equity_curve[:: max(1, len(result.equity_curve) // 30)],
                 "metrics": metrics_dict,
                 "benchmark_curve_sample": result.benchmark_curve[:: max(1, len(result.benchmark_curve) // 30)],
-                "resonance_details": {
-                    "mode": result.config.strategy_mode,
-                    "sample_matched": list(
-                        dict.fromkeys(
-                            s for t in result.trades if t.action == "BUY" for s in (t.notes or [])
-                        )
-                    )[:10],
-                },
+                "resonance_details": result.resonance_summary,
             }
         )
     else:
