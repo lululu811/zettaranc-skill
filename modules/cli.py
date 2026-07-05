@@ -811,6 +811,16 @@ def build_parser():
     p_sim.add_argument("--strategy-lookback", type=int, default=5, help="战法信号回看交易日数")
     p_sim.add_argument("--min-resonance-score", type=float, default=0.35, help="共振模式最低入选分")
     p_sim.add_argument("--json", action="store_true", help="JSON输出")
+    # v0.4 新增：walk-forward 参数寻优
+    p_sim.add_argument("--walk-forward", action="store_true", help="启用 walk-forward 参数寻优")
+    p_sim.add_argument("--wf-train-days", type=int, default=120, help="训练窗口天数（默认 120）")
+    p_sim.add_argument("--wf-test-days", type=int, default=60, help="验证窗口天数（默认 60）")
+    p_sim.add_argument(
+        "--wf-objective",
+        choices=["calmar", "sharpe", "sortino", "total_return"],
+        default="calmar",
+        help="目标函数（默认 calmar）",
+    )
 
     return parser
 

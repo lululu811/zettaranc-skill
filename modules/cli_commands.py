@@ -724,6 +724,30 @@ def cmd_simulate(args) -> None:
     if codes_str:
         ts_codes = [c.strip() for c in codes_str.split(",") if c.strip()]
 
+    # 检查是否启用 walk-forward 参数寻优
+    if getattr(args, "walk_forward", False):
+        from .simulator.walk_forward import run_walk_forward, WalkForwardConfig
+        from .simulator.optimizer_report import summary_text as wf_summary_text, to_dict as wf_to_dict
+
+        wf_config = WalkForwardConfig(
+            train_days=getattr(args, "wf_train_days", 120),
+            test_days=getattr(args, "wf_test_days", 60),
+            objective=getattr(args, "wf_objective", "calmar"),
+        )
+
+        wf_result = run_walk_forward(
+            ts_codes=ts_codes,
+            total_days=days,
+            wf_config=wf_config,
+            base_config=config,
+        )
+
+        if use_json:
+            _json_output(wf_to_dict(wf_result))
+        else:
+            print(wf_summary_text(wf_result))
+        return
+
     result = run_simulation(ts_codes=ts_codes, days=days, config=config)
 
     if use_json:

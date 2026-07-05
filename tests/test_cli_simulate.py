@@ -151,3 +151,82 @@ def test_cli_resonance_details_keys(capsys):
     assert details["total_signals_evaluated"] == 12
     assert "B1" in details["matched_strategies"]
     assert details["avg_buy_score"] == 0.72
+
+
+def test_cli_walk_forward_arguments():
+    """测试 walk-forward CLI 参数解析"""
+    parser = build_parser()
+    args = parser.parse_args([
+        "simulate", "000001.SZ",
+        "--walk-forward",
+        "--wf-train-days", "120",
+        "--wf-test-days", "60",
+        "--wf-objective", "calmar",
+    ])
+
+    assert args.walk_forward is True
+    assert args.wf_train_days == 120
+    assert args.wf_test_days == 60
+    assert args.wf_objective == "calmar"
+
+
+def test_cli_walk_forward_defaults():
+    """测试 walk-forward 参数默认值"""
+    parser = build_parser()
+    args = parser.parse_args(["simulate", "000001.SZ"])
+
+    assert args.walk_forward is False
+    assert args.wf_train_days == 120
+    assert args.wf_test_days == 60
+    assert args.wf_objective == "calmar"
+
+
+def test_cli_walk_forward_objective_choices():
+    """测试 walk-forward 目标函数选项"""
+    parser = build_parser()
+
+    for obj in ["calmar", "sharpe", "sortino", "total_return"]:
+        args = parser.parse_args([
+            "simulate", "000001.SZ",
+            "--walk-forward",
+            "--wf-objective", obj,
+        ])
+        assert args.wf_objective == obj
+
+
+def test_cli_walk_forward_invokes_run_walk_forward(capsys):
+    """测试 --walk-forward 启用时调用 run_walk_forward 而非 run_simulation"""
+    parser = build_parser()
+    args = parser.parse_args([
+        "simulate", "000001.SZ",
+        "--walk-forward",
+        "--wf-train-days", "60",
+        "--wf-test-days", "30",
+        "--wf-objective", "sharpe",
+        "--days", "180",
+        "--json",
+    ])
+
+    mock_wf_result = MagicMock()
+    mock_wf_result.windows = []
+    mock_wf_result.oos_equity_curve = []
+
+    from modules.simulator.walk_forward import WalkForwardConfig
+    from modules.simulator.metrics import PerformanceMetrics
+    mock_wf_result.oos_metrics = PerformanceMetrics()
+    mock_wf_result.overfit_ratio = 1.0
+    mock_wf_result.config = WalkForwardConfig()
+
+    with patch("modules.simulator.walk_forward.run_walk_forward", return_value=mock_wf_result) as mock_wf, \
+         patch("modules.simulator.simulator.run_simulation") as mock_sim:
+        cmd_simulate(args)
+
+    mock_wf.assert_called_once()
+    mock_sim.assert_not_called()
+
+    # 验证 WalkForwardConfig 参数正确传递
+    call_kwargs = mock_wf.call_args
+    wf_config = call_kwargs.kwargs.get("wf_config") or call_kwargs[1].get("wf_config")
+    assert wf_config.train_days == 60
+    assert wf_config.test_days == 30
+    assert wf_config.objective == "sharpe"
