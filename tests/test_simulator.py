@@ -871,4 +871,3 @@ def test_evaluate_stock_simple_mode_unchanged():
     assert score.verdict == SignalVerdict.PASS
     assert score.score == 75
     assert "B1" in score.signals
-

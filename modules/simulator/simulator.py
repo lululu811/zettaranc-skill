@@ -426,18 +426,10 @@ def _build_result(state: _SimulatorState, config: SimulationConfig) -> Simulatio
         result.resonance_summary = {
             "mode": result.config.strategy_mode,
             "total_signals_evaluated": len(resonance_scores),
-            "matched_strategies": sorted(list(set(
-                s for r in resonance_scores for s in r.matched_strategies
-            )))[:20],
-            "conflicts": sorted(list(set(
-                c for r in resonance_scores for c in r.conflicts
-            )))[:20],
-            "avg_buy_score": round(
-                sum(r.buy_score for r in resonance_scores) / len(resonance_scores), 4
-            ),
-            "avg_risk_score": round(
-                sum(r.risk_score for r in resonance_scores) / len(resonance_scores), 4
-            ),
+            "matched_strategies": sorted(list(set(s for r in resonance_scores for s in r.matched_strategies)))[:20],
+            "conflicts": sorted(list(set(c for r in resonance_scores for c in r.conflicts)))[:20],
+            "avg_buy_score": round(sum(r.buy_score for r in resonance_scores) / len(resonance_scores), 4),
+            "avg_risk_score": round(sum(r.risk_score for r in resonance_scores) / len(resonance_scores), 4),
         }
     else:
         result.resonance_summary = {"mode": result.config.strategy_mode}

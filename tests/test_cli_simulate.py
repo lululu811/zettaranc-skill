@@ -47,7 +47,16 @@ def test_cli_strategy_mode_argument():
     """v0.3 战法共振参数必须被正确解析"""
     parser = build_parser()
     args = parser.parse_args(
-        ["simulate", "000001.SZ", "--strategy-mode", "resonance", "--strategy-lookback", "3", "--min-resonance-score", "0.5"]
+        [
+            "simulate",
+            "000001.SZ",
+            "--strategy-mode",
+            "resonance",
+            "--strategy-lookback",
+            "3",
+            "--min-resonance-score",
+            "0.5",
+        ]
     )
     assert args.strategy_mode == "resonance"
     assert args.strategy_lookback == 3

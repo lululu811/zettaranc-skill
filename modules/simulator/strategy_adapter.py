@@ -66,7 +66,7 @@ def _parse_three_wave(sig: StrategySignal) -> RawStrategySignal | None:
     text = sig.reason or sig.description or ""
     if not text.startswith(_THREE_WAVE_PREFIX):
         return None
-    wave_name = text[len(_THREE_WAVE_PREFIX):].split("：", 1)[0].split(":", 1)[0]
+    wave_name = text[len(_THREE_WAVE_PREFIX) :].split("：", 1)[0].split(":", 1)[0]
     mapped = _THREE_WAVE_MAP.get(wave_name)
     if not mapped:
         return None
