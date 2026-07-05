@@ -261,15 +261,19 @@ def run_simulation(
     days: int = 250,
     config: SimulationConfig | None = None,
     datasource: DataSource | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
 ) -> SimulationResult:
     """
     运行少女/少妇模拟器回测。
 
     Args:
         ts_codes: 股票池，None 则取全市场前 500 只
-        days: 回测天数
+        days: 回测天数（当 start_date/end_date 未提供时使用）
         config: 模拟配置
         datasource: 数据源
+        start_date: 起始日期 YYYYMMDD（可选，需与 end_date 同时提供）
+        end_date: 结束日期 YYYYMMDD（可选，需与 start_date 同时提供）
 
     Returns:
         SimulationResult
@@ -285,7 +289,12 @@ def run_simulation(
         return SimulationResult(config=config, initial_capital=config.initial_capital)
 
     # 统一日期序列：以第一只股票的交易日期为基准
-    dates = _available_dates(ts_codes[0], days, ds)
+    if start_date and end_date:
+        # 使用显式日期范围：先拉取足够多的交易日，再按范围过滤
+        all_dates = _available_dates(ts_codes[0], days=500, datasource=ds)
+        dates = [d for d in all_dates if start_date <= d <= end_date]
+    else:
+        dates = _available_dates(ts_codes[0], days, ds)
     if not dates:
         return SimulationResult(config=config, initial_capital=config.initial_capital)
 

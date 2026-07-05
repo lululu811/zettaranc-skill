@@ -871,3 +871,82 @@ def test_evaluate_stock_simple_mode_unchanged():
     assert score.verdict == SignalVerdict.PASS
     assert score.score == 75
     assert "B1" in score.signals
+
+
+def test_run_simulation_with_explicit_date_range():
+    """测试显式日期范围参数"""
+    from modules.simulator.simulator import run_simulation
+    from modules.simulator import SimulationConfig
+    from modules.datasource import get_datasource
+
+    klines = _make_klines(n=90, start_price=100, trend=0.005)
+    sim_dates = [k.trade_date for k in klines]
+
+    # 选取中间一段日期范围
+    start_date = sim_dates[20]
+    end_date = sim_dates[50]
+
+    mock_ds = MagicMock()
+    mock_ds.get_kline_dicts.return_value = [
+        {
+            "trade_date": d,
+            "open": 100.0,
+            "high": 102.0,
+            "low": 98.0,
+            "close": 101.0,
+            "vol": 10000.0,
+            "amount": 1010000.0,
+            "pct_chg": 1.0,
+        }
+        for d in sim_dates
+    ]
+    mock_ds.get_index_daily.return_value = MagicMock()
+    mock_ds.get_index_daily.return_value.empty = True
+
+    with (
+        patch("modules.simulator.simulator.get_datasource", return_value=mock_ds),
+        patch("modules.simulator.simulator.get_recent_klines", return_value=klines),
+        patch("modules.simulator.simulator.get_market_context") as mock_ctx,
+        patch("modules.simulator.simulator.evaluate_stock") as mock_eval,
+    ):
+        mock_ctx.return_value = MarketContext(
+            date=sim_dates[0],
+            regime=MarketRegime.NEUTRAL,
+            index_trend=50,
+            breadth=0.0,
+            moneyflow_score=50,
+        )
+        mock_eval.return_value = SignalScore(
+            ts_code="600519.SH",
+            name="茅台",
+            date=sim_dates[0],
+            score=85,
+            b1_score=80,
+            trend_score=80,
+            volume_score=75,
+            risk_score=80,
+            signals=["B1", "沙漏完美"],
+            reasons=["B1"],
+            warnings=[],
+            verdict=SignalVerdict.PASS,
+        )
+
+        config = SimulationConfig(initial_capital=1_000_000)
+
+        # 使用显式日期范围
+        result = run_simulation(
+            ts_codes=["600519.SH"],
+            days=60,
+            config=config,
+            datasource=mock_ds,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    # 验证结果不为空
+    assert result is not None
+    assert len(result.equity_curve) > 0
+
+    # 验证日期范围在指定范围内
+    dates = [point["date"] for point in result.equity_curve]
+    assert all(start_date <= d <= end_date for d in dates)
