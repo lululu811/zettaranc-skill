@@ -20,9 +20,9 @@ STRATEGY_MAPPING: dict[str, tuple[str, str, str]] = {
     "B2": ("B2", "breakout", "BUY"),
     "B3": ("B3", "consensus", "BUY"),
     "SB1": ("超级B1", "rebound", "BUY"),
-    "长安": ("长安", "breakout", "BUY"),
+    "长安战法": ("长安", "breakout", "BUY"),
     "四分之三阴量": ("四分之三阴量", "rebound", "BUY"),
-    "娜娜": ("娜娜", "pattern", "BUY"),
+    "娜娜图形": ("娜娜", "pattern", "BUY"),
     "异动+地量地价": ("异动地量", "rebound", "BUY"),
     "平行重炮": ("平行重炮", "breakout", "BUY"),
     "坑里起好货": ("坑里起好货", "rebound", "BUY"),
@@ -30,14 +30,13 @@ STRATEGY_MAPPING: dict[str, tuple[str, str, str]] = {
     "S1": ("S1", "risk", "SELL"),
     "S2": ("S2", "risk", "SELL"),
     "S3": ("S3", "risk", "SELL"),
-    "砖形图": ("砖形图", "risk", "SELL"),
+    "四块砖翻绿": ("砖形图翻绿", "risk", "SELL"),
+    "四块砖减仓": ("砖形图减仓", "risk", "SELL"),
+    "四块砖反弹": ("砖形图反弹", "stage", "WATCH"),
     "买盘枯竭": ("买盘枯竭", "risk", "SELL"),
     "绿肥红瘦": ("绿肥红瘦", "risk", "SELL"),
     "阶梯放量下跌": ("阶梯放量下跌", "risk", "SELL"),
     "顶部大风车": ("顶部大风车", "risk", "SELL"),
-    "三波·建仓波": ("三波建仓", "stage", "BUY"),
-    "三波·拉升波": ("三波拉升", "stage", "HOLD"),
-    "三波·冲刺波": ("三波冲刺", "stage", "SELL"),
     "麒麟·吸筹": ("麒麟吸筹", "stage", "WATCH"),
     "麒麟·拉升": ("麒麟拉升", "stage", "HOLD"),
     "麒麟·派发": ("麒麟派发", "stage", "SELL"),
@@ -53,10 +52,45 @@ STRATEGY_MAPPING: dict[str, tuple[str, str, str]] = {
 }
 
 
+# 三波理论前缀与输出映射
+_THREE_WAVE_PREFIX = "三波理论·"
+_THREE_WAVE_MAP: dict[str, tuple[str, str, str]] = {
+    "建仓波": ("三波建仓", "stage", "BUY"),
+    "拉升波": ("三波拉升", "stage", "HOLD"),
+    "冲刺波": ("三波冲刺", "stage", "SELL"),
+}
+
+
+def _parse_three_wave(sig: StrategySignal) -> RawStrategySignal | None:
+    """若信号描述或原因包含三波理论前缀，解析并返回对应 RawStrategySignal。"""
+    text = sig.reason or sig.description or ""
+    if not text.startswith(_THREE_WAVE_PREFIX):
+        return None
+    wave_name = text[len(_THREE_WAVE_PREFIX):].split("：", 1)[0].split(":", 1)[0]
+    mapped = _THREE_WAVE_MAP.get(wave_name)
+    if not mapped:
+        return None
+    name, category, action = mapped
+    return RawStrategySignal(
+        strategy=name,
+        category=category,
+        action=action,
+        confidence=float(sig.confidence or 0.0),
+        trade_date=str(sig.trade_date or ""),
+        reason=text,
+    )
+
+
 def adapt(signals: list[StrategySignal]) -> list[RawStrategySignal]:
     """把 StrategySignal 列表转换为 RawStrategySignal 列表。"""
     result: list[RawStrategySignal] = []
     for sig in signals:
+        # 优先处理三波理论：以 description/reason 中的波次名称为准
+        three_wave = _parse_three_wave(sig)
+        if three_wave:
+            result.append(three_wave)
+            continue
+
         mapped = STRATEGY_MAPPING.get(sig.strategy.value)
         if not mapped:
             continue

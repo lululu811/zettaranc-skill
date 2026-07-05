@@ -77,3 +77,69 @@ def test_deduplicate_preserves_different_dates():
     ]
     result = deduplicate(signals)
     assert len(result) == 2
+
+
+def test_adapt_maps_changan_zhanfa_value():
+    sig = StrategySignal(
+        ts_code="000001.SZ",
+        trade_date="20240101",
+        strategy=StrategyType.CHANGAN,
+        action=Action.BUY.value,
+        confidence=0.8,
+        description="长安战法触发",
+    )
+    raw = adapt([sig])
+    assert len(raw) == 1
+    assert raw[0].strategy == "长安"
+    assert raw[0].category == "breakout"
+    assert raw[0].action == "BUY"
+
+
+def test_adapt_maps_nana_graph_value():
+    sig = StrategySignal(
+        ts_code="000001.SZ",
+        trade_date="20240101",
+        strategy=StrategyType.NANA,
+        action=Action.BUY.value,
+        confidence=0.75,
+        description="娜娜图形触发",
+    )
+    raw = adapt([sig])
+    assert len(raw) == 1
+    assert raw[0].strategy == "娜娜"
+    assert raw[0].category == "pattern"
+    assert raw[0].action == "BUY"
+
+
+def test_adapt_detects_three_waves_from_description():
+    sig = StrategySignal(
+        ts_code="000001.SZ",
+        trade_date="20240101",
+        strategy=StrategyType.B1,
+        action=Action.BUY.value,
+        confidence=0.82,
+        description="三波理论·建仓波：第一波吸筹结束",
+    )
+    raw = adapt([sig])
+    assert len(raw) == 1
+    assert raw[0].strategy == "三波建仓"
+    assert raw[0].category == "stage"
+    assert raw[0].action == "BUY"
+    assert raw[0].confidence == pytest.approx(0.82)
+    assert raw[0].trade_date == "20240101"
+
+
+def test_adapt_maps_brick_signals():
+    sig = StrategySignal(
+        ts_code="000001.SZ",
+        trade_date="20240101",
+        strategy=StrategyType.BRICK_EXIT,
+        action=Action.SELL.value,
+        confidence=0.9,
+        description="四块红砖翻绿",
+    )
+    raw = adapt([sig])
+    assert len(raw) == 1
+    assert raw[0].strategy == "砖形图翻绿"
+    assert raw[0].category == "risk"
+    assert raw[0].action == "SELL"
