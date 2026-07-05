@@ -715,6 +715,9 @@ def cmd_simulate(args) -> None:
         max_position_pct=getattr(args, "max_position_pct", 0.20),
         allow_st=not getattr(args, "no_st", False),
         t1_lock=getattr(args, "t1_lock", True),
+        strategy_mode=getattr(args, "strategy_mode", "simple"),
+        strategy_lookback_days=getattr(args, "strategy_lookback", 5),
+        min_resonance_score=getattr(args, "min_resonance_score", 0.35),
     )
 
     ts_codes = None
@@ -754,6 +757,14 @@ def cmd_simulate(args) -> None:
                 "equity_curve_sample": result.equity_curve[:: max(1, len(result.equity_curve) // 30)],
                 "metrics": metrics_dict,
                 "benchmark_curve_sample": result.benchmark_curve[:: max(1, len(result.benchmark_curve) // 30)],
+                "resonance_details": {
+                    "mode": result.config.strategy_mode,
+                    "sample_matched": list(
+                        dict.fromkeys(
+                            s for t in result.trades if t.action == "BUY" for s in (t.notes or [])
+                        )
+                    )[:10],
+                },
             }
         )
     else:
@@ -825,6 +836,10 @@ if __name__ == "__main__":
     p_sim.add_argument("--no-st", action="store_true", help="不允许交易 ST/*ST 股票")
     p_sim.add_argument("--t1-lock", dest="t1_lock", action="store_true", default=True, help="启用 T+1 卖出锁定（默认）")
     p_sim.add_argument("--no-t1-lock", dest="t1_lock", action="store_false", default=True, help="禁用 T+1 卖出锁定")
+    # v0.3 新增：战法共振模式参数
+    p_sim.add_argument("--strategy-mode", choices=["simple", "resonance"], default="simple", help="选股模式")
+    p_sim.add_argument("--strategy-lookback", type=int, default=5, help="战法信号回看交易日数")
+    p_sim.add_argument("--min-resonance-score", type=float, default=0.35, help="共振模式最低入选分")
     p_sim.add_argument("--json", action="store_true", help="JSON 输出")
 
     args = parser.parse_args()

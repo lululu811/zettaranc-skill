@@ -806,6 +806,10 @@ def build_parser():
     p_sim.add_argument("--no-st", action="store_true", help="不允许交易 ST/*ST 股票")
     p_sim.add_argument("--t1-lock", dest="t1_lock", action="store_true", default=True, help="启用 T+1 卖出锁定（默认）")
     p_sim.add_argument("--no-t1-lock", dest="t1_lock", action="store_false", default=True, help="禁用 T+1 卖出锁定")
+    # v0.3 新增：战法共振模式参数
+    p_sim.add_argument("--strategy-mode", choices=["simple", "resonance"], default="simple", help="选股模式")
+    p_sim.add_argument("--strategy-lookback", type=int, default=5, help="战法信号回看交易日数")
+    p_sim.add_argument("--min-resonance-score", type=float, default=0.35, help="共振模式最低入选分")
     p_sim.add_argument("--json", action="store_true", help="JSON输出")
 
     return parser

@@ -16,7 +16,7 @@ def test_cli_simulate_arguments_parsed():
 
 
 def test_cli_simulate_defaults_unchanged():
-    """默认行为与 v0.1 保持一致"""
+    """默认行为与 v0.1/v0.2 保持一致"""
     parser = build_parser()
     args = parser.parse_args(["simulate"])
     assert args.codes is None
@@ -33,6 +33,21 @@ def test_cli_simulate_defaults_unchanged():
     assert args.max_position_pct == 0.20
     assert args.no_st is False
     assert args.t1_lock is True
+    # v0.3 新增默认值
+    assert args.strategy_mode == "simple"
+    assert args.strategy_lookback == 5
+    assert args.min_resonance_score == 0.35
+
+
+def test_cli_strategy_mode_argument():
+    """v0.3 战法共振参数必须被正确解析"""
+    parser = build_parser()
+    args = parser.parse_args(
+        ["simulate", "000001.SZ", "--strategy-mode", "resonance", "--strategy-lookback", "3", "--min-resonance-score", "0.5"]
+    )
+    assert args.strategy_mode == "resonance"
+    assert args.strategy_lookback == 3
+    assert args.min_resonance_score == 0.5
 
 
 def test_cli_simulate_advanced_options():
