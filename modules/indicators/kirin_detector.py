@@ -397,6 +397,8 @@ def detect_kirin_stage(klines: list[DailyData]) -> dict:
 
 
 if __name__ == "__main__":
+    from modules import ensure_utf8_stdout
+    ensure_utf8_stdout()
     import sys
     from pathlib import Path
 

@@ -42,6 +42,8 @@ __all__ = [
     "TradeReviewer",
     "ReviewContext",
     "create_reviewer",
+    # 控制台编码
+    "ensure_utf8_stdout",
 ]
 
 
@@ -53,3 +55,28 @@ def get_data_mode() -> str:
 def get_project_root() -> Path:
     """获取项目根目录（modules/ 的上一级）"""
     return Path(__file__).parent.parent
+
+
+def ensure_utf8_stdout() -> None:
+    """确保 stdout/stderr 使用 UTF-8，避免 Windows 控制台中文乱码。
+
+    仅在各 CLI 入口（``python -m modules.X``）的 ``if __name__ == "__main__":``
+    块里调用，**绝不在模块顶层调用**——否则会污染 API server / 测试 / 库导入等
+    所有 import 方（pytest 捕获的 stdout 没有 ``.buffer`` 属性，模块级强行包装会报错）。
+
+    幂等：当前流已是 UTF-8、或被重定向无 ``.buffer``（IDE / pytest 捕获）时直接跳过。
+    """
+    import io
+    import sys
+
+    for _name in ("stdout", "stderr"):
+        _stream = getattr(sys, _name, None)
+        if _stream is None:
+            continue
+        _enc = getattr(_stream, "encoding", "") or ""
+        if _enc.lower().replace("-", "") == "utf8":
+            continue
+        _buf = getattr(_stream, "buffer", None)
+        if _buf is None:
+            continue  # 已被重定向（IDE / pytest 捕获等），不要动
+        setattr(sys, _name, io.TextIOWrapper(_buf, encoding="utf-8", errors="replace"))

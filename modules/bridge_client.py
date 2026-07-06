@@ -364,6 +364,8 @@ def _get_local_stock_list(exchange: str | None = None) -> list[dict]:
 # ========== 命令行测试 ==========
 
 if __name__ == "__main__":
+    from modules import ensure_utf8_stdout
+    ensure_utf8_stdout()
     import sys
 
     if len(sys.argv) > 1 and sys.argv[1] == "health":

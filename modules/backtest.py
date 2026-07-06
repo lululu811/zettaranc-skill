@@ -806,6 +806,8 @@ def backtest_portfolio(
 
 
 if __name__ == "__main__":
+    from modules import ensure_utf8_stdout
+    ensure_utf8_stdout()
     import argparse
 
     parser = argparse.ArgumentParser(description="策略回测")

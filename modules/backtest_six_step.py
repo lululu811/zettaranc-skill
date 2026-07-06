@@ -309,6 +309,8 @@ def summary_text(result: ShaofuBacktestResult) -> str:
 
 
 if __name__ == "__main__":
+    from modules import ensure_utf8_stdout
+    ensure_utf8_stdout()
     import argparse
 
     parser = argparse.ArgumentParser(description="少妇战法六步闭环回测")

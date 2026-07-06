@@ -85,6 +85,8 @@ def notify_all(title: str, message: str, webhook_url: str | None = None) -> dict
 
 
 if __name__ == "__main__":
+    from modules import ensure_utf8_stdout
+    ensure_utf8_stdout()
     import sys
 
     # 简单自测

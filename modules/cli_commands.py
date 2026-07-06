@@ -791,6 +791,8 @@ def cmd_simulate(args) -> None:
 # ==================== 主入口（独立运行示例） ====================
 
 if __name__ == "__main__":
+    from modules import ensure_utf8_stdout
+    ensure_utf8_stdout()
     import argparse
 
     parser = argparse.ArgumentParser(

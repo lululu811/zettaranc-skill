@@ -947,4 +947,6 @@ def get_llm_response_stats(request_date: str | None = None) -> dict:
 
 
 if __name__ == "__main__":
+    from modules import ensure_utf8_stdout
+    ensure_utf8_stdout()
     init_database()

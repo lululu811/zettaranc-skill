@@ -125,6 +125,8 @@ def format_knowledge_cards(cards: list[KnowledgeCard]) -> str:
 
 
 if __name__ == "__main__":
+    from modules import ensure_utf8_stdout
+    ensure_utf8_stdout()
     # 测试
     retriever = KnowledgeRetriever()
 

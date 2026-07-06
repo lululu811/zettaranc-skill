@@ -167,6 +167,8 @@ class TushareClient:
 
 # 测试
 if __name__ == "__main__":
+    from modules import ensure_utf8_stdout
+    ensure_utf8_stdout()
     import sys
     import io
 

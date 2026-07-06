@@ -187,5 +187,7 @@ def run_wizard():
 
 
 if __name__ == "__main__":
+    from modules import ensure_utf8_stdout
+    ensure_utf8_stdout()
     mode = run_wizard()
     print(f"\n最终模式: {get_mode_display_name(mode)}")

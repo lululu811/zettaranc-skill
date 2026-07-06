@@ -853,6 +853,8 @@ def main():
 
 
 if __name__ == "__main__":
+    from modules import ensure_utf8_stdout
+    ensure_utf8_stdout()
     # 取消代理，避免 Tushare 连接问题（仅脚本直调时，不影响库导入）
     os.environ["HTTP_PROXY"] = ""
     os.environ["HTTPS_PROXY"] = ""

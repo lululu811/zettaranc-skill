@@ -23,6 +23,7 @@ def run_zt(*args: str, timeout: int = 15) -> subprocess.CompletedProcess:
         [sys.executable, "-m", "modules.cli", *args],
         capture_output=True,
         text=True,
+        encoding="utf-8",  # CLI 现统一输出 UTF-8（见 modules.ensure_utf8_stdout），跨平台稳定解码
         timeout=timeout,
         cwd=str(PROJECT_ROOT),
     )

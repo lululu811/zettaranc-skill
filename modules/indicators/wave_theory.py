@@ -223,6 +223,8 @@ def classify_wave_for_b1(klines: list[DailyData]) -> str:
 
 
 if __name__ == "__main__":
+    from modules import ensure_utf8_stdout
+    ensure_utf8_stdout()
     # 简单测试
     import sys
     from pathlib import Path
