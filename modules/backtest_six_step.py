@@ -5,15 +5,23 @@
 六步 SOP：择时 -> 选股 -> 等 B1 -> 设止损 -> 止盈(卤煮) -> 离场(BBI两日破位)
 """
 
-from typing import Optional
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 import os
 import math
 from dataclasses import dataclass, field
 
-from .loop_engine import ShaofuLoopEngine, LoopConfig, LoopTrade
+from .loop_engine import ShaofuLoopEngine, LoopConfig, LoopTrade, _calc_stop_loss_price
 from .indicators import DailyData, get_kline_data
+from .market_regime import MarketRegime
 from .statistics import sharpe_t_test, monte_carlo_permutation_test, analyze_sub_periods
 from .statistics.criteria import validate_strategy, ValidationReport, CriteriaLevel
+
+if TYPE_CHECKING:
+    from .market_regime import MarketRegimeClassifier
+    from .position_manager import PositionManager
+    from .industry_filter import IndustryFilter
 
 
 @dataclass
@@ -37,7 +45,7 @@ class ShaofuBacktestResult:
     max_drawdown: float = 0  # 最大回撤%
     sharpe_ratio: float = 0  # 夏普比率
     equity_curve: list[float] = field(default_factory=list)  # 资金曲线
-    validation_report: Optional[ValidationReport] = None  # 统计检验报告（可选）
+    validation_report: ValidationReport | None = None  # 统计检验报告（可选）
 
 
 def _calc_metrics(result: ShaofuBacktestResult) -> None:
@@ -421,6 +429,402 @@ def summary_with_validation(result: ShaofuBacktestResult) -> str:
         lines.append(result.validation_report.generate_summary())
 
     return "\n".join(lines)
+
+
+def backtest_shaofu_portfolio_integrated(
+    ts_codes: list[str],
+    days: int = 250,
+    base_config: LoopConfig | None = None,
+    regime_classifier: MarketRegimeClassifier | None = None,
+    position_manager: PositionManager | None = None,
+    industry_filter: IndustryFilter | None = None,
+    initial_capital: float = 1_000_000,
+    regime_params: dict[str, dict] | None = None,
+) -> dict:
+    """
+    集成化组合回测（真实资金管理 + 动态参数 + 行业约束）
+
+    与 backtest_shaofu_portfolio() 的区别：
+    - 共享 cash pool（真实资金竞争）
+    - 集成市场状态分类器（动态参数调整）
+    - 集成仓位管理器（基于风险的仓位计算）
+    - 集成行业过滤器（行业分散化约束）
+
+    按日驱动的真实组合回测：
+    1. 预热期（第 30~119 日）：各股独立运行引擎以积累指标状态，不进入仓位管理
+    2. 集成期（第 120 日起）：逐日处理所有股票的入场/离场，共享资金池
+
+    Args:
+        ts_codes: 股票代码列表
+        days: 回测天数
+        base_config: 基础策略参数
+        regime_classifier: 市场状态分类器（None 则不使用动态参数，固定 SIDEWAYS）
+        position_manager: 仓位管理器（None 则使用默认配置）
+        industry_filter: 行业过滤器（None 则不检查行业约束）
+        initial_capital: 初始资金
+        regime_params: 各市场状态的参数覆盖字典（可选）
+                       格式: {"BULL": {"j_threshold": 18, ...}, "BEAR": {...}, ...}
+                       为 None 时使用 DynamicConfigAdapter 默认映射
+
+    Returns:
+        {
+            "result": ShaofuBacktestResult,  # 组合级回测结果
+            "daily_equity": list[tuple[str, float]],  # 每日净值 [(date, equity), ...]
+            "regime_history": list[tuple[str, str]],  # 市场状态历史 [(date, regime), ...]
+            "trade_details": list[dict],  # 详细交易记录
+        }
+    """
+    # 取消代理
+    os.environ["HTTP_PROXY"] = ""
+    os.environ["HTTPS_PROXY"] = ""
+
+    cfg = base_config or LoopConfig()
+
+    # ── 1. 加载数据 ──────────────────────────────────────
+    # 多请求 warmup 数据，供指标预热使用（最少 120 日）
+    warmup_days = max(120, 30)
+    stock_klines: dict[str, list[DailyData]] = {}
+    for code in ts_codes:
+        klines = get_kline_data(code, days + warmup_days)
+        if klines and len(klines) >= 30:
+            stock_klines[code] = klines
+
+    if not stock_klines:
+        empty = ShaofuBacktestResult(ts_code="PORTFOLIO")
+        return {
+            "result": empty,
+            "daily_equity": [],
+            "regime_history": [],
+            "trade_details": [],
+        }
+
+    # 大盘指数 K 线（用于市场状态分类）
+    index_klines: list[DailyData] = []
+    try:
+        index_klines = get_kline_data("000001.SH", days + warmup_days)
+    except Exception:
+        pass  # 无指数数据时走固定参数路径
+
+    # 回测起始日：取各股 K 线长度的最大值，保证至少有 120 日可用
+    min_kline_len = min(len(kl) for kl in stock_klines.values())
+    start_idx = min(120, min_kline_len)
+
+    # ── 2. 初始化组件 ────────────────────────────────────
+    # 动态参数适配器（延迟导入，避免循环依赖）
+    if regime_classifier is None:
+        # 无分类器：固定使用 SIDEWAYS 参数
+        from .dynamic_config import DynamicConfigAdapter
+
+        dynamic_config = DynamicConfigAdapter(base_config=cfg, regime_params=regime_params)
+        has_regime = False
+    else:
+        from .dynamic_config import DynamicConfigAdapter
+
+        has_regime = bool(index_klines and len(index_klines) >= start_idx)
+        dynamic_config = DynamicConfigAdapter(base_config=cfg, regime_params=regime_params)
+
+    # 仓位管理器
+    if position_manager is None:
+        from .position_manager import PositionManager
+
+        pm = PositionManager(initial_capital=initial_capital)
+    else:
+        pm = position_manager
+        if pm.cash == 0.0:
+            pm.reset(initial_capital)
+
+    # ── 3. 逐股状态初始化 ────────────────────────────────
+    stock_states: dict[str, dict] = {}
+    for code, klines in stock_klines.items():
+        stock_states[code] = {
+            "klines": klines,
+            "engine": ShaofuLoopEngine(cfg),
+            "current_trade": None,  # 当前持仓 LoopTrade | None
+            "in_warmup": True,  # 是否仍在预热期
+            "idle": True,  # 预热期是否空闲（无持仓）
+        }
+
+    # ── 4. 预计算各股 warmup 期止损参数 ──────────────────
+    # warmup 期使用固定 base_config 的止损参数，集成期切换到动态 config
+    stop_loss_configs: dict[str, LoopConfig] = {
+        code: LoopConfig(
+            stop_loss_method=cfg.stop_loss_method,
+            stop_loss_pct=cfg.stop_loss_pct,
+        )
+        for code in stock_klines
+    }
+
+    # 大盘指数数据对齐（确保足够长度）
+    if has_regime and len(index_klines) < start_idx:
+        has_regime = False
+
+    # ── 5. 记录容器 ─────────────────────────────────────
+    daily_equity: list[tuple[str, float]] = []
+    regime_history: list[tuple[str, str]] = []
+    trade_details: list[dict] = []  # 已完成交易明细
+
+    last_regime: str | None = None
+
+    # ── 6. 按日驱动主循环 ────────────────────────────────
+    for day_idx in range(start_idx, min_kline_len):
+        # ── 6a. 市场状态分类 ─────────────────────────────
+        if has_regime and day_idx < len(index_klines):
+            regime = regime_classifier.classify_date(index_klines, day_idx)
+            current_config = dynamic_config.get_config(regime)
+            regime_str = regime.value
+        else:
+            current_config = dynamic_config.get_config(MarketRegime.SIDEWAYS)
+            regime_str = "SIDEWAYS"
+
+        # 获取当日日期字符串（优先使用第一只有数据的股票）
+        current_date = ""
+        for st in stock_states.values():
+            if day_idx < len(st["klines"]):
+                current_date = st["klines"][day_idx].trade_date
+                break
+
+        # 记录市场状态变化
+        if regime_str != last_regime:
+            regime_history.append((current_date, regime_str))
+            last_regime = regime_str
+
+        # ── 6b. 计算当前组合净值 ─────────────────────────
+        # equity = 现金 + 所有持仓的当日市值
+        positions_value = 0.0
+        for code, st in stock_states.items():
+            if st["current_trade"] is not None:
+                positions_value += st["current_trade"].shares_equiv * st["klines"][day_idx].close
+        current_equity = pm.cash + positions_value
+
+        # ── 6c. 逐股状态转移（warmup → active） ──────────
+        for code, st in stock_states.items():
+            if day_idx >= len(st["klines"]):
+                continue
+
+            klines = st["klines"]
+            engine = st["engine"]
+
+            # ── 预热期：独立运行引擎积累指标状态 ─────────
+            if st["in_warmup"]:
+                if st["idle"]:
+                    # 空闲状态：检查是否有入场信号
+                    signal = engine._check_entry_internal(klines, day_idx)
+                    if signal is not None:
+                        entry_price = klines[day_idx].close
+                        sl_cfg = stop_loss_configs[code]
+                        stop_loss = _calc_stop_loss_price(
+                            klines,
+                            day_idx,
+                            sl_cfg.stop_loss_method,
+                            sl_cfg.stop_loss_pct,
+                        )
+                        st["current_trade"] = LoopTrade(
+                            ts_code=code,
+                            entry_date=klines[day_idx].trade_date,
+                            entry_price=entry_price,
+                            entry_reason=signal.get("reason", "B1信号(warmup)"),
+                            stop_loss_price=stop_loss,
+                            market_regime=regime_str,
+                        )
+                        st["idle"] = False
+                else:
+                    # 持仓状态：检查离场条件
+                    trade = st["current_trade"]
+                    updated_trade, completed = engine._apply_exit_checks(klines, day_idx, trade)
+                    if completed:
+                        # 预热期平仓 → 记录交易但不进入仓位管理
+                        trade_details.append(
+                            {
+                                "ts_code": code,
+                                "entry_date": completed.entry_date,
+                                "exit_date": completed.exit_date,
+                                "entry_price": completed.entry_price,
+                                "exit_price": completed.exit_price,
+                                "exit_reason": completed.exit_reason,
+                                "pnl_pct": completed.pnl_pct,
+                                "holding_days": completed.holding_days,
+                                "market_regime": completed.market_regime,
+                                "phase": "warmup",
+                            }
+                        )
+                        st["current_trade"] = None
+                        st["idle"] = True
+                    elif updated_trade is not None:
+                        st["current_trade"] = updated_trade
+                    # updated_trade is None 理论上不会出现在 _apply_exit_checks 中
+
+                # 预热期结束：将未平仓的 warmup 交易注册到仓位管理器
+                if day_idx == start_idx and st["current_trade"] is not None:
+                    st["in_warmup"] = False
+                    trade = st["current_trade"]
+                    shares_equiv = int(pm.cash // trade.entry_price // 100) * 100  # A 股整手
+                    if shares_equiv >= 100:
+                        pm.record_entry(code, shares_equiv, trade.entry_price, trade.stop_loss_price)
+                        trade.shares_equiv = shares_equiv  # type: ignore[attr-defined]
+                    else:
+                        # 资金不足，放弃该 warmup 持仓
+                        st["current_trade"] = None
+                        st["idle"] = True
+                continue
+
+            # ── 集成期：正常 warmup 结束 ─────────────────
+            st["in_warmup"] = False
+
+            # ── 离场检查（集成期持仓） ───────────────────
+            if st["current_trade"] is not None:
+                trade = st["current_trade"]
+                # 临时同步引擎配置为当日动态参数
+                engine.config = current_config
+
+                updated_trade, completed = engine._apply_exit_checks(klines, day_idx, trade)
+
+                if completed:
+                    # 平仓 → 更新仓位管理器
+                    pnl_amount = pm.record_exit(code, completed.exit_price)
+                    trade_details.append(
+                        {
+                            "ts_code": code,
+                            "entry_date": completed.entry_date,
+                            "exit_date": completed.exit_date,
+                            "entry_price": completed.entry_price,
+                            "exit_price": completed.exit_price,
+                            "exit_reason": completed.exit_reason,
+                            "pnl_pct": completed.pnl_pct,
+                            "holding_days": completed.holding_days,
+                            "market_regime": completed.market_regime,
+                            "pnl_amount": pnl_amount,
+                            "phase": "integrated",
+                        }
+                    )
+                    st["current_trade"] = None
+                elif updated_trade is not None:
+                    st["current_trade"] = updated_trade
+                continue
+
+            # ── 入场检查（空闲状态） ─────────────────────
+            signal = engine._check_entry_internal(klines, day_idx)
+            if signal is None:
+                continue
+
+            entry_price = klines[day_idx].close
+            if entry_price <= 0:
+                continue
+
+            # 止损价
+            stop_loss = _calc_stop_loss_price(
+                klines,
+                day_idx,
+                current_config.stop_loss_method,
+                current_config.stop_loss_pct,
+            )
+            if stop_loss >= entry_price:
+                continue
+
+            # 仓位约束 + 行业约束
+            current_holdings = list(pm.positions.keys())
+            if industry_filter is not None:
+                if not industry_filter.check_industry_limit(code, current_holdings):
+                    continue
+            if not pm.can_enter(code, current_holdings, industry_filter):
+                continue
+
+            # 计算买入股数
+            shares = pm.calculate_position_size(
+                ts_code=code,
+                entry_price=entry_price,
+                stop_loss_price=stop_loss,
+                current_equity=current_equity,
+                regime=(
+                    regime_classifier.classify_date(index_klines, day_idx)
+                    if has_regime and day_idx < len(index_klines)
+                    else MarketRegime.SIDEWAYS
+                ),
+            )
+            if shares < 100:
+                continue
+
+            # 记录建仓
+            pm.record_entry(code, shares, entry_price, stop_loss)
+            st["current_trade"] = LoopTrade(
+                ts_code=code,
+                entry_date=klines[day_idx].trade_date,
+                entry_price=entry_price,
+                entry_reason=signal.get("reason", "B1信号"),
+                stop_loss_price=stop_loss,
+                position_pct=shares * entry_price / current_equity if current_equity > 0 else 0,
+                market_regime=regime_str,
+            )
+            st["current_trade"].shares_equiv = shares  # type: ignore[attr-defined]
+
+        # ── 6d. 记录每日净值 ─────────────────────────────
+        positions_value = 0.0
+        for code, st in stock_states.items():
+            if st["current_trade"] is not None:
+                shares = getattr(st["current_trade"], "shares_equiv", 0)
+                if shares > 0 and day_idx < len(st["klines"]):
+                    positions_value += shares * st["klines"][day_idx].close
+        equity = pm.cash + positions_value
+        daily_equity.append((current_date, equity))
+
+    # ── 7. 汇总统计 ──────────────────────────────────────
+    # 所有交易（含 warmup + integrated）
+    all_trade_records: list[LoopTrade] = []
+    for td in trade_details:
+        t = LoopTrade(
+            ts_code=td["ts_code"],
+            entry_date=td["entry_date"],
+            exit_date=td.get("exit_date", ""),
+            entry_price=td["entry_price"],
+            exit_price=td.get("exit_price", 0),
+            entry_reason=td.get("entry_reason", ""),
+            exit_reason=td.get("exit_reason", ""),
+            pnl_pct=td.get("pnl_pct", 0),
+            holding_days=td.get("holding_days", 0),
+            market_regime=td.get("market_regime", ""),
+        )
+        all_trade_records.append(t)
+
+    # 组合级结果
+    portfolio_result = ShaofuBacktestResult(ts_code="PORTFOLIO")
+    portfolio_result.trades = all_trade_records
+    if all_trade_records:
+        _calc_metrics(portfolio_result)
+
+    # 覆盖 total_return / max_drawdown / sharpe_ratio（基于每日净值序列）
+    if daily_equity:
+        equities = [e for _, e in daily_equity]
+        portfolio_result.total_return = (equities[-1] / initial_capital - 1.0) if initial_capital > 0 else 0.0
+
+        # 最大回撤
+        peak = equities[0]
+        max_dd = 0.0
+        for eq in equities:
+            if eq > peak:
+                peak = eq
+            dd = (peak - eq) / peak if peak > 0 else 0.0
+            if dd > max_dd:
+                max_dd = dd
+        portfolio_result.max_drawdown = max_dd
+
+        # 夏普比率（基于每日收益率）
+        if len(equities) >= 3:
+            daily_rets = []
+            for i in range(1, len(equities)):
+                if equities[i - 1] > 0:
+                    daily_rets.append((equities[i] - equities[i - 1]) / equities[i - 1])
+            if len(daily_rets) >= 2:
+                avg_r = sum(daily_rets) / len(daily_rets)
+                var_r = sum((r - avg_r) ** 2 for r in daily_rets) / (len(daily_rets) - 1)
+                std_r = math.sqrt(var_r) if var_r > 0 else 0.0
+                if std_r > 0:
+                    portfolio_result.sharpe_ratio = (avg_r / std_r) * math.sqrt(252)
+
+    return {
+        "result": portfolio_result,
+        "daily_equity": daily_equity,
+        "regime_history": regime_history,
+        "trade_details": trade_details,
+    }
 
 
 if __name__ == "__main__":

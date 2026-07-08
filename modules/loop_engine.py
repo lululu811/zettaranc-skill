@@ -73,7 +73,15 @@ class LoopConfig:
 
 @dataclass
 class LoopTrade:
-    """一笔完整的少妇战法交易记录"""
+    """一笔完整的少妇战法交易记录
+
+    记录从入场到出价的完整交易生命周期，包含：
+    - 入场信息：日期、价格、原因（B1 信号详情）
+    - 出场信息：日期、价格、原因（卤煮止盈/白线跌破/止损/白线死叉黄线）
+    - 过程指标：盈亏比、持仓天数、最大浮盈/浮亏
+    - 仓位管理：卤煮减仓记录、实际仓位比例
+    - 市场环境：入场时的市场状态（BULL/BEAR/SIDEWAYS）
+    """
 
     ts_code: str
     entry_date: str
@@ -88,6 +96,8 @@ class LoopTrade:
     max_favorable: float = 0  # 最大浮盈%
     max_adverse: float = 0  # 最大浮亏%
     partial_exits: list[dict[str, Any]] = field(default_factory=list)  # 卤煮减仓记录
+    position_pct: float = 0.0  # 该笔交易的实际仓位比例（占总资金）
+    market_regime: str = ""  # 入场时的市场状态（BULL/BEAR/SIDEWAYS）
 
 
 # ============================================================
