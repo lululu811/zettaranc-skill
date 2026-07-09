@@ -65,7 +65,9 @@ def _calculate_sharpe(returns: list[float], rf: float = 0.0) -> float:
 
     # 样本标准差（除以 n-1）
     variance = sum((r - mean_ret) ** 2 for r in returns) / (n - 1)
-    std_ret = math.sqrt(variance) if variance > 0 else 0.0
+    # 零方差防御：跨 Python 版本/浮点实现的 sum 可能产生 1e-36 量级非零残差，
+    # 直接进 sqrt 会让 std_ret 极小、夏普爆炸到 1e+16。这里把"近似零"按零处理。
+    std_ret = math.sqrt(variance) if variance > 1e-18 else 0.0
 
     if std_ret == 0:
         return 0.0
