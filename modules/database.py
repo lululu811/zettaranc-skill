@@ -669,6 +669,26 @@ def update_watchlist_item(ts_code: str, updates: dict[str, Any]) -> bool:
         return cursor.rowcount > 0
 
 
+def get_all_stock_codes(limit: int | None = None) -> list[str]:
+    """从 stock_basic 取 ts_code 列表，按 ts_code 排序，可选 limit。
+
+    Args:
+        limit: 限制返回数量，默认 None 返回全部
+
+    Returns:
+        ts_code 字符串列表，按 ts_code 升序排列
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        sql = "SELECT ts_code FROM stock_basic ORDER BY ts_code"
+        params: tuple = ()
+        if limit is not None:
+            sql += " LIMIT ?"
+            params = (limit,)
+        cursor.execute(sql, params)
+        return [row[0] for row in cursor.fetchall()]
+
+
 # ============== 随堂测试/交易记录操作 ==============
 
 

@@ -881,6 +881,10 @@ def cmd_verify_v10(args) -> int:
         argv.extend(["--wf-train", str(args.wf_train)])
     if getattr(args, "wf_test", 60) != 60:
         argv.extend(["--wf-test", str(args.wf_test)])
+    if getattr(args, "ts_codes", None):
+        argv.extend(["--ts-codes", args.ts_codes])
+    if getattr(args, "output", None) and args.output != "data/reports":
+        argv.extend(["--output", args.output])
     if getattr(args, "json", False):
         argv.append("--json")
     if getattr(args, "no_markdown", False):
@@ -897,6 +901,8 @@ def add_verify_v10_parser(subparsers) -> None:
     p_verify.add_argument("--walk-forward", action="store_true")
     p_verify.add_argument("--wf-train", type=int, default=120)
     p_verify.add_argument("--wf-test", type=int, default=60)
+    p_verify.add_argument("--ts-codes", type=str, default=None, help="指定股票列表（逗号分隔）")
+    p_verify.add_argument("--output", type=str, default="data/reports", help="报告输出目录")
     p_verify.add_argument("--json", action="store_true")
     p_verify.add_argument("--no-markdown", action="store_true")
     p_verify.set_defaults(func=cmd_verify_v10)
