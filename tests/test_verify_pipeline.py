@@ -8,6 +8,7 @@ from modules.verify.pipeline import (
     GateResult,
     StockResult,
     VerifyResult,
+    _load_klines_with_precheck,
     verify_v10_pipeline,
 )
 
@@ -32,3 +33,16 @@ def test_pipeline_empty_stocks_returns_empty_result():
     assert result.per_stock == []
     assert result.aggregate.total_trades == 0
     assert result.aggregate.win_rate == 0.0
+
+
+def test_load_klines_skips_short_history():
+    """数据 < 60 天的股票应被标记 skipped"""
+    # 真实数据缺失时自动跳过（不需要 stub）
+    result = _load_klines_with_precheck(
+        ts_codes=["000001.SZ", "999999.SH"],  # 999999 不存在
+        days=250,
+    )
+    assert isinstance(result, list)
+    assert any(r.skipped for r in result)
+    skipped_codes = [r.ts_code for r in result if r.skipped]
+    assert "999999.SH" in skipped_codes

@@ -9,7 +9,11 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
+from modules.datasource import get_datasource
+
 logger = logging.getLogger(__name__)
+
+MIN_KLINE_DAYS = 60  # 少于这个天数视为数据不足
 
 
 @dataclass
@@ -57,6 +61,66 @@ class VerifyResult:
     gates: dict[str, GateResult] = field(default_factory=dict)
     config_used: dict = field(default_factory=dict)
     meta: dict = field(default_factory=dict)
+
+
+def _load_klines_with_precheck(
+    ts_codes: list[str],
+    days: int,
+) -> list[StockResult]:
+    """
+    加载 K 线 + 数据预检。
+    返回 list[StockResult]，数据不足的股票标记 skipped=True。
+    """
+    ds = get_datasource(preferred="auto")
+    results: list[StockResult] = []
+
+    for code in ts_codes:
+        try:
+            klines = ds.get_kline_dicts(code, days=days)
+            if not klines or len(klines) < MIN_KLINE_DAYS:
+                results.append(
+                    StockResult(
+                        ts_code=code,
+                        name="",
+                        trades=0,
+                        win_rate=0.0,
+                        return_pct=0.0,
+                        sharpe=0.0,
+                        max_drawdown=0.0,
+                        skipped=True,
+                        skip_reason=f"K线<{MIN_KLINE_DAYS}天",
+                    )
+                )
+                continue
+            results.append(
+                StockResult(
+                    ts_code=code,
+                    name="",
+                    trades=0,
+                    win_rate=0.0,
+                    return_pct=0.0,
+                    sharpe=0.0,
+                    max_drawdown=0.0,
+                    skipped=False,
+                )
+            )
+        except Exception as e:  # noqa: BLE001 - 单股加载失败不应中断整个组合
+            logger.warning("加载 %s 失败: %s", code, e)
+            results.append(
+                StockResult(
+                    ts_code=code,
+                    name="",
+                    trades=0,
+                    win_rate=0.0,
+                    return_pct=0.0,
+                    sharpe=0.0,
+                    max_drawdown=0.0,
+                    skipped=True,
+                    skip_reason=f"加载异常: {e!s:.50}",
+                )
+            )
+
+    return results
 
 
 def verify_v10_pipeline(
