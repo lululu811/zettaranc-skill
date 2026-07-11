@@ -2,6 +2,48 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## v3.7.1 (2026-07-11)
+
+### 少妇战法 v1.0 验收参数寻优
+
+> **「v3.7.1：少妇战法 v1.0 验收参数寻优 —— 5 轮 hill-climb × 100 股 × 300 天 + WF，把 passed_count 从 1/5 推到 4/5。」**
+
+#### 新增
+
+- `modules/verify/scorer.py` — `V10VerifyScorer`（达尔文友好适配）
+- `scripts/optimize_for_v10_verify.py` — 5 轮 hill-climb CLI
+
+#### 关键修复（v3.7.0 留下的两个 bug）
+
+- **`modules/verify/registry_writer.py`**：`write_optimization_to_registry` 之前只 log 不持久化，已修。`param_registry:shaofu_v1` 现在真的能写能读
+- **`modules/self_optimizer/param_registry.py`**：补全 5 个 LoopConfig 字段注册（`stop_loss_pct` / `bbi_break_days` / `min_holding_days` / `lu_half` / `position_pct`），避免寻优结果被 silently dropped；新增 `persist_override` / `load_persisted_override`，让 `data/registry/shaofu_v1.json` 跨进程生效
+
+#### 寻优结果（写回 `param_registry:shaofu_v1`）
+
+```python
+LoopConfig(
+    j_threshold=13, stop_loss_pct=-0.06, vol_shrink_threshold=0.8,
+    bbi_break_days=2, min_holding_days=2, lu_half=False, position_pct=0.2,
+)
+```
+
+#### 实测（`zt verify v1.0 --limit 50 --days 300 --walk-forward`）
+
+| 指标 | 值 | 阈值 | 通过 |
+|---|---|---|---|
+| Sharpe | 0.93 | ≥ 0.5 | ✅ |
+| Calmar | 0.11 | ≥ 0.5 | ❌（年化收益偏低，下一版重点优化）|
+| WinRate | 50.3% | ≥ 40% | ✅ |
+| MaxDD | 20.0% | ≤ 25% | ✅ |
+| OOS/IS | 1.00 | ≥ 0.6 | ✅ |
+
+**passed_count: 1/5 (v3.7.0 默认) → 4/5 (v3.7.1 寻优)**
+
+#### 测试
+
+- 新增 `tests/test_verify_scorer.py`（4 用例）
+- 零回归：954 → 958 passed（+ 4），12 skipped
+
 ## v3.7.0 (2026-07-10)
 
 ### 少妇战法 v1.0 验收工程化

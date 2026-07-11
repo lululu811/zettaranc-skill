@@ -88,6 +88,23 @@ zt verify v1.0 --output data/reports/my_verify
 
 ---
 
+## v3.7.1 参数寻优（5 轮 hill-climb）
+
+```bash
+python3 -m scripts.optimize_for_v10_verify --rounds 5 --stocks 100 --days 300
+```
+
+输出：
+- `optimization_drafts/v10_verify_<timestamp>.json` — 中间产物
+- 自动写回 `param_registry:shaofu_v1`（含 `data/registry/shaofu_v1.json` 跨进程持久化）
+- 验收命令（用寻优后的参数）：
+  ```bash
+  zt verify v1.0 --limit 50 --days 300 --walk-forward
+  # → 4/5 通过 (Sharpe 0.93 ✓, WinRate 50% ✓, MaxDD 20% ✓, OOS/IS 1.00 ✓)
+  ```
+
+---
+
 ## 🎯 多因子优化成果（v3.3.3）
 
 **基于 200 只股票、500 天真实行情数据的完整优化**
@@ -1251,6 +1268,7 @@ zettaranc ❯ 平安银行 250 天模拟，A 股真实约束 + ATR 仓位：
 
 | 版本 | 核心变化 |
 |------|---------|
+| **v3.7.1** | 少妇战法 v1.0 验收参数寻优（1/5 → 4/5 passed_count） | ✅ 已完成 |
 | **v3.7.0** | 少妇战法 v1.0 验收工程化（一键命令 + 五项硬指标 + WF） | ✅ 已完成 |
 | **v3.6.0** | 模拟器 v0.4 — Walk-forward 参数寻优（滚动窗口 OOS、参数网格、optimizer_report） |
 | **v3.5.0** | 模拟器 v0.3 — 战法共振评分（strategy_adapter / resonance_scorer / environment_weights） |
