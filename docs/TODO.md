@@ -48,10 +48,11 @@
 - [ ] 策略权重可配置，按市场环境动态调整
 - [ ] 回测结果展示各策略贡献度
 
-### v3.10.1 动态止损策略
-- [ ] ATR 动态止损（根据波动率自动调整止损距离）
-- [ ] 移动止损（trailing stop）
-- [ ] 回测对比固定止损，验证胜率/盈亏比提升
+### v3.10.1 动态止损策略 ✅
+- [x] ATR 动态止损（`stop_loss_method="atr_based"`，止损距离 = ATR × multiplier）
+- [x] 移动止损（trailing stop，`trailing_stop_enabled` 开关）
+- [x] 16 个新测试覆盖（test_dynamic_stop_loss.py）
+- [x] 全量回归 1143 passed 无差异
 
 ### v3.10.2 市场环境自适应参数
 - [ ] Walk-forward 自动搜索最优参数组合

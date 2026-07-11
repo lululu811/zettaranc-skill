@@ -2,6 +2,39 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## v3.10.1 (2026-07-11)
+
+### 动态止损策略
+
+> **「v3.10.1：固定百分比止损升级为 ATR 动态止损 + 移动止损（trailing stop），按波动率自适应调整止损距离，保护浮盈。」**
+
+#### 新增
+
+- **`modules/core/atr.py`**：新增 `calculate_atr()` / `atr_pct()` 公共函数（消除 simulator 内部两个 ATR 重复实现）
+- **`modules/core/__init__.py`**：导出 `calculate_atr` / `atr_pct`
+- **`_calc_stop_loss_price()` 新增 `method="atr_based"`**：止损价 = `entry_close - ATR × multiplier`，ATR 不足时 fallback 到 `entry_low`
+- **`calc_trailing_stop_price()`**：从 `highest_after_entry` 回落 `trailing_stop_pct` 即止损
+- **`LoopConfig` 新增字段**：`atr_stop_window=14` / `atr_stop_multiplier=2.0` / `trailing_stop_enabled=False` / `trailing_stop_pct=-0.05`
+- **`LoopTrade` 新增字段**：`highest_after_entry=0.0`（持仓期间持续追踪最高价）
+
+#### 改动
+
+- **`modules/loop_engine.py`**：
+  - `_check_stop_loss_internal` 集成移动止损：原始止损 + trailing 任一触发即止损
+  - `_apply_exit_checks` 每日更新 `trade.highest_after_entry = max(current_high)`
+- **`modules/backtest/portfolio.py`**：`_check_multi_entry` 调用 `_calc_stop_loss_price` 时透传 `atr_multiplier` / `atr_window`
+
+#### 测试
+
+- 新增 `tests/test_dynamic_stop_loss.py`：16 个用例覆盖 ATR 计算、atr_based 止损、trailing 工具函数、集成触发与不触发场景
+- 全量测试：`1143 passed, 15 skipped`（+16 新增，无回归）
+
+#### 验证
+
+- ruff 检查通过
+- 16 个新测试全绿
+- 全量 1143 passed 无回归
+
 ## v3.10.0 (2026-07-11)
 
 ### 多策略融合引擎

@@ -62,7 +62,13 @@ class LoopConfig:
 
     j_threshold: float = 12  # B1 J 值阈值（SOP: J<=12，最好负值）
     stop_loss_pct: float = -0.03  # 止损比例（现已实际生效，原硬编码 0.97 = -3%）
-    stop_loss_method: str = "entry_low"  # "entry_low" | "n_structure_low" | "j_negative_low"
+    stop_loss_method: str = "entry_low"  # "entry_low" | "n_structure_low" | "j_negative_low" | "atr_based"
+    # v3.10.1 新增：ATR 动态止损
+    atr_stop_window: int = 14  # ATR 计算窗口
+    atr_stop_multiplier: float = 2.0  # ATR 乘数（止损距离 = ATR × 倍数）
+    # v3.10.1 新增：移动止损（trailing stop）
+    trailing_stop_enabled: bool = False  # 是否启用移动止损
+    trailing_stop_pct: float = -0.05  # 移动止损比例（高点回落超过此比例则止损）
     bbi_break_days: int = 2  # BBI 连续跌破天数触发离场
     bbi_break_threshold: float = 0.01  # 收盘价低于 BBI 超过此比例才算"跌破"（1%）
     min_holding_days: int = 3  # 最少持仓天数（避免入场后次日就被震出）
@@ -104,6 +110,8 @@ class LoopTrade:
     entry_price: float
     entry_reason: str  # B1 信号详情
     stop_loss_price: float  # Step 4: 收盘价止损位
+    # v3.10.1：移动止损追踪入场后最高点（用于动态抬高止损价）
+    highest_after_entry: float = 0.0
     exit_date: str = ""
     exit_price: float = 0
     exit_reason: str = ""  # "卤煮止盈" | "白线跌破" | "止损" | "白线死叉黄线"
@@ -151,20 +159,26 @@ def _calc_stop_loss_price(
     day_idx: int,
     method: str = "entry_low",
     stop_loss_pct: float = -0.07,
+    atr_multiplier: float = 2.0,
+    atr_window: int = 14,
 ) -> float:
     """
     根据不同方法计算止损价
 
-    三种方法（SOP 第 4 步）：
+    四种方法（SOP 第 4 步）：
     - entry_low: 入场 K 线最低价 + 止损比例缓冲
     - n_structure_low: N 型结构前低（入场前最近一个回调低点）
     - j_negative_low: J 值转负那天 K 线的最低价
+    - atr_based: v3.10.1 ATR 动态止损 = 入场价 - ATR × 倍数
+      （高波动自动放宽，低波动自动收紧）
 
     Args:
         klines: K 线数据
         day_idx: 入场日索引
-        method: 止损方法
-        stop_loss_pct: 止损比例（负值，如 -0.07 表示 -7%）
+        method: 止损方法（"entry_low"/"n_structure_low"/"j_negative_low"/"atr_based"）
+        stop_loss_pct: 止损比例（负值，如 -0.07 表示 -7%），仅 entry_low 模式使用
+        atr_multiplier: ATR 倍数（止损距离 = ATR × 倍数），仅 atr_based 模式使用
+        atr_window: ATR 计算窗口，仅 atr_based 模式使用
 
     Returns:
         止损价
@@ -196,8 +210,44 @@ def _calc_stop_loss_price(
         # 未找到则退化为 entry_low
         return entry_kline.low
 
+    if method == "atr_based":
+        # v3.10.1：ATR 动态止损
+        # 止损价 = 入场参考价 - ATR × 倍数
+        # 入场参考价用 entry_kline.close，更贴近实际成交
+        from .core.atr import calculate_atr
+        # 用入场前 window+1 根 K 线计算 ATR（不偷看入场日之后数据）
+        atr_window_klines = klines[max(0, day_idx - atr_window - 1) : day_idx + 1]
+        atr_value = calculate_atr(atr_window_klines, window=min(atr_window, len(atr_window_klines) - 1))
+        if atr_value <= 0:
+            # 数据不足 fallback 到 entry_low
+            return entry_kline.low * (1 + stop_loss_pct)
+        entry_ref = entry_kline.close or entry_kline.open
+        return entry_ref - atr_value * atr_multiplier
+
     # 默认
     return entry_kline.low
+
+
+def calc_trailing_stop_price(
+    highest_after_entry: float,
+    trailing_stop_pct: float,
+) -> float:
+    """
+    计算移动止损价（v3.10.1）
+
+    移动止损：当股价上涨时，止损价同步上移（保护浮盈）；
+    当股价下跌时，止损价固定不变（不下移）。
+
+    Args:
+        highest_after_entry: 入场后最高价
+        trailing_stop_pct: 移动止损比例（负值，如 -0.05 表示从高点回落 5%）
+
+    Returns:
+        移动止损价
+    """
+    if highest_after_entry <= 0:
+        return 0.0
+    return highest_after_entry * (1 + trailing_stop_pct)
 
 
 # ============================================================
@@ -396,7 +446,7 @@ class ShaofuLoopEngine:
         trade: LoopTrade,
     ) -> bool:
         """
-        内部止损检查
+        内部止损检查（v3.10.1 支持 trailing stop）
 
         Args:
             klines: K 线数据
@@ -404,9 +454,20 @@ class ShaofuLoopEngine:
             trade: 当前交易
 
         Returns:
-            是否触发止损
+            是否触发止损（原始止损价 或 移动止损 任一触发）
         """
-        return self.check_stop_loss(klines[day_idx], trade.stop_loss_price)
+        current = klines[day_idx]
+        # 原始止损检查
+        if self.check_stop_loss(current, trade.stop_loss_price):
+            return True
+        # v3.10.1：移动止损检查（仅在启用时）
+        if self.config.trailing_stop_enabled and trade.highest_after_entry > 0:
+            trailing_price = calc_trailing_stop_price(
+                trade.highest_after_entry, self.config.trailing_stop_pct
+            )
+            if trailing_price > 0 and current.close < trailing_price:
+                return True
+        return False
 
     def _check_lu_zhu_internal(self, klines: list[DailyData], day_idx: int) -> bool:
         """
@@ -536,6 +597,9 @@ class ShaofuLoopEngine:
         pnl_pct = (current_price - trade.entry_price) / trade.entry_price * 100
         trade.max_favorable = max(trade.max_favorable, pnl_pct)
         trade.max_adverse = min(trade.max_adverse, pnl_pct)
+        # v3.10.1：追踪入场后最高价（驱动移动止损上移）
+        current_high = klines[day_idx].high
+        trade.highest_after_entry = max(trade.highest_after_entry, current_high)
         trade.holding_days += 1
 
         # 白线死叉黄线（无条件清仓）

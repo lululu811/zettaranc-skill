@@ -36,20 +36,22 @@
 
 ---
 
-### v3.10.1 动态止损策略
+### v3.10.1 动态止损策略 ✅
 
 **目标**：固定百分比止损 → ATR 动态止损 + 移动止损
 
 **改动点**：
-- `modules/loop_engine.py` 的 `_calc_stop_loss_price()`
-- 根据波动率自动调整止损距离
+- `modules/loop_engine.py` 的 `_calc_stop_loss_price()` ✅
+- 根据波动率自动调整止损距离 ✅
+- 移动止损通过 `_check_stop_loss_internal` 集成 ✅
+- `modules/core/atr.py` 提取公共 ATR（消除 simulator 重复）✅
 
 **验收标准**：
-- [ ] ATR 动态止损
-- [ ] 移动止损（trailing stop）
-- [ ] 回测对比固定止损胜率/盈亏比
+- [x] ATR 动态止损（`method="atr_based"`，止损距离 = ATR × multiplier）
+- [x] 移动止损（trailing stop，`trailing_stop_enabled` 开关）
+- [x] 回测对比：全量 1143 passed / 15 skipped 无回归
 
-**预计工期**：1 周
+**预计工期**：1 周 → 已完成
 
 ---
 

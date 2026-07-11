@@ -410,11 +410,13 @@ class PortfolioBacktestEngine:
             # 只保留 BUY 类信号
             if sig.action != "BUY":
                 continue
-            # 计算止损价
+            # 计算止损价（v3.10.1：支持 ATR 动态止损）
             stop_price = _calc_stop_loss_price(
                 klines, idx,
                 self.loop_config.stop_loss_method,
                 self.loop_config.stop_loss_pct,
+                atr_multiplier=self.loop_config.atr_stop_multiplier,
+                atr_window=self.loop_config.atr_stop_window,
             )
             signals.append(EntrySignal(
                 strategy=strategy_name,

@@ -7,6 +7,7 @@
 - walk_forward: 统一的 walk-forward 窗口切分逻辑
 - market_context: 统一的市场环境判断
 - metrics: 统一的绩效指标计算
+- atr: v3.10.1 统一 ATR 计算（消除 simulator 内部重复实现）
 """
 
 from .walk_forward import (
@@ -29,6 +30,7 @@ from .metrics import (
 )
 from .net import disable_proxy
 from .paths import DATA_DIR, REGISTRY_DIR, REPORTS_DIR
+from .atr import calculate_atr, atr_pct
 
 __all__ = [
     # walk_forward
@@ -52,4 +54,7 @@ __all__ = [
     "DATA_DIR",
     "REGISTRY_DIR",
     "REPORTS_DIR",
+    # atr (v3.10.1)
+    "calculate_atr",
+    "atr_pct",
 ]
