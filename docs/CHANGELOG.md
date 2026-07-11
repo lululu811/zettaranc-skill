@@ -2,6 +2,41 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## v3.10.2 (2026-07-11)
+
+### 自适应参数寻优
+
+> **「v3.10.2：组合回测参数从手工调参升级为 IS 网格搜索自动寻优，避免 OOS 过拟合。」**
+
+#### 新增
+
+- **`GridSearchResult` / `GridSearchReport` 数据类**：网格搜索结果 + 报告容器
+- **`DEFAULT_PORTFOLIO_PARAM_SPACE`**：默认 4 维参数空间
+  - `j_threshold` ∈ {6, 12, 18}（B1 入场 J 值）
+  - `position_pct` ∈ {0.20, 0.30, 0.40}（单笔仓位）
+  - `stop_loss_pct` ∈ {-0.03, -0.05, -0.07}（固定百分比止损）
+  - `atr_stop_multiplier` ∈ {1.5, 2.0, 3.0}（ATR 止损距离倍数）
+- **`portfolio_grid_search_optimize()`**：穷举参数笛卡尔积（约 81 组合），按 `objective`（sharpe/calmar/annualized_return）排序选最优
+  - 数据预加载 + 复用（每组参数只跑回测部分）
+  - LoopConfig 字段白名单校验（防误改）
+  - IS 段 = 前 60% 交易日，剩余 40% 留给 OOS 验证
+- **复用** `simulator.param_space.ParamDimension` / `generate_grid`（消除重建）
+
+#### 改动
+
+- `modules/verify/portfolio_walk_forward.py`：复用 walk_forward 框架，导入 LoopConfig/ParamDimension/generate_grid
+
+#### 测试
+
+- 新增 `tests/test_portfolio_grid_search.py`：11 个用例覆盖数据类、参数空间、网格大小、字段白名单、objective 排序
+- 全量测试：`1154 passed, 15 skipped`（+11 个，无回归）
+
+#### 验收
+
+- ruff 检查通过
+- 11 个新测试全绿
+- 全量 1154 passed 无回归
+
 ## v3.10.1 (2026-07-11)
 
 ### 动态止损策略

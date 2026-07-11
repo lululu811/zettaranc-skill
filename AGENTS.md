@@ -15,7 +15,7 @@
 - **Web 看板**：`api/`（FastAPI 后端）+ `frontend/`（React + Vite + Tailwind 前端），可选
 - **语料基础**：约 467 篇直播/付费课整理文章（~200 万字）+ 13 个 ztalk 视频 transcript（~12.7 万字）+ 9 篇交易心理系列（~3.3 万字）+ 后续新增文章
 - **许可证**：MIT
-- **版本**：`docs/CHANGELOG.md` 与 `pyproject.toml` 当前版本为 **v3.10.1**。
+- **版本**：`docs/CHANGELOG.md` 与 `pyproject.toml` 当前版本为 **v3.10.2**。
 
 ### 双模式架构
 

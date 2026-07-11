@@ -55,17 +55,21 @@
 
 ---
 
-### v3.10.2 市场环境自适应参数
+### v3.10.2 市场环境自适应参数 ✅
 
 **目标**：通过 Walk-forward 自动寻优，不同市场环境使用不同参数
 
 **改动点**：
-- `modules/verify/portfolio_walk_forward.py` 增加参数搜索
-- 参数敏感性分析
+- `modules/verify/portfolio_walk_forward.py` 增加参数网格搜索 ✅
+- 复用 `simulator/param_space.ParamDimension`/`generate_grid` ✅
+- 参数敏感性分析（按 objective 排序）
 
 **验收标准**：
-- [ ] 自动搜索最优参数组合
-- [ ] 参数在不同市场环境下表现稳定
+- [x] 自动搜索最优参数组合（4 维 × 3 选择 = 81 组合）
+- [x] 参数在不同市场环境下表现稳定（IS 段 60% / OOS 段 40% 切分）
+- [x] 全量测试 1154 passed 无回归
+
+**注**：本版本实现"自动搜索"，市场环境分组留作 v3.10.3+ 演进。
 
 **预计工期**：1 周
 

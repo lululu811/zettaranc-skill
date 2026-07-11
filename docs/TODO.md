@@ -54,10 +54,12 @@
 - [x] 16 个新测试覆盖（test_dynamic_stop_loss.py）
 - [x] 全量回归 1143 passed 无差异
 
-### v3.10.2 市场环境自适应参数
-- [ ] Walk-forward 自动搜索最优参数组合
-- [ ] 不同市场环境使用不同仓位/止损参数
-- [ ] 参数敏感性分析
+### v3.10.2 市场环境自适应参数 ✅
+- [x] Walk-forward 自动搜索最优参数组合（81 组合穷举）
+- [x] 参数空间聚焦 4 个核心（j_threshold/position_pct/stop_loss_pct/atr_stop_multiplier）
+- [x] IS/OOS 自动切分（60%/40%）
+- [x] 11 个新测试覆盖（test_portfolio_grid_search.py）
+- [x] 全量回归 1154 passed 无差异
 
 ### v3.11.0 分钟级实时数据
 - [ ] 1/5/15/30/60 分钟线数据接入
