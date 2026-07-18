@@ -51,12 +51,13 @@ class TestPortfolioBacktestEngine:
     """PortfolioBacktestEngine 核心行为测试"""
 
     def test_empty_universe(self):
-        """空候选池返回空结果"""
+        """v3.10.4: 空候选池抛 BACKTEST_INVALID_CONFIG（之前返回空结果）"""
+        from modules.core.errors import ErrorCode, ZettarancError
+
         engine = PortfolioBacktestEngine()
-        result = engine.run([], days=30)
-        assert isinstance(result, PortfolioBacktestResult)
-        assert result.total_trades == 0
-        assert result.net_values == []
+        with pytest.raises(ZettarancError) as exc_info:
+            engine.run([], days=30)
+        assert exc_info.value.code == ErrorCode.BACKTEST_INVALID_CONFIG
 
     def test_no_signals_no_trades(self, monkeypatch):
         """没有 B1 信号时只记录净值，不产生交易"""

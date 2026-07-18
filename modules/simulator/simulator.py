@@ -44,6 +44,7 @@ from .position_sizer import build_position
 from .signal_filter import filter_signals, evaluate_stock
 from .metrics import calculate_metrics
 from ..core.metrics import TRADING_DAYS_PER_YEAR, compute_drawdown, compute_sharpe, daily_returns
+from modules.core.errors import ErrorCode, ZettarancError
 
 
 @dataclass
@@ -279,9 +280,30 @@ def run_simulation(
 
     Returns:
         SimulationResult
+
+    Raises:
+        ZettarancError(SIMULATOR_INVALID_PRICE): 配置中资金/价格/比例非正
+        ZettarancError(SIMULATOR_NO_KLINES): 全部候选股票都拿不到 K 线
     """
     config = config or SimulationConfig()
     ds = datasource or get_datasource()
+
+    # v3.10.4: 配置合法性校验
+    if config.initial_capital <= 0:
+        raise ZettarancError(
+            ErrorCode.SIMULATOR_INVALID_PRICE,
+            f"initial_capital 必须 > 0，当前: {config.initial_capital}",
+        )
+    if config.max_positions <= 0:
+        raise ZettarancError(
+            ErrorCode.SIMULATOR_INVALID_PRICE,
+            f"max_positions 必须 > 0，当前: {config.max_positions}",
+        )
+    if days <= 0:
+        raise ZettarancError(
+            ErrorCode.SIMULATOR_INVALID_PRICE,
+            f"days 必须 > 0，当前: {days}",
+        )
 
     if ts_codes is None:
         stocks = get_all_stocks(datasource=ds)
@@ -313,7 +335,14 @@ def run_simulation(
                 klines_map[code] = loaded
 
     if not klines_map:
-        return SimulationResult(config=config, initial_capital=config.initial_capital)
+        # v3.10.4: 全部候选都拿不到 K 线 → 抛 SIMULATOR_NO_KLINES
+        # （与早期 \"返回空 SimulationResult\" 不同：现在明确报告数据缺失）
+        preview = ts_codes[:3]
+        preview_str = ", ".join(preview) + (" ..." if len(ts_codes) > 3 else "")
+        raise ZettarancError(
+            ErrorCode.SIMULATOR_NO_KLINES,
+            f"全部 {len(ts_codes)} 只候选股票（如 {preview_str}）均无 K 线数据，请检查数据源或股票池",
+        )
 
     state = _SimulatorState(
         cash=config.initial_capital,

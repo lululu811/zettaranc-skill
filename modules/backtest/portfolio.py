@@ -20,6 +20,7 @@ from ..simulator.market_context import precompute_market_contexts
 # 多策略检测函数（延迟导入避免循环依赖）
 from ..strategies.base_strategies import detect_b1, detect_b2, detect_sb1
 from ..strategies.compound_strategies import detect_changan
+from modules.core.errors import ErrorCode, ZettarancError
 
 logger = logging.getLogger(__name__)
 
@@ -165,7 +166,32 @@ class PortfolioBacktestEngine:
     ):
         self.portfolio_config = portfolio_config or PortfolioConfig()
         self.loop_config = loop_config or LoopConfig()
+        self._validate_config(self.portfolio_config)
         self.loop_engine = ShaofuLoopEngine(self.loop_config)
+
+    @staticmethod
+    def _validate_config(config: PortfolioConfig) -> None:
+        """v3.10.4: 校验关键配置项，非法时抛 BACKTEST_INVALID_CONFIG"""
+        if config.initial_capital <= 0:
+            raise ZettarancError(
+                ErrorCode.BACKTEST_INVALID_CONFIG,
+                f"initial_capital 必须 > 0，当前: {config.initial_capital}",
+            )
+        if config.max_positions <= 0:
+            raise ZettarancError(
+                ErrorCode.BACKTEST_INVALID_CONFIG,
+                f"max_positions 必须 > 0，当前: {config.max_positions}",
+            )
+        if not (0 < config.position_pct <= 1):
+            raise ZettarancError(
+                ErrorCode.BACKTEST_INVALID_CONFIG,
+                f"position_pct 必须在 (0, 1]，当前: {config.position_pct}",
+            )
+        if config.min_cash_pct < 0 or config.min_cash_pct >= 1:
+            raise ZettarancError(
+                ErrorCode.BACKTEST_INVALID_CONFIG,
+                f"min_cash_pct 必须在 [0, 1)，当前: {config.min_cash_pct}",
+            )
 
     def load_data(
         self,
@@ -306,7 +332,22 @@ class PortfolioBacktestEngine:
 
         Returns:
             PortfolioBacktestResult
+
+        Raises:
+            ZettarancError(BACKTEST_INVALID_CONFIG): days / ts_codes 非法
+            ZettarancError(BACKTEST_EMPTY_KLINES): 所有候选都拿不到 K 线
         """
+        if days <= 0:
+            raise ZettarancError(
+                ErrorCode.BACKTEST_INVALID_CONFIG,
+                f"days 必须 > 0，当前: {days}",
+            )
+        if not ts_codes:
+            raise ZettarancError(
+                ErrorCode.BACKTEST_INVALID_CONFIG,
+                "ts_codes 不能为空，请提供至少一只候选股票",
+            )
+
         logger.info(
             "组合回测启动: universe=%d, days=%d, max_positions=%d",
             len(ts_codes),
@@ -315,6 +356,15 @@ class PortfolioBacktestEngine:
         )
 
         klines_map, all_dates = self.load_data(ts_codes, days)
+
+        # v3.10.4: 所有候选都拿不到 K 线 → BACKTEST_EMPTY_KLINES
+        if not klines_map:
+            preview = ts_codes[:3]
+            preview_str = ", ".join(preview) + (" ..." if len(ts_codes) > 3 else "")
+            raise ZettarancError(
+                ErrorCode.BACKTEST_EMPTY_KLINES,
+                f"全部 {len(ts_codes)} 只候选股票（如 {preview_str}）均无 K 线数据，请检查数据源或股票池",
+            )
         return self.run_with_data(klines_map, all_dates, start_date, end_date)
 
     def _load_klines(

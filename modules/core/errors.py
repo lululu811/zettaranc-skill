@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-统一错误码与异常基类（v3.10.4 最小版）
+统一错误码与异常基类（v3.10.4）
 
 设计约束：
 - 继承 ValueError，向后兼容现有 `except ValueError` / `pytest.raises(ValueError)` 调用点
@@ -19,6 +19,26 @@ class ErrorCode(str, Enum):
     RATE_LIMIT = "RATE_LIMIT"  # 触发限流
     DB_ERROR = "DB_ERROR"  # 数据库读写失败
     INVALID_PARAM = "INVALID_PARAM"  # 参数非法
+
+    # indevs_client (v3.10.4)
+    INDEVS_NO_DATA = "INDEVS_NO_DATA"  # Indevs 返回数据为空 / 数据源未配置
+
+    # llm_providers (v3.10.4)
+    LLM_TIMEOUT = "LLM_TIMEOUT"  # LLM 请求超时
+    LLM_API_ERROR = "LLM_API_ERROR"  # LLM API 返回非 2xx / 解析失败
+    LLM_INVALID_RESPONSE = "LLM_INVALID_RESPONSE"  # LLM 返回结构异常
+
+    # screener (v3.10.4)
+    SCREENER_NO_DATA = "SCREENER_NO_DATA"  # 选股数据不足（klines 为空 / 股票池为空）
+    SCREENER_INVALID_CRITERIA = "SCREENER_INVALID_CRITERIA"  # 未注册的 criteria
+
+    # simulator (v3.10.4)
+    SIMULATOR_INVALID_PRICE = "SIMULATOR_INVALID_PRICE"  # 模拟器价格非法（<= 0）
+    SIMULATOR_NO_KLINES = "SIMULATOR_NO_KLINES"  # 模拟器无 K 线数据
+
+    # backtest (v3.10.4)
+    BACKTEST_INVALID_CONFIG = "BACKTEST_INVALID_CONFIG"  # 回测配置非法
+    BACKTEST_EMPTY_KLINES = "BACKTEST_EMPTY_KLINES"  # 回测 K 线数据为空
 
 
 class ZettarancError(ValueError):

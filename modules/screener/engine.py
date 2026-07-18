@@ -1,4 +1,9 @@
-"""选股分析引擎（单股分析与批量筛选）。"""
+"""选股分析引擎（单股分析与批量筛选）。
+
+v3.10.4: 接入 ZettarancError
+- ``screen_stocks(criteria="...")`` 传入未注册的 criteria → ``ZettarancError(SCREENER_INVALID_CRITERIA)``
+- ``screen_stocks()`` 无法获取股票列表（data source + DB 都空）→ ``ZettarancError(SCREENER_NO_DATA)``
+"""
 
 import logging
 import os
@@ -8,6 +13,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from ..database import get_db_connection
 from ..datasource import DataSource, daily_to_dict
 from ..indicators import DailyData
+from modules.core.errors import ErrorCode, ZettarancError
 
 from .criteria import _CRITERIA_REGISTRY, _check_centipede, _check_sandglass_min
 from .data import get_all_stocks, get_recent_klines
@@ -211,10 +217,29 @@ def screen_stocks(
     use_parallel: 是否启用多进程并行（<50只时自动关闭；注入的 datasource 需可 pickle）
 
     返回：满足条件的 StockScore 列表（按评分降序）
+
+    Raises:
+        ZettarancError(SCREENER_INVALID_CRITERIA): ``criteria`` 不在注册表中
+        ZettarancError(SCREENER_NO_DATA): 股票池为空（注入 datasource 和 DB 都拿不到）
     """
+    # v3.10.4: 验证 criteria 必须是已注册的策略名
+    if criteria not in _CRITERIA_REGISTRY:
+        valid = sorted(_CRITERIA_REGISTRY.keys())
+        raise ZettarancError(
+            ErrorCode.SCREENER_INVALID_CRITERIA,
+            f"未知选股条件: {criteria!r}，可选: {valid}",
+        )
+
     stocks = get_all_stocks(datasource=datasource)
     limit = max_stocks if max_stocks > 0 else 500
     stocks = stocks[:limit]
+
+    # v3.10.4: 股票池彻底为空 → 抛 SCREENER_NO_DATA
+    if not stocks:
+        raise ZettarancError(
+            ErrorCode.SCREENER_NO_DATA,
+            "无法获取股票列表：注入的 DataSource 和本地 SQLite 都为空",
+        )
 
     results: list[StockScore] = []
 

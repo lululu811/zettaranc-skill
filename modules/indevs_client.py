@@ -8,6 +8,12 @@ Indevs Tushare Replay API 客户端
   Header: X-API-Key: <api_key>
 返回 envelope:
   {"code": 0, "msg": "ok", "count": N, "data": {"fields": [...], "items": [[...], ...]}}
+
+v3.10.4: 接入 ZettarancError
+- 内部 ``request()`` 在 API key 缺失 / 返回错误码 / 网络失败时抛
+  ``ZettarancError(ErrorCode.INDEVS_NO_DATA, ...)``；
+- 公开 ``get_*`` / ``get_kline_dicts`` 方法仍返回 ``Optional`` 以遵守 DataSource Protocol，
+  但不再静默吞错——失败通过日志 + 上层 try/except 暴露。
 """
 
 from __future__ import annotations
@@ -20,6 +26,8 @@ from typing import Any
 
 import pandas as pd
 import requests
+
+from modules.core.errors import ErrorCode, ZettarancError
 
 logger = logging.getLogger(__name__)
 
@@ -124,11 +132,19 @@ class IndevsClient:
         api_name: str,
         params: dict[str, Any] | None = None,
         timeout: int = 30,
-    ) -> dict[str, Any] | None:
-        """调用单个 API，返回原始 JSON envelope。"""
+    ) -> dict[str, Any]:
+        """调用单个 API，返回原始 JSON envelope。
+
+        v3.10.4: 不再返回 None。失败时抛 ``ZettarancError(INDEVS_NO_DATA, ...)``：
+        - API key 未配置
+        - 接口返回 ``code != 0``
+        - 重试 3 次仍失败（网络/HTTP 异常）
+        """
         if not self.api_key:
-            logger.warning("INDEVS_API_KEY 未设置，跳过 %s", api_name)
-            return None
+            raise ZettarancError(
+                ErrorCode.INDEVS_NO_DATA,
+                f"Indevs {api_name}: INDEVS_API_KEY 未配置",
+            )
 
         self._rate_limit()
         url = f"{self.base_url}/{api_name}"
@@ -151,9 +167,13 @@ class IndevsClient:
                 resp.raise_for_status()
                 payload = resp.json()
                 if payload.get("code") != 0:
-                    logger.warning("Indevs %s 返回错误: %s", api_name, payload.get("msg"))
-                    return None
+                    raise ZettarancError(
+                        ErrorCode.INDEVS_NO_DATA,
+                        f"Indevs {api_name} 返回错误: {payload.get('msg')}",
+                    )
                 return payload
+            except ZettarancError:
+                raise
             except Exception as e:  # noqa: BLE001
                 last_error = e
                 if attempt < 2:
@@ -162,8 +182,11 @@ class IndevsClient:
                     time.sleep(sleep_time)
                 continue
 
-        logger.warning("Indevs %s 请求失败: %s", api_name, last_error)
-        return None
+        raise ZettarancError(
+            ErrorCode.INDEVS_NO_DATA,
+            f"Indevs {api_name} 请求失败 (3 次重试耗尽): {last_error}",
+            cause=last_error,
+        )
 
     def get_daily(
         self,
@@ -176,7 +199,11 @@ class IndevsClient:
             params["start_date"] = start_date
         if end_date:
             params["end_date"] = end_date
-        return _dataframe_from_payload(self.request("daily", params))
+        try:
+            return _dataframe_from_payload(self.request("daily", params))
+        except ZettarancError as e:
+            logger.warning("Indevs get_daily 失败: %s", e.message)
+            return None
 
     def get_index_daily(
         self,
@@ -189,20 +216,35 @@ class IndevsClient:
             params["start_date"] = start_date
         if end_date:
             params["end_date"] = end_date
-        return _dataframe_from_payload(self.request("index_daily", params))
+        try:
+            return _dataframe_from_payload(self.request("index_daily", params))
+        except ZettarancError as e:
+            logger.warning("Indevs get_index_daily 失败: %s", e.message)
+            return None
 
     def get_realtime_quote(self, ts_codes: list[str]) -> pd.DataFrame | None:
         # 复用 rt_k 全市场快照接口，按 ts_code 过滤
-        payload = self.request(
-            "rt_k", params={"limit": 7000, "fields": "ts_code,trade_date,open,high,low,close,vol,amount,pct_chg"}
-        )
+        try:
+            payload = self.request(
+                "rt_k",
+                params={"limit": 7000, "fields": "ts_code,trade_date,open,high,low,close,vol,amount,pct_chg"},
+            )
+        except ZettarancError as e:
+            logger.warning("Indevs get_realtime_quote 失败: %s", e.message)
+            return None
         df = _dataframe_from_payload(payload)
         if df is None or df.empty:
             return None
         return df[df["ts_code"].isin(ts_codes)].copy() if "ts_code" in df.columns else None
 
     def get_moneyflow(self, ts_code: str, trade_date: str) -> pd.DataFrame | None:
-        return _dataframe_from_payload(self.request("moneyflow", params={"ts_code": ts_code, "trade_date": trade_date}))
+        try:
+            return _dataframe_from_payload(
+                self.request("moneyflow", params={"ts_code": ts_code, "trade_date": trade_date})
+            )
+        except ZettarancError as e:
+            logger.warning("Indevs get_moneyflow 失败: %s", e.message)
+            return None
 
     def get_daily_basic(
         self,
@@ -215,7 +257,11 @@ class IndevsClient:
             params["start_date"] = start_date
         if end_date:
             params["end_date"] = end_date
-        return _dataframe_from_payload(self.request("daily_basic", params))
+        try:
+            return _dataframe_from_payload(self.request("daily_basic", params))
+        except ZettarancError as e:
+            logger.warning("Indevs get_daily_basic 失败: %s", e.message)
+            return None
 
     def get_stk_factor(
         self,
@@ -228,7 +274,11 @@ class IndevsClient:
             params["start_date"] = start_date
         if end_date:
             params["end_date"] = end_date
-        return _dataframe_from_payload(self.request("stk_factor", params))
+        try:
+            return _dataframe_from_payload(self.request("stk_factor", params))
+        except ZettarancError as e:
+            logger.warning("Indevs get_stk_factor 失败: %s", e.message)
+            return None
 
     def get_stock_basic(
         self,
@@ -240,7 +290,11 @@ class IndevsClient:
             params["ts_code"] = ts_code
         if name:
             params["name"] = name
-        df = _dataframe_from_payload(self.request("stock_basic", params))
+        try:
+            df = _dataframe_from_payload(self.request("stock_basic", params))
+        except ZettarancError as e:
+            logger.warning("Indevs get_stock_basic 失败: %s", e.message)
+            return None
         if df is not None and "is_hs" not in df.columns:
             df["is_hs"] = ""
         return df
@@ -256,7 +310,11 @@ class IndevsClient:
             params["start_date"] = start_date
         if end_date:
             params["end_date"] = end_date
-        return _dataframe_from_payload(self.request("trade_cal", params))
+        try:
+            return _dataframe_from_payload(self.request("trade_cal", params))
+        except ZettarancError as e:
+            logger.warning("Indevs get_trade_cal 失败: %s", e.message)
+            return None
 
     def get_stock_list(self, exchange: str | None = None) -> list[dict]:
         df = self.get_stock_basic()
@@ -295,7 +353,10 @@ class IndevsClient:
         return records
 
     def health_check(self) -> bool:
-        payload = self.request("stock_basic", params={"ts_code": "000001.SZ"})
+        try:
+            payload = self.request("stock_basic", params={"ts_code": "000001.SZ"})
+        except ZettarancError:
+            return False
         return payload is not None and payload.get("code") == 0
 
 

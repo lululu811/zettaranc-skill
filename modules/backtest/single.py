@@ -17,6 +17,7 @@ from typing import Any, Optional
 from ..core.metrics import TRADING_DAYS_PER_YEAR, compute_drawdown, compute_sharpe, daily_returns
 from ..core.net import disable_proxy
 from ..strategies import detect_all_strategies, get_kline_data
+from modules.core.errors import ErrorCode, ZettarancError
 
 
 @dataclass
@@ -246,6 +247,28 @@ def backtest_strategy(
         stop_loss_pct = get_active_param("stop_loss", "stop_loss_pct", 7.0) / 100.0
     if take_profit_pct is None:
         take_profit_pct = 0.15
+
+    # v3.10.4: 配置合法性校验
+    if days <= 0:
+        raise ZettarancError(
+            ErrorCode.BACKTEST_INVALID_CONFIG,
+            f"days 必须 > 0，当前: {days}",
+        )
+    if not ts_code:
+        raise ZettarancError(
+            ErrorCode.BACKTEST_INVALID_CONFIG,
+            "ts_code 不能为空",
+        )
+    if stop_loss_pct <= 0:
+        raise ZettarancError(
+            ErrorCode.BACKTEST_INVALID_CONFIG,
+            f"stop_loss_pct 必须 > 0，当前: {stop_loss_pct}",
+        )
+    if take_profit_pct <= 0:
+        raise ZettarancError(
+            ErrorCode.BACKTEST_INVALID_CONFIG,
+            f"take_profit_pct 必须 > 0，当前: {take_profit_pct}",
+        )
 
     position_pct = get_active_param("position", "single_position_pct", 30.0) / 100.0
     klines = get_kline_data(ts_code, days)
