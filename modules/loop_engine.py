@@ -34,6 +34,7 @@ from .indicators import (
     detect_double_line_cross,
     detect_trade_signal,
 )
+from .constants import BACKTEST_DEFAULT_TRAILING_STOP_PCT
 
 
 # ============================================================
@@ -68,7 +69,7 @@ class LoopConfig:
     atr_stop_multiplier: float = 2.0  # ATR 乘数（止损距离 = ATR × 倍数）
     # v3.10.1 新增：移动止损（trailing stop）
     trailing_stop_enabled: bool = False  # 是否启用移动止损
-    trailing_stop_pct: float = -0.05  # 移动止损比例（高点回落超过此比例则止损）
+    trailing_stop_pct: float = BACKTEST_DEFAULT_TRAILING_STOP_PCT  # 移动止损比例（高点回落超过此比例则止损）
     bbi_break_days: int = 2  # BBI 连续跌破天数触发离场
     bbi_break_threshold: float = 0.01  # 收盘价低于 BBI 超过此比例才算"跌破"（1%）
     min_holding_days: int = 3  # 最少持仓天数（避免入场后次日就被震出）
