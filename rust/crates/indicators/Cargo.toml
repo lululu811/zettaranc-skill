@@ -6,3 +6,6 @@ rust-version.workspace = true
 
 [dependencies]
 zt_core_types = { path = "../core_types" }
+
+[dev-dependencies]
+proptest = { workspace = true }

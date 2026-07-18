@@ -29,7 +29,7 @@ arrow-schema = "59"
 # 并行
 rayon = "1.10"
 # 测试
-proptest = "1.4"
+proptest = "1.5"
 approx = "0.5"
 
 # 仅在 bindings crate 中使用 pyo3 / pyo3-polars。

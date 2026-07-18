@@ -4009,6 +4009,7 @@ dependencies = [
 name = "zt_backtest_engine"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "rayon",
  "serde",
  "zt_core_types",
@@ -4022,9 +4023,7 @@ dependencies = [
  "pyo3",
  "serde",
  "serde_json",
- "zt_backtest_engine",
  "zt_core_types",
- "zt_grid_search",
  "zt_indicators",
 ]
 
@@ -4043,6 +4042,7 @@ dependencies = [
 name = "zt_grid_search"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "rayon",
  "serde",
  "zt_backtest_engine",
@@ -4053,6 +4053,7 @@ dependencies = [
 name = "zt_indicators"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "zt_core_types",
 ]
 
@@ -4061,6 +4062,7 @@ name = "zt_screener"
 version = "0.1.0"
 dependencies = [
  "polars",
+ "proptest",
  "rayon",
  "serde",
  "zt_core_types",
