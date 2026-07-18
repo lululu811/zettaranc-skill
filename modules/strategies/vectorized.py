@@ -1,4 +1,6 @@
 import pandas as pd
+from typing import Any, cast
+
 import numpy as np
 from .core import StrategyType, StrategySignal, Priority
 
@@ -124,7 +126,8 @@ def generate_signals_from_df(df: pd.DataFrame) -> list[StrategySignal]:
 
     signals = []
     for st_type, mask in all_masks.items():
-        indices: list = np.where(mask.fillna(False))[0].tolist()
+        indices_arr = np.where(mask.fillna(False))[0]
+        indices: list[int] = [int(i) for i in cast(Any, indices_arr)]
         for idx in indices:
             row = df.iloc[idx]
             # 基础属性
