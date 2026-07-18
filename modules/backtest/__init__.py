@@ -23,6 +23,8 @@ from .portfolio import (
     Position,
     PortfolioBacktestResult,
     PortfolioBacktestEngine,
+    StrategyStats,
+    EntrySignal,
 )
 
 __all__ = [

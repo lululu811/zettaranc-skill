@@ -23,6 +23,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 
 from modules.market_regime import MarketRegime
+from modules.core.errors import ErrorCode, ZettarancError
 
 logger = logging.getLogger(__name__)
 
@@ -122,9 +123,12 @@ class PositionManager:
             ValueError: 当 entry_price <= 0 或 stop_loss_price >= entry_price 时
         """
         if entry_price <= 0:
-            raise ValueError(f"买入价必须大于 0，当前: {entry_price}")
+            raise ZettarancError(ErrorCode.INVALID_PARAM, f"买入价必须大于 0，当前: {entry_price}")
         if stop_loss_price >= entry_price:
-            raise ValueError(f"止损价({stop_loss_price})必须低于买入价({entry_price})")
+            raise ZettarancError(
+                ErrorCode.INVALID_PARAM,
+                f"止损价({stop_loss_price})必须低于买入价({entry_price})",
+            )
 
         risk_per_share = entry_price - stop_loss_price
 

@@ -2,6 +2,7 @@
 
 封装 verify_v10_pipeline 作为 fitness，方便 V2 hill-climb 寻优。
 """
+
 from __future__ import annotations
 
 import logging

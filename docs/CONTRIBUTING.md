@@ -71,6 +71,19 @@ npx skills add ./SKILL.md
 # 5. 提交 PR
 ```
 
+## 发布 Checklist（维护者）
+
+每次发版必须同步以下版本号位置，缺一不可：
+
+- [ ] `pyproject.toml` → `version = "x.y.z"`
+- [ ] `skill.json` → `"version": "x.y.z"`
+- [ ] `SKILL.md` → frontmatter `Version: x.y.z` 与文末「版本与追踪」表格两处
+- [ ] `README.md` → 版本 badge（如有测试数 badge 一并更新）
+- [ ] `docs/CHANGELOG.md` → 新增版本条目
+- [ ] 全量测试通过：`python -m pytest tests/ -q`
+- [ ] 质量门通过：`python corpus/quality_check.py SKILL.md --strict`
+- [ ] 打 git tag：`git tag vx.y.z`
+
 ## 语料来源黑名单
 
 为保证信息质量，以下来源**不应**作为主要依据：

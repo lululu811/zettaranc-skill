@@ -1,4 +1,5 @@
 """V10VerifyScorer 单元测试"""
+
 from __future__ import annotations
 
 from unittest.mock import patch, MagicMock
@@ -12,22 +13,22 @@ from modules.verify.scorer import V10VerifyScorer, V10ScoreResult
 def _make_passed_gates() -> dict[str, GateResult]:
     """5 个 gate 全通过"""
     return {
-        "sharpe":       GateResult(name="sharpe",       value=1.2,  threshold=0.5, passed=True),
-        "calmar":       GateResult(name="calmar",       value=0.8,  threshold=0.5, passed=True),
-        "win_rate":     GateResult(name="win_rate",     value=0.55, threshold=0.4, passed=True),
+        "sharpe": GateResult(name="sharpe", value=1.2, threshold=0.5, passed=True),
+        "calmar": GateResult(name="calmar", value=0.8, threshold=0.5, passed=True),
+        "win_rate": GateResult(name="win_rate", value=0.55, threshold=0.4, passed=True),
         "max_drawdown": GateResult(name="max_drawdown", value=0.15, threshold=0.25, passed=True),
-        "oos_is_ratio": GateResult(name="oos_is_ratio", value=0.7,  threshold=0.6, passed=True),
+        "oos_is_ratio": GateResult(name="oos_is_ratio", value=0.7, threshold=0.6, passed=True),
     }
 
 
 def _make_failed_gates() -> dict[str, GateResult]:
     """5 个 gate 全失败"""
     return {
-        "sharpe":       GateResult(name="sharpe",       value=-0.5, threshold=0.5, passed=False),
-        "calmar":       GateResult(name="calmar",       value=-0.2, threshold=0.5, passed=False),
-        "win_rate":     GateResult(name="win_rate",     value=0.2,  threshold=0.4, passed=False),
-        "max_drawdown": GateResult(name="max_drawdown", value=0.4,  threshold=0.25, passed=False),
-        "oos_is_ratio": GateResult(name="oos_is_ratio", value=0.1,  threshold=0.6, passed=False),
+        "sharpe": GateResult(name="sharpe", value=-0.5, threshold=0.5, passed=False),
+        "calmar": GateResult(name="calmar", value=-0.2, threshold=0.5, passed=False),
+        "win_rate": GateResult(name="win_rate", value=0.2, threshold=0.4, passed=False),
+        "max_drawdown": GateResult(name="max_drawdown", value=0.4, threshold=0.25, passed=False),
+        "oos_is_ratio": GateResult(name="oos_is_ratio", value=0.1, threshold=0.6, passed=False),
     }
 
 

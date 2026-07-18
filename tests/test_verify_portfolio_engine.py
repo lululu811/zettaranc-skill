@@ -1,4 +1,5 @@
 """组合级回测引擎测试"""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -143,7 +144,9 @@ class TestPortfolioBacktestEngine:
         monkeypatch.setattr(
             engine,
             "_check_multi_entry",
-            lambda klines_arg, idx, enabled: [EntrySignal(strategy="B1", confidence=0.8, reason="B1", stop_loss_price=97.0)],
+            lambda klines_arg, idx, enabled: [
+                EntrySignal(strategy="B1", confidence=0.8, reason="B1", stop_loss_price=97.0)
+            ],
         )
         monkeypatch.setattr(
             engine.loop_engine,
@@ -231,9 +234,7 @@ class TestPortfolioBacktestEngine:
         assert result.total_return == pytest.approx(0.20, rel=1e-6)
         # 回撤：peak=110, trough=105, dd=5/110
         assert result.max_drawdown == pytest.approx(5 / 110, rel=1e-6)
-        assert result.calmar == pytest.approx(
-            result.annualized_return / result.max_drawdown, rel=1e-6
-        )
+        assert result.calmar == pytest.approx(result.annualized_return / result.max_drawdown, rel=1e-6)
 
 
 class TestPortfolioEngineMarketAdaptive:

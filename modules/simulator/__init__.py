@@ -192,7 +192,9 @@ class SimulationResult:
     config: SimulationConfig
     trades: list[TradeRecord] = field(default_factory=list)
     equity_curve: list[float] = field(default_factory=list)  # 资金曲线（仅数值，用于指标计算）
-    equity_details: list[dict[str, Any]] = field(default_factory=list)  # 每日详细数据（含日期、现金、持仓数等，用于绘图/API）
+    equity_details: list[dict[str, Any]] = field(
+        default_factory=list
+    )  # 每日详细数据（含日期、现金、持仓数等，用于绘图/API）
     positions: list[Position] = field(default_factory=list)  # 最终未平仓
     initial_capital: float = 0
     final_value: float = 0

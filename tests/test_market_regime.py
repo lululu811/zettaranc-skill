@@ -210,7 +210,8 @@ class TestMarketRegimeClassifier:
         classifier_strict = MarketRegimeClassifier(bull_threshold=0.9)
         result_strict = classifier_strict.classify(klines)
 
-        # 严格阈值下不应再是 BULL
+        # 默认阈值下应判定为 BULL，严格阈值下不应再是 BULL
+        assert result_default == MarketRegime.BULL
         assert result_strict != MarketRegime.BULL
         # 结果应该是 SIDEWAYS 或 BEAR
         assert result_strict in (MarketRegime.SIDEWAYS, MarketRegime.BEAR)

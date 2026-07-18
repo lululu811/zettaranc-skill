@@ -33,7 +33,7 @@ from . import (
     SignalVerdict,
     MarketContext,
 )
-from ..datasource import DataSource, get_datasource
+from ..datasource import DataSource, dict_to_daily, get_datasource
 from ..indicators import DailyData
 from ..screener.data import get_all_stocks, get_recent_klines
 from .execution_constraints import get_trade_constraints, next_trading_date
@@ -300,12 +300,17 @@ def run_simulation(
     if not dates:
         return SimulationResult(config=config, initial_capital=config.initial_capital)
 
-    # 预加载所有 K 线
+    # 预加载所有 K 线（数据源支持批量接口时共享连接批量查询，否则逐股循环兜底）
     klines_map: dict[str, list[DailyData]] = {}
-    for code in ts_codes:
-        loaded = get_recent_klines(code, days + 60, datasource=ds)
-        if loaded:
-            klines_map[code] = loaded
+    if getattr(type(ds), "get_kline_dicts_batch", None) is not None:
+        for code, rows in ds.get_kline_dicts_batch(ts_codes, days + 60).items():
+            if rows:
+                klines_map[code] = dict_to_daily(rows)
+    else:
+        for code in ts_codes:
+            loaded = get_recent_klines(code, days + 60, datasource=ds)
+            if loaded:
+                klines_map[code] = loaded
 
     if not klines_map:
         return SimulationResult(config=config, initial_capital=config.initial_capital)

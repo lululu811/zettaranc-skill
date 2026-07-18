@@ -35,11 +35,14 @@ def get_trade_dates(start_date: str, end_date: str) -> list[str]:
     """从 trade_cal 表获取交易日历"""
     conn = sqlite3.connect(BRIDGE_DB)
     cursor = conn.cursor()
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT cal_date FROM trade_cal
         WHERE cal_date >= ? AND cal_date <= ? AND is_open = 1
         ORDER BY cal_date ASC
-    """, (start_date, end_date))
+    """,
+        (start_date, end_date),
+    )
     dates = [row[0] for row in cursor.fetchall()]
     conn.close()
     return dates
@@ -78,10 +81,10 @@ def get_synced_dates_in_bridge() -> set[str]:
 def sync_one_day(trade_date: str) -> dict:
     """同步某一天的全市场数据"""
     result = subprocess.run(
-        ["python3", str(BRIDGE_CLI), "sync",
-         "--api", "daily",
-         "--trade-date", trade_date],
-        capture_output=True, text=True, timeout=120,
+        ["python3", str(BRIDGE_CLI), "sync", "--api", "daily", "--trade-date", trade_date],
+        capture_output=True,
+        text=True,
+        timeout=120,
     )
 
     # 解析 JSON 结果（cli 输出最后几行有 JSON）
@@ -110,13 +113,15 @@ def import_to_our_db(trade_dates: list[str]) -> int:
 
     inserted = 0
     for td in trade_dates:
-        cursor_bridge.execute("""
+        cursor_bridge.execute(
+            """
             SELECT ts_code, trade_date, open, high, low, close, vol, amount,
                    pct_chg, pre_close
             FROM daily
             WHERE trade_date = ? AND ts_code IN ({})
         """.format(",".join("?" * len(our_stocks))),
-            [td] + list(our_stocks))
+            [td] + list(our_stocks),
+        )
 
         rows = cursor_bridge.fetchall()
         for row in rows:
@@ -135,24 +140,39 @@ def import_to_our_db(trade_dates: list[str]) -> int:
                 change = close_f - pre_close_f if pre_close_f > 0 else 0
 
                 # 涨跌停判断
-                if ts_code.endswith('BJ'):
+                if ts_code.endswith("BJ"):
                     is_limit_up = pct_chg_f >= 29
                     is_limit_down = pct_chg_f <= -29
-                elif ts_code.startswith('300') or ts_code.startswith('688'):
+                elif ts_code.startswith("300") or ts_code.startswith("688"):
                     is_limit_up = pct_chg_f >= 19.5
                     is_limit_down = pct_chg_f <= -19.5
                 else:
                     is_limit_up = pct_chg_f >= 9.5
                     is_limit_down = pct_chg_f <= -9.5
 
-                cursor_our.execute("""
+                cursor_our.execute(
+                    """
                     INSERT OR REPLACE INTO daily_kline
                     (ts_code, trade_date, open, high, low, close, vol, amount,
                      pct_chg, pre_close, change, is_limit_up, is_limit_down)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (ts_code, trade_date, open_f, high_f, low_f, close_f,
-                      vol_f, amount_f, pct_chg_f, pre_close_f, change,
-                      1 if is_limit_up else 0, 1 if is_limit_down else 0))
+                """,
+                    (
+                        ts_code,
+                        trade_date,
+                        open_f,
+                        high_f,
+                        low_f,
+                        close_f,
+                        vol_f,
+                        amount_f,
+                        pct_chg_f,
+                        pre_close_f,
+                        change,
+                        1 if is_limit_up else 0,
+                        1 if is_limit_down else 0,
+                    ),
+                )
                 inserted += 1
 
             except (ValueError, TypeError):
@@ -185,21 +205,21 @@ def main():
     print(f"  目标 DB: {OUR_DB}")
 
     # 1. 获取交易日历
-    print(f"\n【Step 1】获取交易日历...")
+    print("\n【Step 1】获取交易日历...")
     trade_dates = get_trade_dates(start_date, end_date)
     print(f"  交易日数量: {len(trade_dates)}")
 
     # 2. 检查哪些日期需要同步
-    print(f"\n【Step 2】检查需要同步的日期...")
+    print("\n【Step 2】检查需要同步的日期...")
     synced_dates = get_synced_dates_in_bridge()
     pending_dates = [d for d in trade_dates if d not in synced_dates]
     print(f"  已同步: {len(trade_dates) - len(pending_dates)} 天")
     print(f"  待同步: {len(pending_dates)} 天")
 
     if not pending_dates:
-        print(f"\n✅ 所有日期已同步，无需操作")
+        print("\n✅ 所有日期已同步，无需操作")
     elif args.dry_run:
-        print(f"\n📋 Dry-run 模式，不执行同步")
+        print("\n📋 Dry-run 模式，不执行同步")
         print(f"  前 5 天: {pending_dates[:5]}")
         print(f"  后 5 天: {pending_dates[-5:]}")
     else:
@@ -253,7 +273,7 @@ def main():
         conn.close()
 
         print(f"\n{'=' * 70}")
-        print(f"✅ 全部完成!")
+        print("✅ 全部完成!")
         print(f"{'=' * 70}")
         print(f"  数据库总记录: {total:,}")
         print(f"  股票数量: {stocks}")
@@ -261,7 +281,7 @@ def main():
     elif args.dry_run:
         pass
     else:
-        print(f"\n⏭️  跳过导入")
+        print("\n⏭️  跳过导入")
 
 
 if __name__ == "__main__":

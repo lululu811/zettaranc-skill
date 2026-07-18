@@ -59,19 +59,11 @@ def classify_market_regime(
         MarketRegime
     """
     # 强势判定：三个指标都达到强势阈值
-    if (
-        trend_score >= strong_threshold
-        and breadth > breadth_strong
-        and moneyflow_score >= moneyflow_strong
-    ):
+    if trend_score >= strong_threshold and breadth > breadth_strong and moneyflow_score >= moneyflow_strong:
         return MarketRegime.STRONG
 
     # 弱势判定：任一指标达到弱势阈值
-    if (
-        trend_score <= weak_threshold
-        or breadth < breadth_weak
-        or moneyflow_score <= moneyflow_weak
-    ):
+    if trend_score <= weak_threshold or breadth < breadth_weak or moneyflow_score <= moneyflow_weak:
         return MarketRegime.WEAK
 
     # 其他情况为震荡

@@ -17,7 +17,7 @@ from scripts._common import load_watchlist
 
 def main():
     p = argparse.ArgumentParser(description="批量计算自选股的指标缓存（薄壳）")
-    args = p.parse_args()
+    p.parse_args()
 
     ts_codes = load_watchlist()
     if not ts_codes:

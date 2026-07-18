@@ -1,4 +1,5 @@
 """组合级 Walk-forward 验证测试（v3.7.7）"""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock

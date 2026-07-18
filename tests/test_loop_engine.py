@@ -353,4 +353,4 @@ class TestRunStock:
         trades = engine.run_stock(klines)
         if trades:
             assert all(t.position_pct == 0.25 for t in trades)
-            assert t.exit_reason in ("止损", "卤煮止盈", "白线跌破", "白线死叉黄线", "数据末尾", "未知")
+            assert trades[-1].exit_reason in ("止损", "卤煮止盈", "白线跌破", "白线死叉黄线", "数据末尾", "未知")

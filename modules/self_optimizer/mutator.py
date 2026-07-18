@@ -29,6 +29,7 @@ from modules.self_optimizer.param_registry import (
     get_registry,
     list_optimizable,
 )
+from modules.core.errors import ErrorCode, ZettarancError
 
 MutationStrategy = Literal["step", "random", "jitter"]
 
@@ -112,7 +113,7 @@ class ParamMutator:
         elif strategy == "jitter":
             new_val = self._jitter_mutate(old_val, spec)
         else:
-            raise ValueError(f"未知变异策略: {strategy}")
+            raise ZettarancError(ErrorCode.INVALID_PARAM, f"未知变异策略: {strategy}")
 
         new_val = self._clamp(new_val, spec, align_to_step=(strategy == "random"))
 

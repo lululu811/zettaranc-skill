@@ -9,6 +9,7 @@ Indevs Tushare Replay API 客户端
 返回 envelope:
   {"code": 0, "msg": "ok", "count": N, "data": {"fields": [...], "items": [[...], ...]}}
 """
+
 from __future__ import annotations
 
 import logging
@@ -98,12 +99,14 @@ class IndevsClient:
         self.api_key = api_key or INDEVS_API_KEY
         self.base_url = (base_url or INDEVS_API_URL).rstrip("/")
         self._session = requests.Session()
-        self._session.headers.update({
-            "X-API-Key": self.api_key,
-            "Accept": "application/json",
-            "Accept-Encoding": "gzip",
-            "User-Agent": "zettaranc-skill-indevs/1.0",
-        })
+        self._session.headers.update(
+            {
+                "X-API-Key": self.api_key,
+                "Accept": "application/json",
+                "Accept-Encoding": "gzip",
+                "User-Agent": "zettaranc-skill-indevs/1.0",
+            }
+        )
         self._session.trust_env = False
         self._session.proxies.update({"http": "", "https": ""})
         self._min_interval = 0.5
@@ -190,16 +193,16 @@ class IndevsClient:
 
     def get_realtime_quote(self, ts_codes: list[str]) -> pd.DataFrame | None:
         # 复用 rt_k 全市场快照接口，按 ts_code 过滤
-        payload = self.request("rt_k", params={"limit": 7000, "fields": "ts_code,trade_date,open,high,low,close,vol,amount,pct_chg"})
+        payload = self.request(
+            "rt_k", params={"limit": 7000, "fields": "ts_code,trade_date,open,high,low,close,vol,amount,pct_chg"}
+        )
         df = _dataframe_from_payload(payload)
         if df is None or df.empty:
             return None
         return df[df["ts_code"].isin(ts_codes)].copy() if "ts_code" in df.columns else None
 
     def get_moneyflow(self, ts_code: str, trade_date: str) -> pd.DataFrame | None:
-        return _dataframe_from_payload(
-            self.request("moneyflow", params={"ts_code": ts_code, "trade_date": trade_date})
-        )
+        return _dataframe_from_payload(self.request("moneyflow", params={"ts_code": ts_code, "trade_date": trade_date}))
 
     def get_daily_basic(
         self,

@@ -2,6 +2,7 @@
 
 为少妇战法 v1.0 验收提供质量过滤后的股票池，替代 `stock_basic` 前 N 只的粗暴采样。
 """
+
 from __future__ import annotations
 
 import logging
@@ -10,13 +11,14 @@ from typing import Any
 
 from ..database import get_connection
 from ..datasource import DataSource, get_datasource
+from modules.core.errors import ErrorCode, ZettarancError
 
 logger = logging.getLogger(__name__)
 
 # 默认过滤阈值
 DEFAULT_MIN_AVG_AMOUNT = 100_000_000  # 近 60 日日均成交额 ≥ 1 亿
-DEFAULT_MIN_LIST_DAYS = 365            # 上市时间 ≥ 1 年
-DEFAULT_LOOKBACK_DAYS = 60             # 用于计算流动性和趋势的回看天数
+DEFAULT_MIN_LIST_DAYS = 365  # 上市时间 ≥ 1 年
+DEFAULT_LOOKBACK_DAYS = 60  # 用于计算流动性和趋势的回看天数
 
 # v3.7.6：多指标分组选股。
 # 同一组内的 criteria 是“或”关系；组与组之间默认也是“或”关系（union），
@@ -110,9 +112,7 @@ def load_v10_stock_pool(
             logger.warning("daily_kline 无数据，回退到 stock_basic 前 %d 只", limit)
             return _fallback_stock_codes(limit)
 
-        start_date = _format_trade_date(
-            _parse_trade_date(latest_date) - timedelta(days=lookback_days)
-        )
+        start_date = _format_trade_date(_parse_trade_date(latest_date) - timedelta(days=lookback_days))
 
         # 1. 先拿到所有候选股票（含上市日期、市场）
         cursor = conn.cursor()
@@ -306,7 +306,10 @@ def _merge_group_results(
       - intersection: 仅保留在每个分组都至少命中一个 criteria 的股票
     """
     if mode not in ("union", "intersection"):
-        raise ValueError(f"不支持的合并模式: {mode}，仅支持 union / intersection")
+        raise ZettarancError(
+            ErrorCode.INVALID_PARAM,
+            f"不支持的合并模式: {mode}，仅支持 union / intersection",
+        )
 
     if mode == "union":
         merged: dict[str, Any] = {}

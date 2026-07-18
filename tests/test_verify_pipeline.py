@@ -1,4 +1,5 @@
 """v1.0 验收管线测试"""
+
 from __future__ import annotations
 
 import os
@@ -124,9 +125,7 @@ def test_aggregate_metrics_uses_merged_equity_curve():
     assert metrics.max_drawdown == pytest.approx(expected_max_dd, rel=1e-6)
     # Calmar 应基于组合年化收益 / 组合最大回撤，且为正
     assert metrics.calmar > 0
-    assert metrics.calmar == pytest.approx(
-        metrics.annualized_return / metrics.max_drawdown, rel=1e-6
-    )
+    assert metrics.calmar == pytest.approx(metrics.annualized_return / metrics.max_drawdown, rel=1e-6)
 
 
 def test_aggregate_metrics_empty_active_returns_zero():
@@ -183,12 +182,15 @@ def test_pipeline_passes_portfolio_config_to_engine():
         nonlocal captured_config
         captured_config = portfolio_config
 
-    with patch(
-        "modules.verify.portfolio_engine.PortfolioBacktestEngine.__init__",
-        capture_init,
-    ), patch(
-        "modules.verify.portfolio_engine.PortfolioBacktestEngine.run",
-        return_value=None,
+    with (
+        patch(
+            "modules.verify.portfolio_engine.PortfolioBacktestEngine.__init__",
+            capture_init,
+        ),
+        patch(
+            "modules.verify.portfolio_engine.PortfolioBacktestEngine.run",
+            return_value=None,
+        ),
     ):
         # run 返回 None 会触发属性错误，这里只验证构造时传入的配置
         try:

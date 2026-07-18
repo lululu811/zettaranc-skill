@@ -58,8 +58,8 @@ def test_data_syncer_init_requires_token_in_jnb_mode():
     assert "DATA_MODE" in src
     assert "TUSHARE_TOKEN" in src
     assert "TUSHARE_API_URL" in src
-    # 必须显式 raise ValueError 提示用户
-    assert "raise ValueError" in src
+    # 必须显式 raise 结构化错误（ZettarancError 继承 ValueError）提示用户
+    assert "raise ZettarancError" in src
 
 
 # ==================== modules/report 新模块 ====================

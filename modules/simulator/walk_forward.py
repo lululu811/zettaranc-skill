@@ -78,10 +78,7 @@ def _split_windows(
             test_days=test_days,
             allow_partial_last=False,
         )
-        return [
-            (s.train_start, s.test_start, s.test_end)
-            for s in core_splits
-        ]
+        return [(s.train_start, s.test_start, s.test_end) for s in core_splits]
 
     # anchored 模式：训练窗口从起点固定增长
     windows = []

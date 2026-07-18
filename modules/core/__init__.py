@@ -31,6 +31,7 @@ from .metrics import (
 from .net import disable_proxy
 from .paths import DATA_DIR, REGISTRY_DIR, REPORTS_DIR
 from .atr import calculate_atr, atr_pct
+from .errors import ErrorCode, ZettarancError
 
 __all__ = [
     # walk_forward
@@ -57,4 +58,7 @@ __all__ = [
     # atr (v3.10.1)
     "calculate_atr",
     "atr_pct",
+    # errors (v3.10.4)
+    "ErrorCode",
+    "ZettarancError",
 ]

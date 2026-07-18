@@ -544,7 +544,6 @@ def add_self_optimize_parser(subparsers) -> None:
 def cmd_track(args):
     """跟踪池管理（add / remove / list / info / status / stats）"""
     from modules.tracking_manager import TrackingManager
-    import json
 
     manager = TrackingManager()
 
@@ -861,7 +860,14 @@ def main():
         "simulate": cmd_simulate,
         "verify": cmd_verify_v10,
     }
-    handlers[args.command](args)
+    from modules.core.errors import ZettarancError
+
+    try:
+        handlers[args.command](args)
+    except ZettarancError as e:
+        # 统一错误码输出格式：[ERROR_CODE] message
+        print(str(e), file=sys.stderr)
+        sys.exit(2)
 
 
 if __name__ == "__main__":

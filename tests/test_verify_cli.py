@@ -75,14 +75,26 @@ def test_run_verify_v10_resolves_ts_codes_arg(temp_db, tmp_path):
         conn.commit()
 
     # 把 backtest_shaofu_single 打桩成返回空结果 —— 这样不用真实行情数据
-    with patch("modules.verify.pipeline.backtest_shaofu_single") as mock_backtest, \
-         patch("modules.verify.pipeline.get_datasource") as mock_ds, \
-         patch("modules.verify.pipeline.LoopConfig") as mock_loop_cfg:
+    with (
+        patch("modules.verify.pipeline.backtest_shaofu_single") as mock_backtest,
+        patch("modules.verify.pipeline.get_datasource") as mock_ds,
+        patch("modules.verify.pipeline.LoopConfig") as mock_loop_cfg,
+    ):
         # datasource 给一只股票返回足量 K 线（>60 根）
-        fake_klines = [{"ts_code": "600519.SH", "trade_date": "20260101",
-                        "open": 100.0, "high": 101.0, "low": 99.0,
-                        "close": 100.5, "vol": 10000.0, "amount": 1000000.0,
-                        "pct_chg": 0.5} for _ in range(120)]
+        fake_klines = [
+            {
+                "ts_code": "600519.SH",
+                "trade_date": "20260101",
+                "open": 100.0,
+                "high": 101.0,
+                "low": 99.0,
+                "close": 100.5,
+                "vol": 10000.0,
+                "amount": 1000000.0,
+                "pct_chg": 0.5,
+            }
+            for _ in range(120)
+        ]
         mock_ds.return_value.get_kline_dicts.return_value = fake_klines
 
         # LoopConfig.from_registry 默认返回 None 的实际类型兼容
@@ -127,4 +139,3 @@ def test_run_verify_v10_resolves_ts_codes_arg(temp_db, tmp_path):
         # 验证 get_all_stock_codes 真的可用（Bug 1 已修）
         codes = get_all_stock_codes()
         assert "999999.SH" in codes  # 我们注入的那只
-

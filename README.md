@@ -6,9 +6,9 @@
 基于 ~200 万字语料蒸馏，60+ 指标，30+ 战法，可回测可模拟、可自改进、可走完整闭环。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-3.10.2-green)](docs/CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-3.10.4-green)](docs/CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-1154%20passed%20%7C%2015%20skipped-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-1179%20passed%20%7C%2015%20skipped-brightgreen)](tests/)
 [![Quality Gate](https://img.shields.io/badge/quality-12%2F12-blue)](corpus/quality_check.py)
 [![Skill](https://img.shields.io/badge/Skill--Schema--V2-✓-purple)](SKILL.md)
 

@@ -1,4 +1,5 @@
 """v1.0 验收股票池加载器测试"""
+
 from __future__ import annotations
 
 import sys
@@ -123,7 +124,7 @@ class TestLoadV10StockPool:
         klines = [
             _make_kline("000001.SZ", "20260101", 100.0, vol=1_000_000),  # amount=1e8
             _make_kline("000001.SZ", "20260102", 100.0, vol=1_000_000),
-            _make_kline("000002.SZ", "20260101", 1.0, vol=100),           # amount=100
+            _make_kline("000002.SZ", "20260101", 1.0, vol=100),  # amount=100
             _make_kline("000002.SZ", "20260102", 1.0, vol=100),
         ]
         _insert_klines(db_conn, klines)
@@ -151,7 +152,7 @@ class TestLoadV10StockPool:
             _make_kline("000001.SZ", "20260101", 10.0, vol=1_000_000),
             _make_kline("000001.SZ", "20260102", 15.0, vol=1_000_000),  # +50%
             _make_kline("000002.SZ", "20260101", 10.0, vol=1_000_000),
-            _make_kline("000002.SZ", "20260102", 9.0, vol=1_000_000),   # -10%
+            _make_kline("000002.SZ", "20260102", 9.0, vol=1_000_000),  # -10%
             _make_kline("000003.SZ", "20260101", 10.0, vol=1_000_000),
             _make_kline("000003.SZ", "20260102", 11.0, vol=1_000_000),  # +10%
         ]
@@ -306,10 +307,13 @@ class TestLoadV10StockPoolMultiCriteria:
             {"ts_code": "000001.SZ", "name": "深A", "market": "主板", "list_date": "19910101"},
         ]
         _insert_stock_basic(db_conn, stocks)
-        _insert_klines(db_conn, [
-            _make_kline("000001.SZ", "20260101", 100.0, vol=1_000_000),
-            _make_kline("000001.SZ", "20260102", 100.0, vol=1_000_000),
-        ])
+        _insert_klines(
+            db_conn,
+            [
+                _make_kline("000001.SZ", "20260101", 100.0, vol=1_000_000),
+                _make_kline("000001.SZ", "20260102", 100.0, vol=1_000_000),
+            ],
+        )
 
         result = load_v10_stock_pool_multi_criteria(
             groups=["unknown_group"],

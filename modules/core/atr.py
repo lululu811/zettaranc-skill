@@ -12,6 +12,7 @@ ATR 衡量价格波动幅度，常用于：
 之前在 `simulator/slippage_model._atr` 与 `simulator/position_sizer._calculate_atr`
 中各有一份重复实现，本模块统一为单一来源。
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence

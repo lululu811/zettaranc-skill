@@ -2,6 +2,7 @@
 
 覆盖 PortfolioBacktestResult、PortfolioConfig、MarketAdaptiveConfig 数据类，
 以及 PortfolioBacktestEngine 的纯逻辑方法（_resolve_adaptive、_build_result、_recent_return）。
+v3.10.0 新增：_resolve_strategy_weights、_compute_strategy_stats、StrategyStats。
 """
 
 import math
@@ -13,6 +14,7 @@ from modules.backtest.portfolio import (
     PortfolioBacktestEngine,
     PortfolioBacktestResult,
     PortfolioConfig,
+    StrategyStats,
 )
 from modules.loop_engine import LoopTrade
 from modules.simulator import MarketContext, MarketRegime
@@ -21,6 +23,7 @@ from modules.simulator import MarketContext, MarketRegime
 # ---------------------------------------------------------------------------
 # MarketAdaptiveConfig
 # ---------------------------------------------------------------------------
+
 
 class TestMarketAdaptiveConfig:
     def test_defaults(self):
@@ -55,6 +58,7 @@ class TestMarketAdaptiveConfig:
 # ---------------------------------------------------------------------------
 # PortfolioConfig
 # ---------------------------------------------------------------------------
+
 
 class TestPortfolioConfig:
     def test_defaults(self):
@@ -99,6 +103,7 @@ class TestPortfolioConfig:
 # ---------------------------------------------------------------------------
 # PortfolioBacktestResult
 # ---------------------------------------------------------------------------
+
 
 class TestPortfolioBacktestResult:
     def test_defaults(self):
@@ -165,6 +170,7 @@ class TestPortfolioBacktestResult:
 # PortfolioBacktestEngine — 纯逻辑方法
 # ---------------------------------------------------------------------------
 
+
 class TestPortfolioBacktestEngineInit:
     def test_default_configs(self):
         engine = PortfolioBacktestEngine()
@@ -221,9 +227,9 @@ class TestResolveAdaptive:
             moneyflow_score=80.0,
         )
         mp, pp, me, allow = engine._resolve_adaptive(engine.portfolio_config, ctx)
-        assert mp == 9       # 6 * 1.5
+        assert mp == 9  # 6 * 1.5
         assert pp == pytest.approx(0.24)  # 0.2 * 1.2
-        assert me == 8       # 4 * 2.0
+        assert me == 8  # 4 * 2.0
         assert allow is True
 
     def test_neutral_regime(self):
@@ -241,9 +247,9 @@ class TestResolveAdaptive:
             moneyflow_score=50.0,
         )
         mp, pp, me, allow = engine._resolve_adaptive(engine.portfolio_config, ctx)
-        assert mp == 5       # round(6 * 0.8) = 5
+        assert mp == 5  # round(6 * 0.8) = 5
         assert pp == pytest.approx(0.18)  # 0.2 * 0.9
-        assert me == 4       # 4 * 1.0
+        assert me == 4  # 4 * 1.0
         assert allow is True
 
     def test_weak_regime_no_new_entries(self):
@@ -280,9 +286,9 @@ class TestResolveAdaptive:
         )
         mp, pp, me, allow = engine._resolve_adaptive(engine.portfolio_config, ctx)
         assert allow is True
-        assert mp == 3       # round(6 * 0.5)
+        assert mp == 3  # round(6 * 0.5)
         assert pp == pytest.approx(0.1)  # 0.2 * 0.5
-        assert me == 2       # round(4 * 0.5)
+        assert me == 2  # round(4 * 0.5)
 
 
 class TestBuildResult:
@@ -347,7 +353,7 @@ class TestBuildResult:
         # 所有净值相同 → 日收益率全为 0 → std=0 → sharpe=0
         net_values = [100.0] * 10
         result = engine._build_result(
-            dates=[f"202601{i+1:02d}" for i in range(10)],
+            dates=[f"202601{i + 1:02d}" for i in range(10)],
             net_values=net_values,
             cash_history=[100.0] * 10,
             completed_trades=[],
@@ -365,10 +371,7 @@ class TestBuildResult:
             completed_trades=[],
         )
         # 手动计算验证
-        daily_rets = [
-            (net_values[i] - net_values[i - 1]) / net_values[i - 1]
-            for i in range(1, len(net_values))
-        ]
+        daily_rets = [(net_values[i] - net_values[i - 1]) / net_values[i - 1] for i in range(1, len(net_values))]
         avg_r = sum(daily_rets) / len(daily_rets)
         var = sum((r - avg_r) ** 2 for r in daily_rets) / (len(daily_rets) - 1)
         std = math.sqrt(var)
@@ -409,11 +412,12 @@ class TestRecentReturn:
     def _make_daily_data(self, prices):
         """构造简易 DailyData 列表（只需 close 和 trade_date）"""
         from modules.indicators import DailyData
+
         result = []
         for i, p in enumerate(prices):
             dd = DailyData(
                 ts_code="000001.SZ",
-                trade_date=f"202601{i+1:02d}",
+                trade_date=f"202601{i + 1:02d}",
                 open=p,
                 high=p * 1.01,
                 low=p * 0.99,
@@ -469,3 +473,192 @@ class TestRunWithDataEdgeCases:
         engine = PortfolioBacktestEngine()
         result = engine.run_with_data({"000001.SZ": []}, [])
         assert result.dates == []
+
+
+# ---------------------------------------------------------------------------
+# v3.10.0：StrategyStats 数据结构
+# ---------------------------------------------------------------------------
+
+
+class TestStrategyStats:
+    def test_defaults(self):
+        stats = StrategyStats()
+        assert stats.trade_count == 0
+        assert stats.win_count == 0
+        assert stats.loss_count == 0
+        assert stats.win_rate == 0.0
+        assert stats.total_pnl_pct == 0.0
+        assert stats.avg_pnl_pct == 0.0
+        assert stats.contribution_pct == 0.0
+
+    def test_field_assignment(self):
+        stats = StrategyStats(
+            trade_count=10,
+            win_count=6,
+            loss_count=4,
+            win_rate=0.6,
+            total_pnl_pct=0.15,
+            avg_pnl_pct=0.015,
+            contribution_pct=0.75,
+        )
+        assert stats.trade_count == 10
+        assert stats.win_count == 6
+        assert stats.win_rate == 0.6
+        assert stats.contribution_pct == 0.75
+
+
+# ---------------------------------------------------------------------------
+# v3.10.0：_resolve_strategy_weights
+# ---------------------------------------------------------------------------
+
+
+class TestResolveStrategyWeights:
+    def _make_engine(self, **adaptive_kwargs):
+        adaptive = MarketAdaptiveConfig(**adaptive_kwargs)
+        pc = PortfolioConfig(
+            strategy_weights={"B1": 1.0, "B2": 0.8},
+            regime_strategy_weights={
+                "STRONG": {"B1": 1.2, "B2": 1.0},
+                "NEUTRAL": {"B1": 1.0, "B2": 0.8},
+                "WEAK": {"B1": 0.7, "B2": 0.5},
+            },
+            adaptive=adaptive,
+        )
+        return PortfolioBacktestEngine(portfolio_config=pc)
+
+    def test_disabled_returns_default_weights(self):
+        engine = self._make_engine(enabled=False)
+        weights = engine._resolve_strategy_weights(engine.portfolio_config, None)
+        assert weights == {"B1": 1.0, "B2": 0.8}
+
+    def test_none_context_returns_default_weights(self):
+        engine = self._make_engine(enabled=True)
+        weights = engine._resolve_strategy_weights(engine.portfolio_config, None)
+        assert weights == {"B1": 1.0, "B2": 0.8}
+
+    def test_strong_regime_returns_strong_weights(self):
+        engine = self._make_engine(enabled=True)
+        ctx = MarketContext(
+            date="20260101",
+            regime=MarketRegime.STRONG,
+            index_trend=80.0,
+            breadth=0.5,
+            moneyflow_score=80.0,
+        )
+        weights = engine._resolve_strategy_weights(engine.portfolio_config, ctx)
+        assert weights == {"B1": 1.2, "B2": 1.0}
+
+    def test_weak_regime_returns_weak_weights(self):
+        engine = self._make_engine(enabled=True)
+        ctx = MarketContext(
+            date="20260101",
+            regime=MarketRegime.WEAK,
+            index_trend=20.0,
+            breadth=-0.5,
+            moneyflow_score=20.0,
+        )
+        weights = engine._resolve_strategy_weights(engine.portfolio_config, ctx)
+        assert weights == {"B1": 0.7, "B2": 0.5}
+
+    def test_unknown_regime_falls_back_to_default(self):
+        """配置中缺少的环境退回默认权重"""
+        config = PortfolioConfig(
+            strategy_weights={"B1": 1.0},
+            regime_strategy_weights={"STRONG": {"B1": 1.5}},
+        )
+        adaptive = MarketAdaptiveConfig(enabled=True)
+        config.adaptive = adaptive
+        engine = PortfolioBacktestEngine(portfolio_config=config)
+        ctx = MarketContext(
+            date="20260101",
+            regime=MarketRegime.WEAK,  # 未配置 WEAK
+            index_trend=20.0,
+            breadth=-0.5,
+            moneyflow_score=20.0,
+        )
+        weights = engine._resolve_strategy_weights(config, ctx)
+        assert weights == {"B1": 1.0}  # 退回默认
+
+
+# ---------------------------------------------------------------------------
+# v3.10.0：_compute_strategy_stats
+# ---------------------------------------------------------------------------
+
+
+class TestComputeStrategyStats:
+    def _make_trade(self, pnl_pct: float, strategy_source: str) -> LoopTrade:
+        return LoopTrade(
+            ts_code="000001.SZ",
+            entry_date="20260101",
+            entry_price=10.0,
+            entry_reason="test",
+            stop_loss_price=9.0,
+            exit_date="20260110",
+            exit_price=10.0 * (1 + pnl_pct),
+            pnl_pct=pnl_pct,
+            strategy_source=strategy_source,
+        )
+
+    def test_empty_trades(self):
+        stats = PortfolioBacktestEngine._compute_strategy_stats([])
+        assert stats == {}
+
+    def test_single_strategy(self):
+        trades = [
+            self._make_trade(0.10, "B1"),
+            self._make_trade(-0.05, "B1"),
+            self._make_trade(0.08, "B1"),
+        ]
+        stats = PortfolioBacktestEngine._compute_strategy_stats(trades)
+        assert "B1" in stats
+        b1 = stats["B1"]
+        assert b1.trade_count == 3
+        assert b1.win_count == 2
+        assert b1.loss_count == 1
+        assert b1.win_rate == pytest.approx(2 / 3)
+        assert b1.total_pnl_pct == pytest.approx(0.13)  # 0.10 - 0.05 + 0.08
+        assert b1.avg_pnl_pct == pytest.approx(0.13 / 3)
+
+    def test_multiple_strategies(self):
+        trades = [
+            self._make_trade(0.10, "B1"),
+            self._make_trade(0.20, "SB1"),
+            self._make_trade(-0.05, "B1"),
+        ]
+        stats = PortfolioBacktestEngine._compute_strategy_stats(trades)
+        assert set(stats.keys()) == {"B1", "SB1"}
+        assert stats["SB1"].trade_count == 1
+        assert stats["SB1"].win_count == 1
+        assert stats["SB1"].total_pnl_pct == pytest.approx(0.20)
+
+    def test_multi_strategy_resonance_splits_pnl(self):
+        """多策略共振交易 pnl 均分到各策略"""
+        # B1+SB1 共振，pnl=0.12 → 各分 0.06
+        trades = [self._make_trade(0.12, "B1+SB1")]
+        stats = PortfolioBacktestEngine._compute_strategy_stats(trades)
+        assert "B1" in stats
+        assert "SB1" in stats
+        assert stats["B1"].trade_count == 1
+        assert stats["SB1"].trade_count == 1
+        assert stats["B1"].total_pnl_pct == pytest.approx(0.06)
+        assert stats["SB1"].total_pnl_pct == pytest.approx(0.06)
+        assert stats["B1"].win_count == 1
+        assert stats["SB1"].win_count == 1
+
+    def test_contribution_pct_sums_to_one(self):
+        """所有策略 contribution_pct 之和应约等于 1"""
+        trades = [
+            self._make_trade(0.30, "B1"),
+            self._make_trade(0.20, "SB1"),
+            self._make_trade(-0.10, "B2"),
+        ]
+        stats = PortfolioBacktestEngine._compute_strategy_stats(trades)
+        total_contrib = sum(s.contribution_pct for s in stats.values())
+        assert total_contrib == pytest.approx(1.0)
+
+    def test_unknown_strategy_source(self):
+        """空 strategy_source 归类为 unknown"""
+        trades = [self._make_trade(0.05, "")]
+        stats = PortfolioBacktestEngine._compute_strategy_stats(trades)
+        assert "unknown" in stats
+        assert stats["unknown"].trade_count == 1

@@ -12,6 +12,7 @@ import logging
 from .pipeline import VerifyResult, verify_v10_pipeline
 from .report import write_report
 from modules.core.paths import REPORTS_DIR
+from modules.core.errors import ErrorCode, ZettarancError
 
 logger = logging.getLogger(__name__)
 
@@ -92,13 +93,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _validate_args(args: argparse.Namespace) -> None:
     if not 10 <= args.limit <= 500:
-        raise ValueError(f"--limit 必须在 [10, 500]，当前 {args.limit}")
+        raise ZettarancError(ErrorCode.INVALID_PARAM, f"--limit 必须在 [10, 500]，当前 {args.limit}")
     if not 120 <= args.days <= 1000:
-        raise ValueError(f"--days 必须在 [120, 1000]，当前 {args.days}")
+        raise ZettarancError(ErrorCode.INVALID_PARAM, f"--days 必须在 [120, 1000]，当前 {args.days}")
     if args.wf_train < 60 or args.wf_train > 500:
-        raise ValueError(f"--wf-train 必须在 [60, 500]，当前 {args.wf_train}")
+        raise ZettarancError(ErrorCode.INVALID_PARAM, f"--wf-train 必须在 [60, 500]，当前 {args.wf_train}")
     if args.wf_test < 30 or args.wf_test > 200:
-        raise ValueError(f"--wf-test 必须在 [30, 200]，当前 {args.wf_test}")
+        raise ZettarancError(ErrorCode.INVALID_PARAM, f"--wf-test 必须在 [30, 200]，当前 {args.wf_test}")
 
 
 def _resolve_ts_codes(args: argparse.Namespace) -> list[str]:

@@ -9,6 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from modules.core.errors import ErrorCode, ZettarancError
+
 if TYPE_CHECKING:  # pragma: no cover - 仅类型检查
     from modules.self_optimizer.backtest_scorer import BacktestScorer
     from modules.self_optimizer.mutator import ParamMutator
@@ -48,13 +50,13 @@ class SelfOptimizer:
         backtest_days: int = 240,
     ) -> None:
         if target not in ("trading", "skill"):
-            raise ValueError(f"仅支持 trading/skill, 收到: {target}")
+            raise ZettarancError(ErrorCode.INVALID_PARAM, f"仅支持 trading/skill, 收到: {target}")
         if mode not in ("dry_run", "auto_revert"):
-            raise ValueError(f"仅支持 dry_run/auto_revert, 收到: {mode}")
+            raise ZettarancError(ErrorCode.INVALID_PARAM, f"仅支持 dry_run/auto_revert, 收到: {mode}")
         if mode == "auto_revert":
             raise NotImplementedError("V2 不支持 auto_revert")
         if rounds < 1 or rounds > 10:
-            raise ValueError(f"rounds 必须在 [1, 10], 收到: {rounds}")
+            raise ZettarancError(ErrorCode.INVALID_PARAM, f"rounds 必须在 [1, 10], 收到: {rounds}")
 
         self.target = target
         self.rounds = rounds

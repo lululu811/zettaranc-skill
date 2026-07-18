@@ -12,6 +12,8 @@ from modules.backtest.portfolio import (
     Position,
     PortfolioBacktestResult,
     PortfolioBacktestEngine,
+    StrategyStats,
+    EntrySignal,
 )
 
 __all__ = [
@@ -20,4 +22,6 @@ __all__ = [
     "Position",
     "PortfolioBacktestResult",
     "PortfolioBacktestEngine",
+    "StrategyStats",
+    "EntrySignal",
 ]

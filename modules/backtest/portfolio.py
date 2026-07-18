@@ -3,6 +3,7 @@
 每日扫描多策略信号、动态选股、维护真实组合账户，从组合资金曲线计算
 年化 / Sharpe / MaxDD / Calmar。
 """
+
 from __future__ import annotations
 
 import logging
@@ -27,10 +28,10 @@ logger = logging.getLogger(__name__)
 class EntrySignal:
     """单策略入场信号"""
 
-    strategy: str          # "B1", "B2", "长安", "SB1"
-    confidence: float      # 置信度 0-1
-    reason: str           # 信号原因
-    stop_loss_price: float # 建议止损价
+    strategy: str  # "B1", "B2", "长安", "SB1"
+    confidence: float  # 置信度 0-1
+    reason: str  # 信号原因
+    stop_loss_price: float  # 建议止损价
 
 
 # 策略检测函数映射：策略名 -> (detector_func, default_weight)
@@ -60,10 +61,10 @@ class MarketAdaptiveConfig:
     """
 
     enabled: bool = False
-    weak_no_new_entries: bool = True          # 弱势日是否禁止新开仓
+    weak_no_new_entries: bool = True  # 弱势日是否禁止新开仓
     strong_max_positions_factor: float = 1.0  # 强势日 max_positions 乘数
-    neutral_max_positions_factor: float = 1.0 # 震荡日 max_positions 乘数
-    weak_max_positions_factor: float = 0.0    # 弱势日 max_positions 乘数（0=空仓）
+    neutral_max_positions_factor: float = 1.0  # 震荡日 max_positions 乘数
+    weak_max_positions_factor: float = 0.0  # 弱势日 max_positions 乘数（0=空仓）
     strong_position_pct_factor: float = 1.0
     neutral_position_pct_factor: float = 1.0
     weak_position_pct_factor: float = 0.5
@@ -77,21 +78,28 @@ class PortfolioConfig:
     """组合回测配置"""
 
     initial_capital: float = 1_000_000.0
-    max_positions: int = 5           # 最多同时持仓数
-    position_pct: float = 0.2        # 单票占组合净值比例
-    min_cash_pct: float = 0.05       # 最低现金保留比例
-    max_entries_per_day: int = 2     # 每日最多新买入几只
-    commission_rate: float = 0.00025 # 佣金
-    min_commission: float = 5.0      # 佣金最低 5 元
+    max_positions: int = 5  # 最多同时持仓数
+    position_pct: float = 0.2  # 单票占组合净值比例
+    min_cash_pct: float = 0.05  # 最低现金保留比例
+    max_entries_per_day: int = 2  # 每日最多新买入几只
+    commission_rate: float = 0.00025  # 佣金
+    min_commission: float = 5.0  # 佣金最低 5 元
     stamp_duty_rate: float = 0.0005  # 印花税（卖出）
-    min_signal_days: int = 30        # 最少需要多少根 K 线才检查信号
+    min_signal_days: int = 30  # 最少需要多少根 K 线才检查信号
     adaptive: MarketAdaptiveConfig = field(default_factory=MarketAdaptiveConfig)
     # v3.10.0 多策略融合配置
     enabled_strategies: list[str] = field(default_factory=lambda: ["B1"])
-    strategy_weights: dict[str, float] = field(default_factory=lambda: {
-        "B1": 1.0, "B2": 0.8, "SB1": 1.2, "长安": 0.9
-    })
+    strategy_weights: dict[str, float] = field(default_factory=lambda: {"B1": 1.0, "B2": 0.8, "SB1": 1.2, "长安": 0.9})
     min_composite_score: float = 0.3
+    # v3.10.0：按市场环境分组的策略权重（键: STRONG / NEUTRAL / WEAK）
+    # 若某环境未配置则退回 strategy_weights
+    regime_strategy_weights: dict[str, dict[str, float]] = field(
+        default_factory=lambda: {
+            "STRONG": {"B1": 1.0, "B2": 0.9, "SB1": 1.1, "长安": 1.0},
+            "NEUTRAL": {"B1": 1.0, "B2": 0.8, "SB1": 1.2, "长安": 0.9},
+            "WEAK": {"B1": 0.8, "B2": 0.6, "SB1": 1.3, "长安": 0.7},
+        }
+    )
 
 
 @dataclass
@@ -99,11 +107,24 @@ class Position:
     """组合中的一笔持仓"""
 
     ts_code: str
-    shares: int                      # 持股数（A股100整数倍）
+    shares: int  # 持股数（A股100整数倍）
     entry_price: float
     entry_date: str
-    cost_basis: float                # 含手续费的总成本
-    trade: LoopTrade                 # 当前持仓交易对象
+    cost_basis: float  # 含手续费的总成本
+    trade: LoopTrade  # 当前持仓交易对象
+
+
+@dataclass
+class StrategyStats:
+    """单策略贡献度统计（v3.10.0）"""
+
+    trade_count: int = 0
+    win_count: int = 0
+    loss_count: int = 0
+    win_rate: float = 0.0
+    total_pnl_pct: float = 0.0  # 该策略所有交易 pnl_pct 之和
+    avg_pnl_pct: float = 0.0  # 该策略平均每笔交易盈亏
+    contribution_pct: float = 0.0  # 占总收益比例（按 pnl_pct 加权）
 
 
 @dataclass
@@ -123,6 +144,8 @@ class PortfolioBacktestResult:
     sharpe_ratio: float = 0.0
     max_drawdown: float = 0.0
     calmar: float = 0.0
+    # v3.10.0：按策略分组的贡献度统计
+    strategy_stats: dict[str, StrategyStats] = field(default_factory=dict)
 
 
 class PortfolioBacktestEngine:
@@ -182,10 +205,7 @@ class PortfolioBacktestEngine:
         window_dates = all_dates
         if start_date is not None or end_date is not None:
             window_dates = [
-                d
-                for d in all_dates
-                if (start_date is None or d >= start_date)
-                and (end_date is None or d <= end_date)
+                d for d in all_dates if (start_date is None or d >= start_date) and (end_date is None or d <= end_date)
             ]
         if not window_dates:
             return PortfolioBacktestResult()
@@ -368,7 +388,9 @@ class PortfolioBacktestEngine:
                 # 平仓：按收盘价卖出
                 exit_price = completed.exit_price
                 sell_amount = pos.shares * exit_price
-                commission = max(self.portfolio_config.min_commission, sell_amount * self.portfolio_config.commission_rate)
+                commission = max(
+                    self.portfolio_config.min_commission, sell_amount * self.portfolio_config.commission_rate
+                )
                 stamp_duty = sell_amount * self.portfolio_config.stamp_duty_rate
                 cash += sell_amount - commission - stamp_duty
                 completed_trades.append(completed)
@@ -412,18 +434,21 @@ class PortfolioBacktestEngine:
                 continue
             # 计算止损价（v3.10.1：支持 ATR 动态止损）
             stop_price = _calc_stop_loss_price(
-                klines, idx,
+                klines,
+                idx,
                 self.loop_config.stop_loss_method,
                 self.loop_config.stop_loss_pct,
                 atr_multiplier=self.loop_config.atr_stop_multiplier,
                 atr_window=self.loop_config.atr_stop_window,
             )
-            signals.append(EntrySignal(
-                strategy=strategy_name,
-                confidence=float(sig.confidence or 0.5),
-                reason=str(sig.reason or sig.description or strategy_name),
-                stop_loss_price=stop_price,
-            ))
+            signals.append(
+                EntrySignal(
+                    strategy=strategy_name,
+                    confidence=float(sig.confidence or 0.5),
+                    reason=str(sig.reason or sig.description or strategy_name),
+                    stop_loss_price=stop_price,
+                )
+            )
         return signals
 
     @staticmethod
@@ -470,9 +495,7 @@ class PortfolioBacktestEngine:
         prev_context 为上一交易日市场环境，用于自适应仓位控制。
         """
         config = self.portfolio_config
-        eff_max_positions, eff_position_pct, eff_max_entries, allow_new = self._resolve_adaptive(
-            config, prev_context
-        )
+        eff_max_positions, eff_position_pct, eff_max_entries, allow_new = self._resolve_adaptive(config, prev_context)
 
         if not allow_new:
             return cash
@@ -482,7 +505,7 @@ class PortfolioBacktestEngine:
             return cash
 
         enabled = config.enabled_strategies
-        weights = config.strategy_weights
+        weights = self._resolve_strategy_weights(config, prev_context)
         min_score = config.min_composite_score
 
         # 收集候选：(code, EntrySignal 列表, 综合评分)
@@ -544,6 +567,9 @@ class PortfolioBacktestEngine:
             strategy_label = STRATEGY_NAME_TO_TYPE.get(best_signal.strategy, best_signal.strategy)
             entry_reason = f"{strategy_label}: {best_signal.reason}"
 
+            # v3.10.0：记录所有触发的策略（按置信度排序，用 + 连接）
+            all_strategies = "+".join(s.strategy for s in sorted(signals, key=lambda x: x.confidence, reverse=True))
+
             # 创建 LoopTrade 持仓对象
             stop_loss = best_signal.stop_loss_price
             trade = LoopTrade(
@@ -553,6 +579,7 @@ class PortfolioBacktestEngine:
                 entry_reason=entry_reason,
                 stop_loss_price=stop_loss,
                 position_pct=self.loop_config.position_pct,
+                strategy_source=all_strategies,
             )
 
             positions[code] = Position(
@@ -597,6 +624,24 @@ class PortfolioBacktestEngine:
             me = int(round(config.max_entries_per_day * ac.neutral_max_entries_factor))
 
         return max(mp, 0), pp, max(me, 0), True
+
+    def _resolve_strategy_weights(
+        self,
+        config: PortfolioConfig,
+        prev_context: MarketContext | None,
+    ) -> dict[str, float]:
+        """根据市场环境解析当日有效策略权重
+
+        若 adaptive 未启用或 prev_context 为 None，退回 config.strategy_weights；
+        否则按 regime 查找 config.regime_strategy_weights，找不到则退回默认权重。
+
+        Returns:
+            策略权重字典 {strategy_name: weight}
+        """
+        if not config.adaptive.enabled or prev_context is None:
+            return config.strategy_weights
+        regime_key = prev_context.regime.name  # STRONG / NEUTRAL / WEAK
+        return config.regime_strategy_weights.get(regime_key, config.strategy_weights)
 
     def _recent_return(self, klines: list[DailyData], idx: int, lookback: int = 60) -> float:
         """计算近 lookback 日涨幅，用于买入排序"""
@@ -651,8 +696,51 @@ class PortfolioBacktestEngine:
         result.sharpe_ratio = compute_sharpe(daily_rets)
 
         # Calmar
-        result.calmar = (
-            result.annualized_return / result.max_drawdown if result.max_drawdown > 0.001 else 0.0
-        )
+        result.calmar = result.annualized_return / result.max_drawdown if result.max_drawdown > 0.001 else 0.0
+
+        # v3.10.0：按策略分组统计贡献度
+        result.strategy_stats = self._compute_strategy_stats(completed_trades)
 
         return result
+
+    @staticmethod
+    def _compute_strategy_stats(
+        completed_trades: list[LoopTrade],
+    ) -> dict[str, StrategyStats]:
+        """按策略分组计算贡献度统计
+
+        单策略交易直接归属；多策略共振交易（strategy_source 含 +）
+        将 pnl 按比例均分到各策略。
+        """
+        # 收集每策略的交易 pnl 列表
+        strategy_pnls: dict[str, list[float]] = {}
+        for t in completed_trades:
+            source = t.strategy_source or "unknown"
+            # 多策略共振：均分 pnl
+            strategies = [s.strip() for s in source.split("+") if s.strip()]
+            if not strategies:
+                strategies = ["unknown"]
+            per_strategy_pnl = t.pnl_pct / len(strategies)
+            for strat in strategies:
+                if strat not in strategy_pnls:
+                    strategy_pnls[strat] = []
+                strategy_pnls[strat].append(per_strategy_pnl)
+
+        # 计算总 pnl（用于贡献度分母）
+        total_pnl = sum(sum(pnls) for pnls in strategy_pnls.values())
+
+        stats: dict[str, StrategyStats] = {}
+        for strat, pnls in strategy_pnls.items():
+            wins = [p for p in pnls if p > 0]
+            losses = [p for p in pnls if p <= 0]
+            strat_total = sum(pnls)
+            stats[strat] = StrategyStats(
+                trade_count=len(pnls),
+                win_count=len(wins),
+                loss_count=len(losses),
+                win_rate=len(wins) / len(pnls) if pnls else 0.0,
+                total_pnl_pct=strat_total,
+                avg_pnl_pct=strat_total / len(pnls) if pnls else 0.0,
+                contribution_pct=strat_total / total_pnl if total_pnl != 0 else 0.0,
+            )
+        return stats

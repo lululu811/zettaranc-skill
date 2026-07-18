@@ -4,6 +4,7 @@
 把 v3.3.3 格式（phase1_best / phase2_best）转为 LoopConfig 字段，
 写入 param_registry（shaofu_v1 命名空间）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -24,6 +25,7 @@ DEFAULT_STRATEGY_NAME = "shaofu_v1"
 @dataclass
 class RegistryWriteReport:
     """registry 写入报告"""
+
     written: int = 0
     skipped: int = 0
     warnings: list[str] = field(default_factory=list)
@@ -72,7 +74,9 @@ def write_optimization_to_registry(
     persist_override(strategy_name, valid_params)
     logger.info(
         "已为 %s 写入 %d 个参数到 active override: %s",
-        strategy_name, len(valid_params), valid_params,
+        strategy_name,
+        len(valid_params),
+        valid_params,
     )
     report.written = len(valid_params)
     return report
@@ -81,6 +85,7 @@ def write_optimization_to_registry(
 def _registry_get(strategy_name: str) -> dict | None:
     """从 using_params 上下文取最近一次设置的 override"""
     from modules.self_optimizer.param_registry import _ACTIVE_OVERRIDES
+
     return _ACTIVE_OVERRIDES.get(strategy_name)
 
 
@@ -96,8 +101,13 @@ def load_config_from_registry(strategy_name: str = DEFAULT_STRATEGY_NAME) -> Loo
     # 构造 LoopConfig（只填有值的字段，其他用默认值）
     valid_kwargs: dict = {}
     for field_name in (
-        "j_threshold", "stop_loss_pct", "vol_shrink_threshold",
-        "bbi_break_days", "min_holding_days", "lu_half", "position_pct",
+        "j_threshold",
+        "stop_loss_pct",
+        "vol_shrink_threshold",
+        "bbi_break_days",
+        "min_holding_days",
+        "lu_half",
+        "position_pct",
     ):
         if field_name in params:
             valid_kwargs[field_name] = params[field_name]

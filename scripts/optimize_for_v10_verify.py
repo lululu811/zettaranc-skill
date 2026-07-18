@@ -9,6 +9,7 @@ V10VerifyScorer，按 passed_count + 0.1*sharpe 适应度爬山，
   python -m scripts.optimize_for_v10_verify --rounds 5 --stocks 100
   python -m scripts.optimize_for_v10_verify --smoke   # 1 round × 5 stocks
 """
+
 from __future__ import annotations
 
 import argparse
@@ -35,13 +36,13 @@ logger = logging.getLogger(__name__)
 
 # LoopConfig 字段的 (min, max, step) 元组（用于爬山边界）
 PARAM_SPACE = {
-    "j_threshold":         (3,    20,   1),
-    "stop_loss_pct":      (-0.10, -0.01, 0.01),
-    "vol_shrink_threshold": (0.5,  1.0,  0.1),
-    "bbi_break_days":      (1,     5,    1),
-    "min_holding_days":    (2,     7,    1),
-    "lu_half":             (0,     1,    1),   # bool 当 int 用
-    "position_pct":        (0.10,  0.50, 0.05),
+    "j_threshold": (3, 20, 1),
+    "stop_loss_pct": (-0.10, -0.01, 0.01),
+    "vol_shrink_threshold": (0.5, 1.0, 0.1),
+    "bbi_break_days": (1, 5, 1),
+    "min_holding_days": (2, 7, 1),
+    "lu_half": (0, 1, 1),  # bool 当 int 用
+    "position_pct": (0.10, 0.50, 0.05),
 }
 
 
@@ -105,13 +106,15 @@ def run_hillclimb(
     """返回 (best_params, best_score, history)"""
     current = dict(initial)
     current_result = scorer.score(current)
-    history: list[dict] = [{
-        "round": 0,
-        "kind": "baseline",
-        "params": current,
-        "fit": current_result.fit,
-        "passed_count": current_result.passed_count,
-    }]
+    history: list[dict] = [
+        {
+            "round": 0,
+            "kind": "baseline",
+            "params": current,
+            "fit": current_result.fit,
+            "passed_count": current_result.passed_count,
+        }
+    ]
     logger.info(
         "基线 fit=%.3f passed=%d/%d sharpe=%.3f calmar=%.3f annret=%.3f",
         current_result.fit,
@@ -129,14 +132,16 @@ def run_hillclimb(
     for r in range(1, rounds + 1):
         candidate = _mutate(current, rng)
         candidate_result = scorer.score(candidate)
-        history.append({
-            "round": r,
-            "kind": "candidate",
-            "params": candidate,
-            "fit": candidate_result.fit,
-            "passed_count": candidate_result.passed_count,
-            "error": candidate_result.error,
-        })
+        history.append(
+            {
+                "round": r,
+                "kind": "candidate",
+                "params": candidate,
+                "fit": candidate_result.fit,
+                "passed_count": candidate_result.passed_count,
+                "error": candidate_result.error,
+            }
+        )
 
         if candidate_result.fit > current_result.fit:
             current = candidate
@@ -153,12 +158,16 @@ def run_hillclimb(
 
         logger.info(
             "round %d: %s fit=%.3f passed=%d/%d sharpe=%.3f calmar=%.3f annret=%.3f (best fit=%.3f p=%d/%d)",
-            r, status, candidate_result.fit, candidate_result.passed_count,
+            r,
+            status,
+            candidate_result.fit,
+            candidate_result.passed_count,
             candidate_result.total_count,
             getattr(candidate_result, "sharpe", 0.0),
             getattr(candidate_result, "calmar", 0.0),
             getattr(candidate_result, "annualized_return", 0.0),
-            best_result.fit, best_result.passed_count,
+            best_result.fit,
+            best_result.passed_count,
             best_result.total_count,
         )
 
@@ -254,10 +263,7 @@ def main() -> int:
         portfolio_config=portfolio_config,
     )
 
-    baseline_params = {
-        f: getattr(LoopConfig(), f)
-        for f in LOOP_CONFIG_FIELDS
-    }
+    baseline_params = {f: getattr(LoopConfig(), f) for f in LOOP_CONFIG_FIELDS}
     baseline_params["lu_half"] = bool(baseline_params["lu_half"])
 
     total_rounds = args.rounds + args.extras

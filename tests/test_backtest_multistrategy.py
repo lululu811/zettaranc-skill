@@ -1,4 +1,5 @@
 """多策略融合引擎测试（v3.10.0）"""
+
 from __future__ import annotations
 
 import pytest
@@ -24,6 +25,7 @@ def _score_candidate(
 # 测试数据工厂
 # ============================================================
 
+
 def _make_signal(strategy: str = "B1", confidence: float = 0.8) -> EntrySignal:
     return EntrySignal(
         strategy=strategy,
@@ -36,6 +38,7 @@ def _make_signal(strategy: str = "B1", confidence: float = 0.8) -> EntrySignal:
 # ============================================================
 # EntrySignal 数据类测试
 # ============================================================
+
 
 class TestEntrySignal:
     def test_creation(self):
@@ -54,6 +57,7 @@ class TestEntrySignal:
 # ============================================================
 # STRATEGY_DETECTORS 注册表测试
 # ============================================================
+
 
 class TestStrategyDetectors:
     def test_b1_registered(self):
@@ -80,6 +84,7 @@ class TestStrategyDetectors:
 # ============================================================
 # _score_candidate 评分函数测试
 # ============================================================
+
 
 class TestScoreCandidate:
     def test_empty_signals(self):
@@ -132,6 +137,7 @@ class TestScoreCandidate:
 # PortfolioConfig 多策略字段测试
 # ============================================================
 
+
 class TestPortfolioConfigMultiStrategy:
     def test_default_single_strategy(self):
         config = PortfolioConfig()
@@ -159,6 +165,7 @@ class TestPortfolioConfigMultiStrategy:
 # PortfolioBacktestEngine._check_multi_entry 测试
 # ============================================================
 
+
 class TestCheckMultiEntry:
     def setup_method(self):
         self.engine = PortfolioBacktestEngine()
@@ -166,7 +173,7 @@ class TestCheckMultiEntry:
     def test_no_signals_returns_empty(self):
         """无信号时应返回空列表"""
         # 构造一个空的 mock engine
-        with patch.object(self.engine, '_check_multi_entry', return_value=[]):
+        with patch.object(self.engine, "_check_multi_entry", return_value=[]):
             result = self.engine._check_multi_entry([], 50, ["B1"])
             assert result == []
 

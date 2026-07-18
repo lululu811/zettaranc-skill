@@ -1,4 +1,5 @@
 """五项硬指标判定测试"""
+
 from __future__ import annotations
 
 from modules.verify.gates import (

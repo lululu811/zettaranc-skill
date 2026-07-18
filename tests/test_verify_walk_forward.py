@@ -71,7 +71,11 @@ def _fake_klines(n: int) -> list[dict]:
         {
             "ts_code": "000001.SZ",
             "trade_date": f"2024{(i // 30 + 1):02d}{(i % 30 + 1):02d}",
-            "open": 10.0, "high": 11.0, "low": 9.5, "close": 10.5, "vol": 1_000_000.0,
+            "open": 10.0,
+            "high": 11.0,
+            "low": 9.5,
+            "close": 10.5,
+            "vol": 1_000_000.0,
         }
         for i in range(n)
     ]
@@ -150,9 +154,7 @@ def test_wf_oos_is_ratio_is_not_one_when_oos_underperforms(monkeypatch):
         wf_test_days=60,
     )
 
-    assert result.oos_is_ratio < 0.5, (
-        f"OOS/IS 必须 < 0.5 才能区分两段，实际={result.oos_is_ratio:.3f}"
-    )
+    assert result.oos_is_ratio < 0.5, f"OOS/IS 必须 < 0.5 才能区分两段，实际={result.oos_is_ratio:.3f}"
 
 
 def test_wf_each_segment_runs_separate_backtest(monkeypatch):

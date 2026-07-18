@@ -173,9 +173,9 @@ def walk_forward_verify(
 
         for split in splits:
             # IS 窗口：klines[train_start:train_end]
-            is_window = klines[split.train_start:split.train_end]
+            is_window = klines[split.train_start : split.train_end]
             # OOS 窗口：klines[test_start:test_end]
-            oos_window = klines[split.test_start:split.test_end]
+            oos_window = klines[split.test_start : split.test_end]
 
             # IS 段回测
             if len(is_window) >= 30:  # backtest 最低 K 线要求

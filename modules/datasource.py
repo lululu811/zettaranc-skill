@@ -19,6 +19,10 @@ from .bridge_client import (
 from .database import get_connection, save_klines
 from .indevs_client import IndevsClient
 from .tushare_client import TushareClient
+from modules.core.errors import ErrorCode, ZettarancError
+
+# get_kline_dicts 的固定返回列（与 SELECT 顺序一致，用于元组转 dict）
+_KLINE_COLUMNS = ("ts_code", "trade_date", "open", "high", "low", "close", "vol", "amount", "pct_chg")
 
 
 @runtime_checkable
@@ -297,6 +301,8 @@ class SqliteDataSource:
         end_date: str | None = None,
     ) -> list[dict]:
         with get_connection() as conn:
+            # sqlite3.Row 构造开销大，批量逐股调用场景下用裸元组 + zip 转 dict 更快
+            conn.row_factory = None
             cursor = conn.cursor()
             params: list = [ts_code]
             sql = """
@@ -316,7 +322,47 @@ class SqliteDataSource:
                 params.append(days)
             cursor.execute(sql, params)
             rows = cursor.fetchall()
-        return [dict(row) for row in reversed(rows)]
+        return [dict(zip(_KLINE_COLUMNS, row)) for row in reversed(rows)]
+
+    def get_kline_dicts_batch(
+        self,
+        ts_codes: list[str],
+        days: int = 60,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> dict[str, list[dict]]:
+        """批量获取多只股票的 K 线：共享一个连接逐股查询，省去逐股开关连接的开销。
+
+        每只股票的 SQL 与 get_kline_dicts 完全一致（行为不变），只是复用连接。
+        返回 {ts_code: [K 线 dict 升序]}，无数据的股票对应空列表。
+        """
+        result: dict[str, list[dict]] = {code: [] for code in ts_codes}
+        if not ts_codes:
+            return result
+        with get_connection() as conn:
+            # sqlite3.Row 构造开销大，批量场景下用裸元组 + zip 转 dict 更快
+            conn.row_factory = None
+            cursor = conn.cursor()
+            for ts_code in ts_codes:
+                params: list = [ts_code]
+                sql = """
+                    SELECT ts_code, trade_date, open, high, low, close, vol, amount, pct_chg
+                    FROM daily_kline
+                    WHERE ts_code = ?
+                """
+                if start_date:
+                    sql += " AND trade_date >= ?"
+                    params.append(start_date)
+                if end_date:
+                    sql += " AND trade_date <= ?"
+                    params.append(end_date)
+                sql += " ORDER BY trade_date DESC"
+                if not start_date and days > 0:
+                    sql += " LIMIT ?"
+                    params.append(days)
+                cursor.execute(sql, params)
+                result[ts_code] = [dict(zip(_KLINE_COLUMNS, row)) for row in reversed(cursor.fetchall())]
+        return result
 
 
 class CompositeDataSource:
@@ -327,7 +373,14 @@ class CompositeDataSource:
     ``preferred="tushare"`` 或 ``preferred="indevs"`` 时生效。
     """
 
+    VALID_PREFERRED = ("auto", "tushare", "indevs", "bridge", "sqlite")
+
     def __init__(self, preferred: str = "auto"):
+        if preferred not in self.VALID_PREFERRED:
+            raise ZettarancError(
+                ErrorCode.INVALID_PARAM,
+                f"不支持的数据源: {preferred}，仅支持 {' / '.join(self.VALID_PREFERRED)}",
+            )
         self._preferred = preferred
         self._bridge = BridgeDataSource()
         self._sqlite = SqliteDataSource()
@@ -449,6 +502,8 @@ class CompositeDataSource:
         """获取 K 线数据，优先从 DB 读取，DB 没有时调 API 并缓存"""
         # 1. 先查 DB
         with get_connection() as conn:
+            # sqlite3.Row 构造开销大，批量逐股调用场景下用裸元组 + zip 转 dict 更快
+            conn.row_factory = None
             cursor = conn.cursor()
             sql = """
                 SELECT ts_code, trade_date, open, high, low, close, vol, amount, pct_chg
@@ -456,29 +511,31 @@ class CompositeDataSource:
                 WHERE ts_code = ?
             """
             params: list = [ts_code]
-            
+
             if start_date:
                 sql += " AND trade_date >= ?"
                 params.append(start_date)
             if end_date:
                 sql += " AND trade_date <= ?"
                 params.append(end_date)
-            
+
             sql += " ORDER BY trade_date DESC"
-            
-            if not start_date and not end_date and days > 0:
+
+            # 与 TushareDataSource / SqliteDataSource 对齐：只要未指定 start_date，
+            # 就按 days 截断最近 N 天（即使指定了 end_date），避免拉取全历史
+            if not start_date and days > 0:
                 sql += " LIMIT ?"
                 params.append(days)
-            
+
             cursor.execute(sql, params)
             rows = cursor.fetchall()
-        
+
         if rows:
             # DB 有数据，直接返回
-            records = [dict(row) for row in rows]
+            records = [dict(zip(_KLINE_COLUMNS, row)) for row in rows]
             records.reverse()  # 因为查询时是 DESC，需要反转为 ASC
             return records
-        
+
         # 2. DB 没有数据，调 API
         sources: list[DataSource] = []
         if self._preferred == "auto":
@@ -491,7 +548,7 @@ class CompositeDataSource:
             sources = [self._tushare_source]
         elif self._preferred == "indevs":
             sources = [self._indevs_source]
-        
+
         for source in sources:
             try:
                 data = source.get_kline_dicts(ts_code, days=days, start_date=start_date, end_date=end_date)
@@ -502,6 +559,24 @@ class CompositeDataSource:
             except Exception:
                 continue
         return []
+
+    def get_kline_dicts_batch(
+        self,
+        ts_codes: list[str],
+        days: int = 60,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> dict[str, list[dict]]:
+        """批量获取多只股票的 K 线：DB 共享连接批量查询优先，缺失的股票逐只回退外部源。
+
+        返回 {ts_code: [K 线 dict 升序]}，无数据的股票对应空列表。
+        """
+        result = self._sqlite.get_kline_dicts_batch(ts_codes, days=days, start_date=start_date, end_date=end_date)
+        # DB 缺失的股票走单股回退路径（含 save_klines 缓存写回）
+        for code in ts_codes:
+            if not result.get(code):
+                result[code] = self.get_kline_dicts(code, days=days, start_date=start_date, end_date=end_date)
+        return result
 
 
 # ---------------------------------------------------------------------------

@@ -6,6 +6,7 @@
 - portfolio_grid_search_optimize 返回结构与排序
 - 空数据 / 无效参数 / objective 排序
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -58,6 +59,7 @@ class TestDefaultParamSpace:
     def test_default_dimensions_are_loop_config_fields(self):
         """默认参数都是 LoopConfig 的合法字段"""
         from modules.loop_engine import LoopConfig
+
         valid_fields = set(LoopConfig().__dict__.keys())
         for dim in DEFAULT_PORTFOLIO_PARAM_SPACE:
             assert dim.name in valid_fields, f"参数 {dim.name} 不在 LoopConfig"
@@ -85,6 +87,7 @@ class TestGridSearchOptimize:
         """空 ts_codes 不会崩溃，返回有效 Report"""
         from modules.loop_engine import LoopConfig
         from modules.backtest.portfolio import PortfolioConfig
+
         rep = portfolio_grid_search_optimize(
             ts_codes=[],
             days=120,

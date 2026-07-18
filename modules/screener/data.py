@@ -50,6 +50,3 @@ def get_recent_klines(ts_code: str, days: int = 60, datasource: DataSource | Non
         return []
 
     return _dict_to_daily(rows)
-
-
-

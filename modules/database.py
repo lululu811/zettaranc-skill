@@ -3,6 +3,7 @@
 负责 SQLite 数据库的创建、连接和数据表操作
 """
 
+import logging
 import os
 import sqlite3
 from pathlib import Path
@@ -10,6 +11,8 @@ from typing import Any, Optional
 from collections.abc import Generator
 from dataclasses import dataclass
 from contextlib import contextmanager
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -274,6 +277,12 @@ def init_database() -> None:
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_kline_code_date
             ON daily_kline(ts_code, trade_date DESC)
+        """)
+        # 市场环境预计算（precompute_market_contexts）按日期范围做全市场聚合，
+        # 该 covering index 让 GROUP BY 走索引顺序扫描且无需回表
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_kline_date_agg
+            ON daily_kline(trade_date, pct_chg, amount)
         """)
 
         # 2. 技术指标缓存表（每日快照）

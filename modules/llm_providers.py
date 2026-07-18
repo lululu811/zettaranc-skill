@@ -12,6 +12,8 @@ import httpx
 import json
 from collections.abc import Generator
 
+from modules.core.errors import ErrorCode, ZettarancError
+
 
 class LLMProvider:
     """LLM 生成基类"""
@@ -33,7 +35,10 @@ class MiniMaxProvider(LLMProvider):
         self.model = model or os.getenv("LLM_MODEL", self.DEFAULT_MODEL)
 
         if not self.api_key:
-            raise ValueError("LLM_API_KEY not set. Please configure LLM_API_KEY in .env")
+            raise ZettarancError(
+                ErrorCode.CONFIG_MISSING,
+                "LLM_API_KEY not set. Please configure LLM_API_KEY in .env",
+            )
 
     def generate(self, system_prompt: str, user_message: str, temperature: float = 0.7, stream: bool = False) -> str:
         """同步生成（使用 OpenAI 兼容接口）"""

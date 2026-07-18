@@ -4,6 +4,7 @@ v1.0 验收统一管线
 调用现有 backtest_shaofu_portfolio / metrics / param_registry，
 不修改任何现有模块的内部逻辑。
 """
+
 from __future__ import annotations
 
 import logging
@@ -23,6 +24,7 @@ MIN_KLINE_DAYS = 60  # 少于这个天数视为数据不足
 @dataclass
 class StockResult:
     """单股回测结果"""
+
     ts_code: str
     name: str
     trades: int
@@ -34,9 +36,11 @@ class StockResult:
     skip_reason: str = ""
     equity_curve: list[float] = field(default_factory=list)  # v3.7.4 组合级指标用
 
+
 @dataclass
 class AggregateMetrics:
     """组合级聚合指标"""
+
     total_trades: int = 0
     win_rate: float = 0.0
     total_return_pct: float = 0.0
@@ -50,6 +54,7 @@ class AggregateMetrics:
 @dataclass
 class GateResult:
     """单项硬指标判定结果"""
+
     name: str
     value: float
     threshold: float
@@ -60,6 +65,7 @@ class GateResult:
 @dataclass
 class VerifyResult:
     """v1.0 验收聚合结果"""
+
     per_stock: list[StockResult] = field(default_factory=list)
     aggregate: AggregateMetrics = field(default_factory=AggregateMetrics)
     gates: dict[str, GateResult] = field(default_factory=dict)
@@ -205,9 +211,7 @@ def verify_v10_pipeline(
     # 0. config 为 None 时尝试从 registry 读，读不到再用 LoopConfig 默认值兜底
     if config is None:
         config = LoopConfig.from_registry("shaofu_v1") or LoopConfig()
-        meta["config_source"] = (
-            "param_registry:shaofu_v1" if config is not None else "loop_engine:default"
-        )
+        meta["config_source"] = "param_registry:shaofu_v1" if config is not None else "loop_engine:default"
     else:
         meta["config_source"] = "user:explicit"
 
@@ -249,6 +253,7 @@ def verify_v10_pipeline(
     wf_result = None
     if walk_forward and not meta.get("empty_input"):
         from .walk_forward import walk_forward_verify
+
         wf_result = walk_forward_verify(
             ts_codes=ts_codes,
             days=days,
@@ -260,6 +265,7 @@ def verify_v10_pipeline(
         meta["wf_splits"] = len(wf_result.splits)
 
     from .gates import check_gates
+
     gates = check_gates(aggregate, wf=wf_result)
 
     return VerifyResult(
@@ -311,6 +317,7 @@ def _run_portfolio_engine_branch(
     wf_result = None
     if walk_forward:
         from .portfolio_walk_forward import portfolio_walk_forward_verify
+
         wf_result = portfolio_walk_forward_verify(
             ts_codes=ts_codes,
             days=days,
@@ -324,6 +331,7 @@ def _run_portfolio_engine_branch(
         meta["portfolio_engine_walk_forward_note"] = "组合净值序列真切片"
 
     from .gates import check_gates
+
     gates = check_gates(aggregate, wf=wf_result)
 
     return VerifyResult(

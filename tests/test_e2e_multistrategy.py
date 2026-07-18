@@ -7,6 +7,7 @@
 4. 验证 _score_candidate 综合评分
 5. 验证 PortfolioBacktestEngine 完整回测流程
 """
+
 from __future__ import annotations
 
 import pytest
@@ -66,48 +67,56 @@ def _generate_b1_scenario(n_days: int = 30) -> list[DailyData]:
     # 前 10 天：稳定盘整（为 KDJ 计算提供基础）
     for i in range(10):
         p = 100.0 + (i % 3) * 0.5
-        klines.append(_make_kline(
-            trade_date=f"202601{i+1:02d}",
-            close=p,
-            vol=20000,
-        ))
+        klines.append(
+            _make_kline(
+                trade_date=f"202601{i + 1:02d}",
+                close=p,
+                vol=20000,
+            )
+        )
 
     # 第 11-14 天：连续 4 天大跌（收盘接近最低价，制造极低 J 值）
     price = 100.0
     for i in range(4):
         price -= 8.0
         # 开盘 = 前一天收盘，收盘接近最低（大阴线）
-        klines.append(_make_kline(
-            trade_date=f"202601{11+i:02d}",
-            close=price + 0.5,
-            vol=25000,
-            pct_chg=-7.5,
-            is_yinxian=True,
-            opens=price + 8.0,
-            high=price + 8.5,
-            low=price,
-        ))
+        klines.append(
+            _make_kline(
+                trade_date=f"202601{11 + i:02d}",
+                close=price + 0.5,
+                vol=25000,
+                pct_chg=-7.5,
+                is_yinxian=True,
+                opens=price + 8.0,
+                high=price + 8.5,
+                low=price,
+            )
+        )
 
     # 第 15 天：缩量止跌小阳线（B1 买点触发日）
-    klines.append(_make_kline(
-        trade_date="20260116",
-        close=klines[-1].close + 0.8,
-        vol=8000,  # 大幅缩量
-        pct_chg=0.5,
-        opens=klines[-1].close,
-        high=klines[-1].close + 1.0,
-        low=klines[-1].close,
-    ))
+    klines.append(
+        _make_kline(
+            trade_date="20260116",
+            close=klines[-1].close + 0.8,
+            vol=8000,  # 大幅缩量
+            pct_chg=0.5,
+            opens=klines[-1].close,
+            high=klines[-1].close + 1.0,
+            low=klines[-1].close,
+        )
+    )
 
     # 补充到请求的天数（后续走势）
     price = klines[-1].close
     for i in range(15, n_days):
         price += 0.3
-        klines.append(_make_kline(
-            trade_date=f"202602{i-14:02d}",
-            close=price,
-            vol=15000 + (i - 15) * 500,
-        ))
+        klines.append(
+            _make_kline(
+                trade_date=f"202602{i - 14:02d}",
+                close=price,
+                vol=15000 + (i - 15) * 500,
+            )
+        )
 
     return klines
 

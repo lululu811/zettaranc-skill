@@ -16,7 +16,7 @@ description: |
   
   Output format: 中文、Z 哥口吻（长铺垫+短结论、设问自答、死规矩体、算账句）
   
-  Version: 3.6.0 | 2026-07-06
+  Version: 3.10.4 | 2026-07-16
   
   语料基础：467 篇直播/付费课整理（~200 万字）、13 ztalk transcript（12.7 万字）、
   9 篇交易心理系列（3.3 万字）、雪球专栏及网络预研。
@@ -134,20 +134,20 @@ description: |
 
 | 资源 | 加载时机 | 用途 | 大小参考 |
 |------|---------|------|---------|
-| `knowledge/trading-core.md` | 用户询问 B1/B2/B3、少妇战法、四块砖、量比战法 | 战术规则库 | ~15KB |
-| `knowledge/indicators.md` | 用户询问 MACD、KDJ、麒麟会、三波理论、沙漏评分 | 指标工具库 | ~12KB |
+| `knowledge/trading-core.md` | 用户询问 B1/B2/B3、少妇战法、四块砖、量比战法 | 战术规则库 | ~14KB |
+| `knowledge/indicators.md` | 用户询问 MACD、KDJ、麒麟会、三波理论、沙漏评分 | 指标工具库 | ~14KB |
 | `knowledge/sell-discipline.md` | 用户询问什么时候卖、防卖飞、S1/S2/S3 | 卖出规则库 | ~10KB |
-| `knowledge/trend-lines.md` | 用户询问双线战法、白线黄线、牛绳理论 | 趋势判断库 | ~8KB |
-| `knowledge/position-management.md` | 用户询问仓位、防火墙、曼城配置 | 仓位管理库 | ~10KB |
-| `knowledge/market-macro.md` | 用户询问周期、宏观、逆向操作 | 宏观判断库 | ~8KB |
-| `knowledge/heuristics.md` | 需要引用具体决策规则编号时 | 44 条启发式全量 | ~8KB |
-| `knowledge/life-decision.md` | 用户问人生/健康/能力/心性/时运 | 人生框架 | ~8KB |
-| `knowledge/career-development.md` | 用户问职业跃迁、赚钱能力 | 职业框架 | ~8KB |
-| `knowledge/business-judgment.md` | 用户问创业/赛道/企业分析 | 商业框架 | ~8KB |
-| `knowledge/data_dictionary.md` | Agent 需要理解数据结构时 | 输入数据字典 | ~10KB |
-| `knowledge/signal_dictionary.md` | Agent 需要理解指标信号时 | 输出信号字典 | ~8KB |
-| `knowledge/workflow.md` | 用户提问后执行 Step 1/1.5/2/3 任意步骤时 | 完整工作流（分类/问诊/研究/回答） | ~16KB |
-| `knowledge/harness.md` | 需要对照约束规则 / 验证输出 / 纠错恢复时 | Guardrails / Feedback / Error Recovery / Context | ~22KB |
+| `knowledge/trend-lines.md` | 用户询问双线战法、白线黄线、牛绳理论 | 趋势判断库 | ~4KB |
+| `knowledge/position-management.md` | 用户询问仓位、防火墙、曼城配置 | 仓位管理库 | ~6KB |
+| `knowledge/market-macro.md` | 用户询问周期、宏观、逆向操作 | 宏观判断库 | ~10KB |
+| `knowledge/heuristics.md` | 需要引用具体决策规则编号时 | 44 条启发式全量 | ~4KB |
+| `knowledge/life-decision.md` | 用户问人生/健康/能力/心性/时运 | 人生框架 | ~13KB |
+| `knowledge/career-development.md` | 用户问职业跃迁、赚钱能力 | 职业框架 | ~9KB |
+| `knowledge/business-judgment.md` | 用户问创业/赛道/企业分析 | 商业框架 | ~12KB |
+| `knowledge/data_dictionary.md` | Agent 需要理解数据结构时 | 输入数据字典 | ~6KB |
+| `knowledge/signal_dictionary.md` | Agent 需要理解指标信号时 | 输出信号字典 | ~9KB |
+| `knowledge/workflow.md` | 用户提问后执行 Step 1/1.5/2/3 任意步骤时 | 完整工作流（分类/问诊/研究/回答） | ~19KB |
+| `knowledge/harness.md` | 需要对照约束规则 / 验证输出 / 纠错恢复时 | Guardrails / Feedback / Error Recovery / Context | ~17KB |
 | `knowledge/improvement-system.md` | 需要跟踪验证策略、月度复盘、自我改进时 | 跟踪池 + 复盘 + 优化闭环 | ~7KB |
 | `knowledge/advanced-patterns.md` | 用户询问高级战法、复杂形态识别 | 高级战法库 | ~6KB |
 | `knowledge/breathing-theory.md` | 用户询问呼吸理论、蜈蚣图、牛绳理论 | 呼吸理论库 | ~2KB |
@@ -222,8 +222,8 @@ description: |
 
 | 项 | 值 |
 |----|-----|
-| 版本 | v3.3.1 |
-| 更新日期 | 2026-07-04 |
+| 版本 | v3.10.4 |
+| 更新日期 | 2026-07-16 |
 | 语料截止 | 2026-04-18 及后续更新 |
 | 质量检查 | `corpus/quality_check.py SKILL.md --strict` |
 | 许可证 | MIT |

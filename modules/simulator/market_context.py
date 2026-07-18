@@ -17,16 +17,14 @@ from . import MarketContext, MarketRegime
 _DEFAULT_INDEX_CODE = "000001.SH"
 
 
-def _trend_score(klines: list[DailyData]) -> float:
-    """基于白线/黄线位置与斜率给出大盘趋势得分 0-100。"""
-    if len(klines) < 60:
-        return 50.0
-
-    white = calculate_zg_white(klines)
-    yellow = calculate_dg_yellow(klines)
-    prev_white = calculate_zg_white(klines[:-1])
-    prev_yellow = calculate_dg_yellow(klines[:-1])
-
+def _trend_score_from_values(
+    white: float,
+    yellow: float,
+    prev_white: float,
+    prev_yellow: float,
+    close: float,
+) -> float:
+    """由已算好的白线/黄线值给出大盘趋势得分 0-100（纯算术，无重复计算）。"""
     score = 50.0
     if white > yellow:
         score += 20
@@ -39,10 +37,65 @@ def _trend_score(klines: list[DailyData]) -> float:
         score += 10
 
     # 价格在黄线上方加分
-    if klines[-1].close > yellow:
+    if close > yellow:
         score += 10
 
     return max(0.0, min(100.0, score))
+
+
+def _trend_score(klines: list[DailyData]) -> float:
+    """基于白线/黄线位置与斜率给出大盘趋势得分 0-100。"""
+    if len(klines) < 60:
+        return 50.0
+
+    white = calculate_zg_white(klines)
+    yellow = calculate_dg_yellow(klines)
+    prev_white = calculate_zg_white(klines[:-1])
+    prev_yellow = calculate_dg_yellow(klines[:-1])
+
+    return _trend_score_from_values(white, yellow, prev_white, prev_yellow, klines[-1].close)
+
+
+def _precompute_line_series(klines: list[DailyData], start: int) -> tuple[dict[int, float], dict[int, float]]:
+    """一次性预计算白线/黄线序列，避免逐日期 O(n) 重复计算。
+
+    浮点运算顺序与 calculate_zg_white / calculate_dg_yellow 完全一致，
+    保证结果逐位相同。仅计算 start 及之后的位置（precompute 只需 idx >= 59）。
+
+    Returns:
+        (whites, yellows)：下标 -> 指标值 的两个 dict
+    """
+    closes = [k.close for k in klines]
+    whites: dict[int, float] = {}
+    yellows: dict[int, float] = {}
+    ema_k = 2 / 11  # calculate_ema(period=10) 的平滑系数
+
+    for i in range(max(0, start), len(klines)):
+        n = i + 1
+        # 白线：calculate_zg_white 同款分支
+        if n < 10:
+            whites[i] = 0
+        elif n < 19:
+            ema = closes[0]
+            for price in closes[1 : i + 1]:
+                ema = price * ema_k + ema * (1 - ema_k)
+            whites[i] = ema
+        else:
+            ema = closes[i - 9]
+            for price in closes[i - 8 : i + 1]:
+                ema = price * ema_k + ema * (1 - ema_k)
+            whites[i] = round(ema, 2)
+        # 黄线：calculate_dg_yellow 同款分支
+        if n < 114:
+            yellows[i] = 0
+        else:
+            ma14 = sum(closes[i - 13 : i + 1]) / 14
+            ma28 = sum(closes[i - 27 : i + 1]) / 28
+            ma57 = sum(closes[i - 56 : i + 1]) / 57
+            ma114 = sum(closes[i - 113 : i + 1]) / 114
+            yellows[i] = round((ma14 + ma28 + ma57 + ma114) / 4, 2)
+
+    return whites, yellows
 
 
 def _breadth_approx(klines: list[DailyData]) -> float:
@@ -207,7 +260,7 @@ def precompute_market_contexts(
 ) -> dict[str, MarketContext]:
     """批量预计算所有日期的 MarketContext，避免逐天重复查询数据库。
 
-    比 get_market_context 快 100x+：3 次 SQL 替代 N 次。
+    比 get_market_context 快 100x+：2 次 SQL 替代 N 次，指标序列一次性预计算。
     """
     if not dates:
         return {}
@@ -225,8 +278,9 @@ def precompute_market_contexts(
         index_klines.append(DailyData(**k))
     index_dates = {k.trade_date: i for i, k in enumerate(index_klines)}
 
-    # 2. 批量查询涨跌停家数
+    # 2. 批量查询涨跌停家数与每日总成交额（单条 SQL 一次扫描，避免两次全表扫描）
     breadth_map: dict[str, tuple[int, int]] = {}
+    daily_amounts: dict[str, float] = {}
     try:
         with get_connection() as conn:
             cursor = conn.cursor()
@@ -234,26 +288,8 @@ def precompute_market_contexts(
                 """
                 SELECT trade_date,
                     SUM(CASE WHEN pct_chg >= 9.5 THEN 1 ELSE 0 END) AS limit_up,
-                    SUM(CASE WHEN pct_chg <= -9.5 THEN 1 ELSE 0 END) AS limit_down
-                FROM daily_kline
-                WHERE trade_date >= ? AND trade_date <= ?
-                GROUP BY trade_date
-                """,
-                (earliest, max(dates)),
-            )
-            for row in cursor.fetchall():
-                breadth_map[row["trade_date"]] = (int(row["limit_up"]), int(row["limit_down"]))
-    except Exception:
-        pass
-
-    # 3. 批量查询每日总成交额
-    daily_amounts: dict[str, float] = {}
-    try:
-        with get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT trade_date, SUM(amount) AS total_amount
+                    SUM(CASE WHEN pct_chg <= -9.5 THEN 1 ELSE 0 END) AS limit_down,
+                    SUM(amount) AS total_amount
                 FROM daily_kline
                 WHERE trade_date >= ? AND trade_date <= ?
                 GROUP BY trade_date
@@ -262,11 +298,16 @@ def precompute_market_contexts(
                 (earliest, max(dates)),
             )
             for row in cursor.fetchall():
+                breadth_map[row["trade_date"]] = (int(row["limit_up"]), int(row["limit_down"]))
                 daily_amounts[row["trade_date"]] = float(row["total_amount"])
     except Exception:
         pass
 
     sorted_amount_dates = sorted(daily_amounts.keys())
+    amount_pos = {d: i for i, d in enumerate(sorted_amount_dates)}
+
+    # 3. 一次性预计算白线/黄线序列（idx < 60 的日期走默认环境，最小需要 idx-1=59）
+    whites, yellows = _precompute_line_series(index_klines, start=59)
 
     # 4. 逐日期组装 MarketContext（纯内存计算，无 IO）
     for trade_date in dates:
@@ -284,10 +325,13 @@ def precompute_market_contexts(
             )
             continue
 
-        sub_klines = index_klines[: idx + 1]
-        trend = _trend_score(sub_klines)
-        breadth = _breadth_approx(sub_klines)
-        mf = _moneyflow_score(sub_klines)
+        trend = _trend_score_from_values(
+            whites[idx], yellows[idx], whites[idx - 1], yellows[idx - 1], index_klines[idx].close
+        )
+        # 广度/资金得分只依赖最近 20 根 K 线，传窗口避免整段切片复制
+        window20 = index_klines[idx - 19 : idx + 1]
+        breadth = _breadth_approx(window20)
+        mf = _moneyflow_score(window20)
 
         if trend >= 65 and breadth > 0.1 and mf >= 55:
             regime = MarketRegime.STRONG
@@ -298,7 +342,7 @@ def precompute_market_contexts(
 
         limit_up, limit_down = breadth_map.get(normalized, (0, 0))
 
-        amt_idx = sorted_amount_dates.index(normalized) if normalized in daily_amounts else -1
+        amt_idx = amount_pos.get(normalized, -1)
         if amt_idx >= 40 and sorted_amount_dates[amt_idx] == normalized:
             recent = sum(daily_amounts[sorted_amount_dates[amt_idx - i]] for i in range(20))
             previous = sum(daily_amounts[sorted_amount_dates[amt_idx - 20 - i]] for i in range(20))

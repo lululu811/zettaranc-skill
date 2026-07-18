@@ -7,6 +7,7 @@
 - ShaofuLoopEngine 集成移动止损（持仓期间 highest_after_entry 追踪 + 触发）
 - LoopConfig 向后兼容
 """
+
 from __future__ import annotations
 
 import pytest
@@ -151,7 +152,8 @@ class TestCalcStopLossPrice:
         # ATR = 2.0 (TR 都是 2)
         # stop = 100.5 - 2 * 2 = 96.5
         stop = _calc_stop_loss_price(
-            klines, day_idx=5,
+            klines,
+            day_idx=5,
             method="atr_based",
             atr_multiplier=2.0,
             atr_window=3,
@@ -161,12 +163,14 @@ class TestCalcStopLossPrice:
     def test_atr_based_fallback_on_empty_data(self, monkeypatch):
         """ATR 数据不足（force 返回 0）时 fallback 到 entry_low"""
         from modules.core import atr as atr_module
+
         # 强制 calculate_atr 返回 0 模拟 ATR 无法计算的场景
         monkeypatch.setattr(atr_module, "calculate_atr", lambda klines, window: 0.0)
         kline1 = _make_kline("20260101", close=100.0)
         kline2 = _make_kline("20260102", close=99.0)
         stop = _calc_stop_loss_price(
-            [kline1, kline2], day_idx=1,
+            [kline1, kline2],
+            day_idx=1,
             method="atr_based",
             stop_loss_pct=-0.05,
             atr_multiplier=2.0,

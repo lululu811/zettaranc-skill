@@ -9,8 +9,6 @@ from ..database import get_db_connection
 from ..datasource import DataSource, daily_to_dict
 from ..indicators import DailyData
 
-# 向后兼容别名
-_daily_to_dict = daily_to_dict
 from .criteria import _CRITERIA_REGISTRY, _check_centipede, _check_sandglass_min
 from .data import get_all_stocks, get_recent_klines
 from .models import StockScore
@@ -21,6 +19,9 @@ from .scoring import (
     score_trend,
     score_volume_pattern,
 )
+
+# 向后兼容别名
+_daily_to_dict = daily_to_dict
 
 logger = logging.getLogger(__name__)
 

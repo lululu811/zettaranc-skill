@@ -88,6 +88,7 @@ class LoopConfig:
         """
         try:
             from modules.verify.registry_writer import load_config_from_registry
+
             return load_config_from_registry(strategy_name)
         except ImportError:
             return None
@@ -122,6 +123,7 @@ class LoopTrade:
     partial_exits: list[dict[str, Any]] = field(default_factory=list)  # 卤煮减仓记录
     position_pct: float = 0.0  # 该笔交易的实际仓位比例（占总资金）
     market_regime: str = ""  # 入场时的市场状态（BULL/BEAR/SIDEWAYS）
+    strategy_source: str = ""  # v3.10.0：触发该交易的策略名（B1/B2/SB1/长安 等）
 
 
 # ============================================================
@@ -215,6 +217,7 @@ def _calc_stop_loss_price(
         # 止损价 = 入场参考价 - ATR × 倍数
         # 入场参考价用 entry_kline.close，更贴近实际成交
         from .core.atr import calculate_atr
+
         # 用入场前 window+1 根 K 线计算 ATR（不偷看入场日之后数据）
         atr_window_klines = klines[max(0, day_idx - atr_window - 1) : day_idx + 1]
         atr_value = calculate_atr(atr_window_klines, window=min(atr_window, len(atr_window_klines) - 1))
@@ -462,9 +465,7 @@ class ShaofuLoopEngine:
             return True
         # v3.10.1：移动止损检查（仅在启用时）
         if self.config.trailing_stop_enabled and trade.highest_after_entry > 0:
-            trailing_price = calc_trailing_stop_price(
-                trade.highest_after_entry, self.config.trailing_stop_pct
-            )
+            trailing_price = calc_trailing_stop_price(trade.highest_after_entry, self.config.trailing_stop_pct)
             if trailing_price > 0 and current.close < trailing_price:
                 return True
         return False

@@ -249,6 +249,7 @@ class TestNet:
         disable_proxy()
 
         import os
+
         assert os.environ["HTTP_PROXY"] == ""
         assert os.environ["HTTPS_PROXY"] == ""
 
@@ -260,5 +261,6 @@ class TestNet:
         disable_proxy()
 
         import os
+
         assert os.environ["HTTP_PROXY"] == ""
         assert os.environ["HTTPS_PROXY"] == ""

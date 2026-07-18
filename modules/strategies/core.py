@@ -187,9 +187,6 @@ def get_kline_data(ts_code: str, days: int = 120) -> list[dict]:
     return data_list
 
 
-
-
-
 def _calc_kdj(klines: list[dict]) -> tuple[float, float, float]:
     """计算 KDJ（委托到 indicators.calculate_kdj，支持 dict 输入）"""
     from ..indicators import calculate_kdj

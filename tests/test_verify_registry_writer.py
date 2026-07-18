@@ -1,4 +1,5 @@
 """多因子结果 → param_registry 测试"""
+
 from __future__ import annotations
 
 from unittest.mock import patch

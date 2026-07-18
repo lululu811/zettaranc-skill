@@ -13,6 +13,7 @@
 v3.10.2 新增 `portfolio_grid_search_optimize`：在 IS 段上穷举参数网格，
 按目标指标（如 calmar）选最优组合，避免 OOS 过拟合。
 """
+
 from __future__ import annotations
 
 import copy
