@@ -75,7 +75,6 @@ pub fn run_single_strategy_backtest(
     let mut position = 0.0_f64;
     let mut entry_price = 0.0_f64;
     let mut entry_date = 0_i32;
-    let mut held_days = 0_usize;
     let mut net_values = Vec::with_capacity(n);
     let mut cash_history = Vec::with_capacity(n);
     let mut trades = Vec::new();
@@ -85,7 +84,6 @@ pub fn run_single_strategy_backtest(
 
         // 1. 持仓中：判断离场
         if position > 0.0 {
-            held_days += 1;
             if let Some(reason) = exit_at(i, klines, config, entry_price) {
                 let pnl = (price - entry_price) * position;
                 cash += price * position;
@@ -99,7 +97,6 @@ pub fn run_single_strategy_backtest(
                 });
                 position = 0.0;
                 entry_price = 0.0;
-                held_days = 0;
             }
         }
 
@@ -113,7 +110,6 @@ pub fn run_single_strategy_backtest(
                         position = shares;
                         entry_price = signal_price;
                         entry_date = klines.items[i].trade_date;
-                        held_days = 0;
                         cash -= shares * signal_price;
                     }
                 }
@@ -129,7 +125,6 @@ pub fn run_single_strategy_backtest(
     if position > 0.0 {
         let price = klines.items[n - 1].close;
         let pnl = (price - entry_price) * position;
-        cash += price * position;
         trades.push(Trade {
             entry_date,
             entry_price,

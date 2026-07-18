@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use zt_core_types::{CoreError, KLineSeries, Result};
 
 use crate::single::{
-    run_single_strategy_backtest, SingleStrategyConfig, SingleStrategyResult, Trade,
+    run_single_strategy_backtest, SingleStrategyConfig, SingleStrategyResult,
 };
 
 #[derive(Debug, Clone, Deserialize)]
@@ -71,7 +71,6 @@ where
 
     // 聚合 trades
     let mut all_trades: Vec<NamedTrade> = Vec::new();
-    let mut total_pnl = 0.0;
     let mut wins = 0_usize;
     let mut count = 0_usize;
 
@@ -86,7 +85,6 @@ where
                 pnl: t.pnl,
                 strategy: "single".into(),
             });
-            total_pnl += t.pnl;
             if t.pnl > 0.0 {
                 wins += 1;
             }
