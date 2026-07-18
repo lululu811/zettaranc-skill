@@ -117,7 +117,14 @@ where
     let sharpe = compute_sharpe(&net_values);
     let max_dd = compute_max_drawdown(&net_values);
     let calmar = if max_dd > 0.0 { sharpe / max_dd } else { 0.0 };
-    let final_value = *net_values.last().unwrap_or(&initial);
+    // `net_values` is the per-bar average across stocks (chart-friendly),
+    // while `all_trades` is the un-averaged list of every stock's trades.
+    // We derive `final_value` from the trade list so that
+    // `final_value - initial == sum(trades.pnl)`, regardless of how many
+    // stocks were aggregated. Using `*net_values.last()` here would only
+    // reflect one stock's gain and would silently disagree with `trades`.
+    let total_pnl: f64 = all_trades.iter().map(|t| t.pnl).sum();
+    let final_value = initial + total_pnl;
 
     Ok(PortfolioResult {
         net_values,

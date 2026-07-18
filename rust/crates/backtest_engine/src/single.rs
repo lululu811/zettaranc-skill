@@ -125,6 +125,10 @@ pub fn run_single_strategy_backtest(
     if position > 0.0 {
         let price = klines.items[n - 1].close;
         let pnl = (price - entry_price) * position;
+        // 与正常离场分支保持一致：把仓位价值回流到 cash。
+        // 后续用 `cash + position * last_price` 推导 final_value，
+        // 因此这次写入会真实影响结果，而不是 no-op。
+        cash += price * position;
         trades.push(Trade {
             entry_date,
             entry_price,
@@ -133,12 +137,17 @@ pub fn run_single_strategy_backtest(
             pnl,
             exit_reason: "force_close".into(),
         });
+        position = 0.0;
     }
 
     let win_rate = compute_win_rate(&trades);
     let sharpe = compute_sharpe(&net_values, config.initial_cash);
     let max_dd = compute_max_drawdown(&net_values);
-    let final_value = *net_values.last().unwrap_or(&config.initial_cash);
+    // 显式用「现金 + 剩余仓位按末价计」推导 final_value，保证
+    //   final_value == cash + position * last_price
+    // 与 trades.pnl 之和 (= initial + Σpnl) 一致。
+    let last_price = klines.items[n - 1].close;
+    let final_value = cash + position * last_price;
 
     Ok(SingleStrategyResult {
         net_values,
