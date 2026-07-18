@@ -83,6 +83,83 @@ npx skills add ./SKILL.md
 - [ ] 全量测试通过：`python -m pytest tests/ -q`
 - [ ] 质量门通过：`python corpus/quality_check.py SKILL.md --strict`
 - [ ] 打 git tag：`git tag vx.y.z`
+- [ ] 推送 tag：`git push origin vx.y.z`（**触发自动发布流程**，见下）
+
+## 自动发布流程（L4：CI/CD）
+
+> 自 v4.0.3 起，发布到 PyPI / GitHub Release / ClawHub 已由 GitHub Actions 自动完成。
+> 维护者只需推送 tag，CI 会按顺序执行：**测试 → 构建 wheel → 发布 PyPI（稳定 tag）→ 创建 GitHub Release → 通知 ClawHub**。
+
+### 触发条件
+
+推送形如 `v*.*.*` 的 tag 即可触发 `.github/workflows/release.yml`。预发布 tag（含 `rc` / `alpha` / `beta`）会被识别并标记为 **prerelease**，跳过 PyPI 但仍创建 GitHub Release。
+
+### 自动执行的步骤
+
+1. **Test job**（Python 3.12 + 3.13 矩阵）
+   - 安装 Python + Rust stable toolchain
+   - 跑 `cargo fmt --check` + `cargo clippy -D warnings` + `cargo test --workspace --exclude zt_bindings`
+   - 用 maturin 在两个 Python 版本上分别 build wheel
+   - 上传 wheel artifact（保留 14 天）
+
+2. **pypi-publish job**（仅稳定 tag）
+   - 下载所有 matrix job 的 wheel
+   - 通过 Trusted Publishing (OIDC) 发布到 PyPI
+   - 跳过已存在的版本（`skip-existing: true`）
+
+3. **github-release job**（所有 tag）
+   - 生成 sdist
+   - 创建 GitHub Release（预发布 tag 自动标 `prerelease: true`）
+   - 附 wheel + sdist 到 Release
+
+4. **clawhub-publish job**（所有 tag，占位阶段）
+   - 校验 `skill.json` 合法
+   - 若配置了 `CLAWHUB_WEBHOOK` + `CLAWHUB_TOKEN` secret 则 POST 通知
+   - 当前为占位实现，集成真实 ClawHub API 后启用
+
+### 维护者一次性配置
+
+以下 secrets 需在 GitHub repo Settings → Secrets and variables → Actions 中配置：
+
+| Secret | 用途 | 是否必需 |
+| --- | --- | --- |
+| `GITHUB_TOKEN` | 创建 GitHub Release | **自动提供**，无需配置 |
+| PyPI Trusted Publishing | 发布到 PyPI | **需在 PyPI 项目设置中添加 OIDC trusted publisher**（指向本仓库的 `pypi-publish` environment） |
+| `CLAWHUB_WEBHOOK` | ClawHub 通知 webhook URL | 可选，留空则跳过 |
+| `CLAWHUB_TOKEN` | ClawHub 通知认证 token | 可选，留空则跳过 |
+
+### 本地 dry-run 验证
+
+```bash
+# 1. 校验 release.yml YAML 语法
+python3 -c "import yaml; yaml.safe_load(open('.github/workflows/release.yml'))"
+
+# 2. 模拟 tag 推送（不真触发 CI）
+git tag v0.0.0-test --delete  # 创建测试 tag 仅本地
+git push origin :refs/tags/v0.0.0-test  # 删除远端测试 tag
+
+# 3. 跑 release workflow 中测试 job 的本地等价命令
+pytest tests/ --ignore=tests/test_rust_compat.py -q
+cd rust && cargo test --workspace --exclude zt_bindings
+cd rust/crates/bindings && maturin build --release
+```
+
+### 紧急回滚
+
+如果自动发布的版本有问题：
+
+```bash
+# 1. 从 PyPI yank 坏版本（不删，只是不再出现在 pip 默认索引）
+#    在 https://pypi.org/project/zettaranc-skill/#history 操作
+
+# 2. 删除远端 tag 并重建
+git push origin :refs/tags/vX.Y.Z
+git tag -d vX.Y.Z
+git tag -a vX.Y.Z-fix -m "fixed version"
+git push origin main --tags
+
+# 3. 修复后 bump 到 vX.Y.Z+1
+```
 
 ## 语料来源黑名单
 

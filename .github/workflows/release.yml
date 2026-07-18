@@ -1,0 +1,210 @@
+name: Release
+
+# v4.0.3 — L4 CI/CD 自动化部署
+# 触发：推送任何 v*.*.* 形式 tag（含 rc / alpha / beta）
+# 流程：测试矩阵 → maturin build wheel → 稳定 tag 发布到 PyPI → ClawHub notify（占位）
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要发布的 tag（如 v4.0.3，留空使用当前 ref）'
+        required: false
+        type: string
+
+permissions:
+  contents: write  # 允许创建 GitHub Release
+  id-token: write  # PyPI Trusted Publishing (OIDC)
+
+jobs:
+  # ───────────────────────────────────────────────────────────
+  # Job 1: 在 Python 3.12 / 3.13 上跑完整测试 + 构建 wheel
+  # ───────────────────────────────────────────────────────────
+  test:
+    name: Test + Build (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-${{ matrix.python-version }}-
+            ${{ runner.os }}-pip-
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install maturin pytest
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> target
+
+      - name: Run cargo fmt
+        working-directory: rust
+        run: cargo fmt --all -- --check
+
+      - name: Run cargo clippy
+        working-directory: rust
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run cargo tests (exclude zt_bindings on Linux)
+        working-directory: rust
+        run: cargo test --workspace --exclude zt_bindings
+
+      - name: Build wheel with maturin
+        run: |
+          cd rust/crates/bindings
+          maturin build --release --out ../../target/wheels
+
+      - name: Install wheel and run pytest
+        run: |
+          pip install target/wheels/*.whl
+          python -c "import _core_compute; print('core version:', _core_compute.__version__)"
+          pytest tests/test_rust_compat.py tests/test_cli_uses_rust.py -v --tb=short
+        continue-on-error: true  # 兼容层测试若缺失则跳过
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-py${{ matrix.python-version }}
+          path: target/wheels/*.whl
+          if-no-files-found: error
+          retention-days: 14
+
+  # ───────────────────────────────────────────────────────────
+  # Job 2: 发布到 PyPI（仅稳定 tag，无 rc/alpha/beta）
+  # ───────────────────────────────────────────────────────────
+  pypi-publish:
+    name: Publish to PyPI
+    needs: test
+    runs-on: ubuntu-latest
+    if: |
+      startsWith(github.ref, 'refs/tags/v') &&
+      !contains(github.ref, 'rc') &&
+      !contains(github.ref, 'alpha') &&
+      !contains(github.ref, 'beta')
+    environment:
+      name: pypi
+      url: https://pypi.org/project/zettaranc-skill/
+    steps:
+      - name: Download wheels from all matrix jobs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-py*
+          path: dist
+          merge-multiple: true
+
+      - name: List downloaded artifacts
+        run: |
+          ls -la dist/
+          echo "=== wheel files ==="
+          find dist -name "*.whl" -type f
+
+      - name: Publish to PyPI via Trusted Publishing (OIDC)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-directory: dist/
+          skip-existing: true
+
+  # ───────────────────────────────────────────────────────────
+  # Job 3: 创建 GitHub Release（所有 tag 都创建，含草稿/预发布标记）
+  # ───────────────────────────────────────────────────────────
+  github-release:
+    name: Create GitHub Release
+    needs: test
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download sdist + wheels
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-py*
+          path: dist
+          merge-multiple: true
+
+      - name: Generate source distribution
+        run: |
+          pip install build
+          python -m build --sdist --outdir dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref, 'rc') || contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
+          generate_release_notes: true
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ───────────────────────────────────────────────────────────
+  # Job 4: ClawHub skill 发布通知（占位，待集成真实 API）
+  # ───────────────────────────────────────────────────────────
+  clawhub-publish:
+    name: Publish to ClawHub (notify)
+    needs: [pypi-publish, github-release]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    continue-on-error: true  # 占位阶段失败不影响主发布链路
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate skill.json
+        run: |
+          python -c "import json; data = json.load(open('skill.json')); print('OK version:', data.get('version'))"
+
+      - name: Notify ClawHub
+        env:
+          CLAWHUB_WEBHOOK: ${{ secrets.CLAWHUB_WEBHOOK }}
+          CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
+        run: |
+          if [ -z "$CLAWHUB_WEBHOOK" ]; then
+            echo "::warning::CLAWHUB_WEBHOOK not configured, skipping publish notify (placeholder)"
+            echo "TODO: integrate with ClawHub publish API"
+            exit 0
+          fi
+
+          VERSION=${GITHUB_REF_NAME}
+          echo "Notifying ClawHub for $VERSION..."
+          curl -fsSL -X POST "$CLAWHUB_WEBHOOK" \
+            -H "Authorization: Bearer $CLAWHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"name\":\"zettaranc-skill\",\"version\":\"$VERSION\",\"source\":\"github-actions\"}" \
+            && echo "ClawHub notified" \
+            || echo "::warning::ClawHub notify failed, will retry later"

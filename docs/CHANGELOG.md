@@ -4,6 +4,17 @@
 
 ## v4.0.3 (TBD) — 收尾技术债
 
+### L4: CI/CD 自动化部署
+
+- **新增** `.github/workflows/release.yml`
+  - 触发条件：推送 `v*.*.*` 形式 tag
+  - Test job：Python 3.12 + 3.13 矩阵 → cargo fmt/clippy/test → maturin build wheel → 上传 artifact
+  - pypi-publish job：稳定 tag（无 rc/alpha/beta）通过 Trusted Publishing (OIDC) 发布到 PyPI
+  - github-release job：所有 tag 自动创建 GitHub Release（预发布 tag 自动标 prerelease）
+  - clawhub-publish job：所有 tag 通知 ClawHub（占位，集成真实 API 后启用）
+- **更新** `docs/CONTRIBUTING.md`：新增「自动发布流程（L4：CI/CD）」章节，含 secrets 配置表 + 紧急回滚步骤
+- **自动替换**：手动 `git tag + push` + 手动 PyPI 发布 + 手动 ClawHub 上传的旧流程
+
 ### 变更
 
 - L2: Python 最低版本从 3.10 升到 3.12（classifier + requires-python + CI 矩阵）
