@@ -7,6 +7,11 @@
 ### 变更
 
 - L2: Python 最低版本从 3.10 升到 3.12（classifier + requires-python + CI 矩阵）
+- M3: PyO3 0.22 → 0.23
+  - `rust/Cargo.toml`: workspace `pyo3` 0.21 → 0.23
+  - `rust/crates/bindings/Cargo.toml`: `pyo3` 0.22 → 0.23
+  - 解锁 Python 3.14 编译支持；abi3-py312 保留（Python 3.12+ 兼容）
+  - 8 处 deprecation warning（`ToPyObject::to_object` / `PyList::empty_bound` / `PyDict::new_bound`），不影响功能，留待后续 PR 升级到 `IntoPyObject` API
 
 ## v4.0.0 (2026-07-18) — Rust 内核
 

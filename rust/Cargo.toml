@@ -34,7 +34,7 @@ approx = "0.5"
 
 # 仅在 bindings crate 中使用 pyo3 / pyo3-polars。
 # workspace 依赖不能加 optional，所以这里不带 optional，由 bindings/Cargo.toml 自行启用 feature。
-pyo3 = { version = "0.21", features = ["extension-module", "abi3-py312"] }
+pyo3 = { version = "0.23", features = ["extension-module", "abi3-py312"] }
 pyo3-polars = { version = "0.10", git = "https://github.com/ritchie46/polars", features = ["lazy"] }
 
 [profile.release]

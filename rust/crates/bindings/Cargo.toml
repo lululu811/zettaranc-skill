@@ -20,7 +20,7 @@ zt_grid_search = { path = "../grid_search" }
 # pyo3 is optional so `cargo test --no-default-features` does NOT trigger
 # pyo3's build script (which complains on Python 3.14 with pyo3 0.22, and
 # would force every developer to match a specific Python version).
-pyo3 = { version = "0.22", features = ["extension-module"], optional = true }
+pyo3 = { version = "0.23", features = ["extension-module"], optional = true }
 serde_json = "1.0"
 
 [dev-dependencies]
