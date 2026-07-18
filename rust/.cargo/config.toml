@@ -12,6 +12,11 @@
 #
 # Update path if your Homebrew prefix differs (Apple Silicon: /opt/homebrew,
 # Intel: /usr/local).
+#
+# CI override: GitHub Actions runners (ubuntu/macos) do NOT have lld 22 at
+# /opt/homebrew/bin/ld64.lld. CI sets `CARGO_BUILD_RUSTFLAGS=` (empty) to
+# override these flags. For local dev with Homebrew lld installed, no env
+# action is needed.
 [target.aarch64-apple-darwin]
 rustflags = [
   "-C", "link-arg=-fuse-ld=/opt/homebrew/bin/ld64.lld",
