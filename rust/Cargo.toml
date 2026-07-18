@@ -23,9 +23,9 @@ anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # 数据栈
-polars = { version = "0.40", default-features = false, features = ["dtype-full", "temporal", "strings"] }
-arrow-array = "53"
-arrow-schema = "53"
+polars = { version = "0.54", default-features = false, features = ["dtype-full", "temporal", "strings"] }
+arrow-array = "59"
+arrow-schema = "59"
 # 并行
 rayon = "1.10"
 # 测试
