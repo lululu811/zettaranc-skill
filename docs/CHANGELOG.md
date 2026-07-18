@@ -121,6 +121,31 @@
 - `fe3f550` merge: env-try (macOS LINKEDIT fix + Docker fallback)
 - `f83643a` chore(hygiene): adopt 68 unstaged files + 1 stash from prior session
 
+## v4.0.3 (2026-07-18) — 收尾技术债（pandas 3.x 升级）
+
+> **「v4.0.3：依赖规范升级到 pandas 3.x；之前 spec `>=2.0.0` 与已装 3.0.3 不一致，本版彻底锁齐。」**
+
+### 变更
+
+- **L3：pandas 依赖升级** `>=2.0.0` → `>=3.0,<4`
+  - `pyproject.toml`: `dependencies` 内 `pandas` spec
+  - `requirements.txt`: 同步
+- 当前已安装版本 pandas **3.0.3**（与新 spec 对齐）
+- **未触发任何 pandas 2.x → 3.x API 兼容问题**：扫了 `modules/screener/` / `modules/strategies/` / `modules/data_sync/` / `modules/simulator/` 等热路径，无 `DataFrame.append` / `Series.iteritems` / `inplace` 行为变更点；未来 pandas 3.x 移除 deprecated API 时再补 PR
+
+### 验证
+
+- **`pytest tests/ --ignore=tests/test_rust_compat.py`：** 1265 passed, 15 skipped
+  - 5 个预存在失败（`tests/test_cli_uses_rust.py` 中 5 个 Rust bridge fallback 测试），主分支同样失败，与本次升级无关——属于测试隔离问题（非 pandas），等单独 PR 修
+- **`cargo test --workspace --exclude zt_bindings`：** **58/58 通过**（与 v4.0.2 一致）
+- **`python3 -W error::FutureWarning -W error::DeprecationWarning` 导入热门模块**：`modules.screener.engine` / `modules.strategies.core` / `modules.data_sync.syncer` / `modules.simulator.market_context` 均无 warning 抛出
+
+### 不变更
+
+- Rust 代码：未修改（cargo 58/58 仍通过）
+- 任何运行时代码（`modules/`）：未修改（spec 与 installed 版本一致后零变更）
+- `requirements*.txt` 仅 `requirements.txt`（无 dev/lock 等其它文件）
+
 ## v4.0.2 (2026-07-18) — CLI ↔ Rust PyO3 桥
 
 > **「v4.0.2：CLI 默认走 Rust PyO3 回测路径；`_core_compute` 缺失或抛错时 silent fallback 到 Python。」**
