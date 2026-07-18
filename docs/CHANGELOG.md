@@ -172,6 +172,56 @@
 - 不影响 `ZETTARANC_BACKTEST_IMPL=python` 用户：CLI 行为与 v4.0.1 完全一致
 - `_core_compute` 未安装用户：第一次 import `compute_func(...)` 返回 None，bridge 走 Python，log 一条 "fallback" debug（DEBUG 级别不显示）
 
+### 后续合并（H2/H3/M1/M2/L5/L6 在 v4.0.2 同一批完成）
+
+> 这些工作在 feature 分支独立完成，最终合并到 v4.0.2 release commit。
+
+#### H2: Rust dead-code 清理
+- `zt_backtest_engine` 8 个 warning → 0：`Trade` import、`cash`/`held_days`/`total_pnl` 累加器全部 dead code
+- ⚠️ 顺手发现：force-close 分支 `cash += price * position` 不读 — `pnl` 记入 trades 但 `cash_history`/`final_value` 不反映；仍 partial no-op 状态，留待后续决定
+
+#### H3: 静默 except 收敛
+- 5 hot files：`data_sync/syncer.py`(8) / `tracking_manager.py`(7) / `simulator/narrator.py`(7) / `tracking_syncer.py`(6) / `review_generator.py`(6)
+- 33+ `except Exception` → narrow 到具体类型（`sqlite3.Error` / `OSError` / `ValueError` / `KeyError` / `ConnectionError` 等）
+- `print()` → `logger.warning(...)` + ts_code/trade_date/review_month 上下文
+- **删除 2 个空 try/except**（`tracking_syncer.py::_detect_patterns` / `_detect_stage`，try 块只 return 常量）
+- 25 个新 test（`tests/test_silent_except.py`），全过
+
+#### M1: 统一错误码扩张（5 模块）
+- 加 11 个 `ErrorCode`：`INDEVS_NO_DATA` / `LLM_TIMEOUT` / `LLM_API_ERROR` / `LLM_INVALID_RESPONSE` / `SCREENER_NO_DATA` / `SCREENER_INVALID_CRITERIA` / `SIMULATOR_INVALID_PRICE` / `SIMULATOR_NO_KLINES` / `BACKTEST_INVALID_CONFIG` / `BACKTEST_EMPTY_KLINES`
+- 接入 5 模块：`indevs_client` / `llm_providers` / `screener` / `simulator` / `backtest`
+- 50 个新错误测试（5 个 `tests/test_<module>_errors.py`），全过
+- **向后兼容**：所有 `ZettarancError` 继承 `ValueError`，老 `except ValueError` 自动捕获（narrator / commentary_service）
+
+#### M2: return None 收敛
+- 24 处 `return None` → raise（5 模块）
+- 9 处保留 `Optional[X]`（已审视：`DataSource` Protocol 兼容 + `_analyze_worker` 数据不足语义）
+
+#### L5: docstring 覆盖率 80.6% → 100%
+- **109 个新 docstring**，跨 17 文件：`datasource.py`(71) / `indevs_client.py`(11) / `self_optimizer/backtest_scorer.py`(5) / `data_sync/fetcher.py`(5) / 其他
+- AST 基线：`public funcs=571, with docstring=571`
+
+#### L6: 命名常量提取
+- 新增 `modules/constants.py`，**28 个命名常量**：
+  - `BACKSTOP_*` / `BACKTEST_*`（13）：仓位档 / 止损档 / 移动止损 / 最大仓位
+  - `MARKET_REGIME_WEIGHT_*`（3）：环境权重
+  - `SIMULATOR_*`（5）：涨跌停 / 风险预算 / 滑点
+  - `STATISTICS_SIGNIFICANCE_ALPHA` / `RATE_LIMITER_WINDOW_BUFFER_S` / `INTENT_DEFAULT_SCORE_THRESHOLD` 等
+- **55 处 magic literal 替换**
+- 剩余 **53 处** 已审视：战法内部语义（confidence bonus ±0.30/+0.20）、形态评分数学常数、A 股监管涨跌停（5/10/20%）、`statistics` 注释中说明性文本
+
+### 已偿还技术债（ROADMAP H1/H2/H3/M1/M2/L5/L6）
+详见 `docs/ROADMAP.md`「技术债务 → ✅ 已偿还」段落。
+
+### Merge 记录（v4.0.2）
+
+- `968a10a` merge: quality2 (L5 docstring 100% + L6 magic literal 28 constants)
+- `8053c3c` release(v4.0.2): CLI ↔ Rust bridge + 5 module errors + tech debt cleanup
+- `d0dc164` merge: cli-rust (H1 CLI bridge to Rust compute_module)
+- `5cb70c0` merge: quality (M1+M2 error code convergence to 5 modules)
+- `0b7290f` merge: silent-clean (H3 silent except narrowing)
+- `f2d09ee` merge: rust-clean (H2 dead-code removal)
+
 ## v3.10.4 (2026-07-16)
 
 ### 技术债与文档收尾

@@ -231,6 +231,8 @@
 | ~~H3~~ | 静默 except 收敛 | ✅ v4.0.2（5 hot files 33+ 处 except narrow + 25 个新测试） |
 | ~~M1~~ | 错误码扩张 | ✅ v4.0.2（5 模块：indevs / llm / screener / simulator / backtest，加 11 个 ErrorCode） |
 | ~~M2~~ | return None 收敛 | ✅ v4.0.2（24 处 raise 化 + 9 处 Optional 保留"已审视"） |
+| ~~L5~~ | docstring 覆盖率 | ✅ v4.0.2（80.6% → **100%**，109 个新 docstring，跨 17 文件） |
+| ~~L6~~ | magic literal 提取 | ✅ v4.0.2（`modules/constants.py` 28 个命名常量，55 处替换；剩余 53 处为战法语义/形态评分/数学常数，已逐一审视） |
 
 ---
 
