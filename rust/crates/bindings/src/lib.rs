@@ -1,22 +1,48 @@
-//! PyO3 绑定 crate，编译成 `_core_compute` 原生扩展。
+//! PyO3 bindings crate, compiled into the `_core_compute` Python extension.
 //!
-//! 包含：smoke 测试 + 高层 API（compute_atr / 单策略回测）+ 错误映射。
+//! Architecture (see also `Cargo.toml`):
+//!
+//! ```text
+//! crates/bindings/
+//!   src/core.rs          <- pure Rust, no PyO3, cargo-testable
+//!   src/lib.rs (this)    <- PyO3 wrappers, gated on `#[cfg(feature = "pyo3")]`
+//! ```
+//!
+//! Cargo `[[test]]` cannot consume `cdylib` output directly, so we keep the
+//! pure-Rust logic in `core` and only the Python adapter layer here. The
+//! `pyo3` feature is on by default (so maturin works) and can be disabled
+//! via `--no-default-features` to run cargo test without PyO3.
+
 #![forbid(unsafe_code)]
 
+// Pure-Rust core is always compiled; PyO3 wrappers are gated on `pyo3` feature.
+pub mod core;
+
+#[cfg(feature = "pyo3")]
 mod backtest_bindings;
+#[cfg(feature = "pyo3")]
 mod error;
 
+#[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-use zt_core_types::KLine;
-use zt_indicators;
 
-/// 测试函数：证明 Rust 编译产物可以被 Python 调用。
+#[cfg(feature = "pyo3")]
+use zt_core_types::KLine;
+
+#[cfg(feature = "pyo3")]
+use crate::core as _core_mod;
+
+// ---------------------------------------------------------------------------
+// PyO3 wrapper layer (only present when `pyo3` feature is enabled)
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "pyo3")]
 #[pyfunction]
 fn rust_smoke() -> &'static str {
     "ok from rust"
 }
 
-/// 抛出一个 ValueError（验证错误映射）。
+#[cfg(feature = "pyo3")]
 #[pyfunction]
 fn raise_value_error() -> PyResult<()> {
     Err(error::core_error_to_pyerr(
@@ -24,7 +50,7 @@ fn raise_value_error() -> PyResult<()> {
     ))
 }
 
-/// 抛出一个 KeyError。
+#[cfg(feature = "pyo3")]
 #[pyfunction]
 fn raise_key_error() -> PyResult<()> {
     Err(error::core_error_to_pyerr(
@@ -32,15 +58,15 @@ fn raise_key_error() -> PyResult<()> {
     ))
 }
 
-/// 高层 API：从 Python 接收 list[dict]，返回 list[float]。
+#[cfg(feature = "pyo3")]
 #[pyfunction]
 #[pyo3(signature = (klines, window=14))]
 fn compute_atr_py(klines: Vec<Bound<'_, pyo3::PyAny>>, window: usize) -> PyResult<Vec<f64>> {
     let series = parse_klines(&klines)?;
-    zt_indicators::compute_atr(&series, window).map_err(error::core_error_to_pyerr)
+    _core_mod::core_compute_atr(&series, window).map_err(error::core_error_to_pyerr)
 }
 
-/// 把 Python list[dict] 转成 Rust KLineSeries。
+#[cfg(feature = "pyo3")]
 fn parse_klines(items: &[Bound<'_, pyo3::PyAny>]) -> PyResult<zt_core_types::KLineSeries> {
     use pyo3::types::PyDict;
     let mut out = Vec::with_capacity(items.len());
@@ -92,6 +118,7 @@ fn parse_klines(items: &[Bound<'_, pyo3::PyAny>]) -> PyResult<zt_core_types::KLi
     Ok(zt_core_types::KLineSeries { items: out })
 }
 
+#[cfg(feature = "pyo3")]
 #[pymodule]
 fn _core_compute(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;

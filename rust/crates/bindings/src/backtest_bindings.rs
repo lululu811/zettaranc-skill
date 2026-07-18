@@ -1,28 +1,39 @@
-//! PyO3 绑定：单策略回测包装。
+//! PyO3 bindings: single-strategy / portfolio / grid-search wrappers.
 //!
-//! 输入约定：Python `dict` → `serde_json::Value` 中转 → 字段级读取（带默认值）。
-//! 输出约定：Rust struct 字段 → `serde_json::Value` → 嵌套 `PyDict`。
+//! Layering (matches `lib.rs`):
 //!
-//! 注意：内层 `run_single_strategy_backtest` 接受 `signal_at` / `exit_at` 回调。
-//! M3 阶段约定由 Python 业务层在更外层包装，因此本 binding 直接使用"无信号"
-//! 占位回调 —— 结果不含真实交易，仅暴露净值曲线和指标结构。
-//! Python 侧调用时可在更外层迭代实现真实策略信号注入。
+//! ```text
+//! Python dict/list  --(parse)-->  serde_json::Value / Rust types
+//!                                          |
+//!                                          v
+//!                                  crate::core::core_run_*(...)  <- pure Rust
+//!                                          |
+//!                                          v
+//!                                  *View struct  --(serialize)-->  serde_json::Value
+//!                                          |
+//!                                          v
+//!                                  Python dict
+//! ```
+//!
+//! The actual computation lives in `crate::core` so it is cargo-testable
+//! without PyO3.
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use serde_json::Value;
 use std::collections::HashMap;
 
-use zt_backtest_engine::{
-    run_portfolio_backtest, run_single_strategy_backtest, NamedTrade, PortfolioConfig,
-    PortfolioResult, SingleStrategyConfig, SingleStrategyResult, Trade,
-};
-use zt_core_types::KLineSeries;
-use zt_grid_search::{run_grid_search, GridSearchResult, ParamSet, WalkForwardSplit};
+use zt_backtest_engine::{PortfolioConfig, SingleStrategyConfig};
+use zt_core_types::{CoreError, KLineSeries};
+use zt_grid_search::{ParamSet, WalkForwardSplit};
 
+use crate::core as core_api;
 use crate::error::core_error_to_pyerr;
 
-/// PyDict / PyAny → serde_json::Value（递归）。
+// ---------------------------------------------------------------------------
+// Python <-> JSON conversion (PyO3 only; kept here so `core` stays PyO3-free)
+// ---------------------------------------------------------------------------
+
 fn pyany_to_json(obj: &Bound<'_, pyo3::PyAny>) -> PyResult<Value> {
     if obj.is_none() {
         Ok(Value::Null)
@@ -57,7 +68,6 @@ fn pyany_to_json(obj: &Bound<'_, pyo3::PyAny>) -> PyResult<Value> {
     }
 }
 
-/// serde_json::Value → Bound<'py, PyAny>（递归）。
 fn json_to_py<'py>(py: Python<'py>, v: &Value) -> PyResult<Bound<'py, pyo3::PyAny>> {
     use pyo3::conversion::ToPyObject;
     match v {
@@ -93,7 +103,8 @@ fn json_to_py<'py>(py: Python<'py>, v: &Value) -> PyResult<Bound<'py, pyo3::PyAn
 }
 
 // ---------------------------------------------------------------------------
-// 通用字段读取（带默认值）
+// Field readers (with defaults) — kept here because they're purely about
+// Python dict shape, not about the Rust core.
 // ---------------------------------------------------------------------------
 
 fn read_f64(v: &Value, key: &str, default: f64) -> PyResult<f64> {
@@ -133,36 +144,22 @@ fn read_bool(v: &Value, key: &str, default: bool) -> PyResult<bool> {
 }
 
 // ---------------------------------------------------------------------------
-// Trade 序列化辅助
+// *View -> serde_json::Value (output serialization, PyO3-only)
 // ---------------------------------------------------------------------------
 
-trait TradeExt {
-    fn return_pct(&self) -> f64;
-}
-
-impl TradeExt for Trade {
-    fn return_pct(&self) -> f64 {
-        if self.entry_price.abs() < 1e-12 {
-            0.0
-        } else {
-            (self.exit_price - self.entry_price) / self.entry_price
-        }
-    }
-}
-
-fn trade_to_value(t: &Trade) -> Value {
+fn trade_view_to_value(t: &core_api::TradeView) -> Value {
     let mut m = serde_json::Map::new();
     m.insert("entry_date".into(), Value::from(t.entry_date));
     m.insert("exit_date".into(), Value::from(t.exit_date));
     m.insert("entry_price".into(), Value::from(t.entry_price));
     m.insert("exit_price".into(), Value::from(t.exit_price));
     m.insert("pnl".into(), Value::from(t.pnl));
-    m.insert("return".into(), Value::from(t.return_pct()));
+    m.insert("return".into(), Value::from(t.return_pct));
     m.insert("exit_reason".into(), Value::String(t.exit_reason.clone()));
     Value::Object(m)
 }
 
-fn named_trade_to_value(t: &NamedTrade) -> Value {
+fn named_trade_view_to_value(t: &core_api::NamedTradeView) -> Value {
     let mut m = serde_json::Map::new();
     m.insert("ts_code".into(), Value::String(t.ts_code.clone()));
     m.insert("entry_date".into(), Value::from(t.entry_date));
@@ -174,51 +171,23 @@ fn named_trade_to_value(t: &NamedTrade) -> Value {
     Value::Object(m)
 }
 
-// ---------------------------------------------------------------------------
-// 单策略回测
-// ---------------------------------------------------------------------------
-
-/// Python dict → SingleStrategyConfig（带默认值兜底）。
-fn parse_single_config(v: &Value) -> PyResult<SingleStrategyConfig> {
-    let cfg = SingleStrategyConfig {
-        j_threshold: read_f64(v, "j_threshold", -5.0)?,
-        stop_loss_pct: read_f64(v, "stop_loss_pct", 0.05)?,
-        vol_shrink_threshold: read_f64(v, "vol_shrink_threshold", 0.5)?,
-        bbi_break_days: read_usize(v, "bbi_break_days", 3)?,
-        min_holding_days: read_usize(v, "min_holding_days", 3)?,
-        lu_half: read_bool(v, "lu_half", true)?,
-        position_pct: read_f64(v, "position_pct", 0.5)?,
-        initial_cash: read_f64(v, "initial_cash", 100_000.0)?,
-    };
-    Ok(cfg)
-}
-
-fn parse_klines_series(items: &[Bound<'_, pyo3::PyAny>]) -> PyResult<KLineSeries> {
-    crate::parse_klines(items)
-}
-
-fn single_result_to_value(r: &SingleStrategyResult, initial_cash: f64) -> Value {
-    let trades: Vec<Value> = r.trades.iter().map(trade_to_value).collect();
-    let total_return = if initial_cash.abs() > 1e-12 {
-        (r.final_value - initial_cash) / initial_cash
-    } else {
-        0.0
-    };
+fn single_view_to_value(r: &core_api::SingleResultView) -> Value {
+    let trades: Vec<Value> = r.trades.iter().map(trade_view_to_value).collect();
     let mut metrics = serde_json::Map::new();
-    metrics.insert("total_return".into(), Value::from(total_return));
+    metrics.insert("total_return".into(), Value::from(r.total_return));
     metrics.insert("sharpe_ratio".into(), Value::from(r.sharpe_ratio));
     metrics.insert("max_drawdown".into(), Value::from(r.max_drawdown));
     metrics.insert("win_rate".into(), Value::from(r.win_rate));
     metrics.insert("final_value".into(), Value::from(r.final_value));
-    metrics.insert("initial_cash".into(), Value::from(initial_cash));
-    metrics.insert("total_trades".into(), Value::from(r.trades.len()));
+    metrics.insert("initial_cash".into(), Value::from(r.initial_cash));
+    metrics.insert("total_trades".into(), Value::from(r.total_trades));
 
     let mut m = serde_json::Map::new();
     m.insert("trades".into(), Value::Array(trades));
     m.insert("metrics".into(), Value::Object(metrics));
     m.insert(
         "equity_curve".into(),
-        Value::Array(r.net_values.iter().map(|v| Value::from(*v)).collect()),
+        Value::Array(r.equity_curve.iter().map(|v| Value::from(*v)).collect()),
     );
     m.insert(
         "cash_history".into(),
@@ -227,35 +196,114 @@ fn single_result_to_value(r: &SingleStrategyResult, initial_cash: f64) -> Value 
     Value::Object(m)
 }
 
-/// PyO3 包装：单策略回测（Task 15）。
-///
-/// 输入：`config` (Python dict) + `klines` (list[dict])。
-/// 输出：dict 含 trades / metrics / equity_curve / cash_history。
-#[pyfunction]
-#[pyo3(signature = (config, klines))]
-pub fn run_single_strategy_backtest_py(
-    py: Python<'_>,
-    config: &Bound<'_, pyo3::PyAny>,
-    klines: Vec<Bound<'_, pyo3::PyAny>>,
-) -> PyResult<PyObject> {
-    let cfg_v = pyany_to_json(config)?;
-    let cfg = parse_single_config(&cfg_v)?;
-    let series = parse_klines_series(&klines)?;
-    let initial_cash = cfg.initial_cash;
+fn portfolio_view_to_value(r: &core_api::PortfolioResultView) -> Value {
+    let per_strategy_trades: serde_json::Map<String, Value> = r
+        .per_strategy_trades
+        .iter()
+        .map(|(k, v)| {
+            (
+                k.clone(),
+                Value::Array(v.iter().map(named_trade_view_to_value).collect()),
+            )
+        })
+        .collect();
 
-    // 占位回调：M3 阶段不暴露真实策略信号，由 Python 业务层在外包装。
-    let result = run_single_strategy_backtest(&series, &cfg, |_, _, _| None, |_, _, _, _| None)
-        .map_err(core_error_to_pyerr)?;
+    let mut metrics = serde_json::Map::new();
+    metrics.insert("total_return".into(), Value::from(r.total_return));
+    metrics.insert("sharpe_ratio".into(), Value::from(r.sharpe_ratio));
+    metrics.insert("max_drawdown".into(), Value::from(r.max_drawdown));
+    metrics.insert("win_rate".into(), Value::from(r.win_rate));
+    metrics.insert("calmar".into(), Value::from(r.calmar));
+    metrics.insert("final_value".into(), Value::from(r.final_value));
+    metrics.insert("initial_cash".into(), Value::from(r.initial_cash));
+    metrics.insert("total_trades".into(), Value::from(r.total_trades));
 
-    let v = single_result_to_value(&result, initial_cash);
-    Ok(json_to_py(py, &v)?.unbind())
+    let mut m = serde_json::Map::new();
+    m.insert("portfolio_metrics".into(), Value::Object(metrics));
+    m.insert(
+        "per_strategy_trades".into(),
+        Value::Object(per_strategy_trades),
+    );
+    m.insert(
+        "aggregate_equity_curve".into(),
+        Value::Array(r.aggregate_equity_curve.iter().map(|v| Value::from(*v)).collect()),
+    );
+    m.insert(
+        "cash_history".into(),
+        Value::Array(r.cash_history.iter().map(|v| Value::from(*v)).collect()),
+    );
+    Value::Object(m)
+}
+
+fn param_set_to_value(p: &ParamSet) -> Value {
+    let mut m = serde_json::Map::new();
+    m.insert("j_threshold".into(), Value::from(p.j_threshold));
+    m.insert("stop_loss_pct".into(), Value::from(p.stop_loss_pct));
+    m.insert("vol_shrink_threshold".into(), Value::from(p.vol_shrink_threshold));
+    m.insert("bbi_break_days".into(), Value::from(p.bbi_break_days as i64));
+    m.insert("min_holding_days".into(), Value::from(p.min_holding_days as i64));
+    m.insert("lu_half".into(), Value::Bool(p.lu_half));
+    m.insert("position_pct".into(), Value::from(p.position_pct));
+    Value::Object(m)
+}
+
+fn grid_search_view_to_value(r: &core_api::GridSearchOutputView) -> Value {
+    let mut out = serde_json::Map::new();
+    out.insert(
+        "all_results".into(),
+        Value::Array(
+            r.all_results
+                .iter()
+                .map(|gr| {
+                    let mut m = serde_json::Map::new();
+                    m.insert("params".into(), param_set_to_value(&gr.params));
+                    m.insert("train_sharpe".into(), Value::from(gr.train_sharpe));
+                    m.insert("test_sharpe".into(), Value::from(gr.test_sharpe));
+                    m.insert("oos_is_ratio".into(), Value::from(gr.oos_is_ratio));
+                    Value::Object(m)
+                })
+                .collect(),
+        ),
+    );
+    out.insert("n_results".into(), Value::from(r.n_results));
+    out.insert("best_score".into(), Value::from(r.best_score));
+    out.insert(
+        "best_train_sharpe".into(),
+        Value::from(r.best_train_sharpe),
+    );
+    out.insert(
+        "best_oos_is_ratio".into(),
+        Value::from(r.best_oos_is_ratio),
+    );
+    if let Some(p) = &r.best_params {
+        out.insert("best_params".into(), param_set_to_value(p));
+    } else {
+        out.insert("best_params".into(), Value::Object(serde_json::Map::new()));
+    }
+    Value::Object(out)
 }
 
 // ---------------------------------------------------------------------------
-// 组合回测
+// Python dict -> Rust types
 // ---------------------------------------------------------------------------
 
-/// Python dict → PortfolioConfig。
+fn parse_single_config(v: &Value) -> PyResult<SingleStrategyConfig> {
+    Ok(SingleStrategyConfig {
+        j_threshold: read_f64(v, "j_threshold", -5.0)?,
+        stop_loss_pct: read_f64(v, "stop_loss_pct", 0.05)?,
+        vol_shrink_threshold: read_f64(v, "vol_shrink_threshold", 0.5)?,
+        bbi_break_days: read_usize(v, "bbi_break_days", 3)?,
+        min_holding_days: read_usize(v, "min_holding_days", 3)?,
+        lu_half: read_bool(v, "lu_half", true)?,
+        position_pct: read_f64(v, "position_pct", 0.5)?,
+        initial_cash: read_f64(v, "initial_cash", 100_000.0)?,
+    })
+}
+
+fn parse_klines_series(items: &[Bound<'_, pyo3::PyAny>]) -> PyResult<KLineSeries> {
+    crate::parse_klines(items)
+}
+
 fn parse_portfolio_config(v: &Value) -> PyResult<PortfolioConfig> {
     let single_v = v
         .get("single")
@@ -270,96 +318,6 @@ fn parse_portfolio_config(v: &Value) -> PyResult<PortfolioConfig> {
     })
 }
 
-fn portfolio_result_to_value(r: &PortfolioResult, initial_cash: f64) -> Value {
-    let total_return = if initial_cash.abs() > 1e-12 {
-        (r.final_value - initial_cash) / initial_cash
-    } else {
-        0.0
-    };
-    // 按 strategy 分组 trades
-    let mut by_strategy: HashMap<String, Vec<Value>> = HashMap::new();
-    for t in &r.trades {
-        by_strategy
-            .entry(t.strategy.clone())
-            .or_default()
-            .push(named_trade_to_value(t));
-    }
-    let per_strategy_trades: serde_json::Map<String, Value> = by_strategy
-        .into_iter()
-        .map(|(k, v)| (k, Value::Array(v)))
-        .collect();
-
-    let mut metrics = serde_json::Map::new();
-    metrics.insert("total_return".into(), Value::from(total_return));
-    metrics.insert("sharpe_ratio".into(), Value::from(r.sharpe_ratio));
-    metrics.insert("max_drawdown".into(), Value::from(r.max_drawdown));
-    metrics.insert("win_rate".into(), Value::from(r.win_rate));
-    metrics.insert("calmar".into(), Value::from(r.calmar));
-    metrics.insert("final_value".into(), Value::from(r.final_value));
-    metrics.insert("initial_cash".into(), Value::from(initial_cash));
-    metrics.insert("total_trades".into(), Value::from(r.trades.len()));
-
-    let mut m = serde_json::Map::new();
-    m.insert("portfolio_metrics".into(), Value::Object(metrics));
-    m.insert(
-        "per_strategy_trades".into(),
-        Value::Object(per_strategy_trades),
-    );
-    m.insert(
-        "aggregate_equity_curve".into(),
-        Value::Array(r.net_values.iter().map(|v| Value::from(*v)).collect()),
-    );
-    m.insert(
-        "cash_history".into(),
-        Value::Array(r.cash_history.iter().map(|v| Value::from(*v)).collect()),
-    );
-    Value::Object(m)
-}
-
-/// PyO3 包装：组合回测（Task 18）。
-///
-/// 输入：
-///   - `config`：dict 含 `days`, `max_positions`, `single`
-///   - `klines_by_code`：dict[str, list[dict]] —— 每只股票 K 线序列
-///
-/// 输出：dict 含 portfolio_metrics / per_strategy_trades / aggregate_equity_curve / cash_history。
-#[pyfunction]
-#[pyo3(signature = (config, klines_by_code))]
-pub fn run_portfolio_backtest_py(
-    py: Python<'_>,
-    config: &Bound<'_, pyo3::PyAny>,
-    klines_by_code: &Bound<'_, pyo3::PyAny>,
-) -> PyResult<PyObject> {
-    let cfg_v = pyany_to_json(config)?;
-    let cfg = parse_portfolio_config(&cfg_v)?;
-
-    // 直接遍历 PyDict 的键值（不经过 JSON 字符串往返）
-    let map_dict = klines_by_code.downcast::<PyDict>()?;
-    let mut series_map: HashMap<String, KLineSeries> = HashMap::new();
-    for (key, value) in map_dict.iter() {
-        let code = key.extract::<String>()?;
-        let seq = value.extract::<Vec<Bound<'_, pyo3::PyAny>>>().map_err(|e| {
-            pyo3::exceptions::PyTypeError::new_err(format!(
-                "klines_by_code[{code}] must be list: {e}"
-            ))
-        })?;
-        let series = parse_klines_series(&seq)?;
-        series_map.insert(code, series);
-    }
-
-    let initial_cash = cfg.single.initial_cash;
-    let result = run_portfolio_backtest(&series_map, &cfg, |_, _, _| None, |_, _, _, _| None)
-        .map_err(core_error_to_pyerr)?;
-
-    let v = portfolio_result_to_value(&result, initial_cash);
-    Ok(json_to_py(py, &v)?.unbind())
-}
-
-// ---------------------------------------------------------------------------
-// 网格搜索
-// ---------------------------------------------------------------------------
-
-/// `Vec<HashMap<String, f64>>` → `Vec<ParamSet>`，使用 serde derive。
 fn parse_param_grid(grid: Vec<HashMap<String, f64>>) -> PyResult<Vec<ParamSet>> {
     let mut out = Vec::with_capacity(grid.len());
     for (i, params) in grid.into_iter().enumerate() {
@@ -387,7 +345,6 @@ fn parse_param_grid(grid: Vec<HashMap<String, f64>>) -> PyResult<Vec<ParamSet>> 
     Ok(out)
 }
 
-/// Python `list[dict]` → `Vec<WalkForwardSplit>`。
 fn parse_walk_forward_splits(v: &Value) -> PyResult<Vec<WalkForwardSplit>> {
     let arr = v
         .as_array()
@@ -415,36 +372,68 @@ fn parse_walk_forward_splits(v: &Value) -> PyResult<Vec<WalkForwardSplit>> {
     Ok(out)
 }
 
-fn param_set_to_value(p: &ParamSet) -> Value {
-    let mut m = serde_json::Map::new();
-    m.insert("j_threshold".into(), Value::from(p.j_threshold));
-    m.insert("stop_loss_pct".into(), Value::from(p.stop_loss_pct));
-    m.insert("vol_shrink_threshold".into(), Value::from(p.vol_shrink_threshold));
-    m.insert("bbi_break_days".into(), Value::from(p.bbi_break_days as i64));
-    m.insert("min_holding_days".into(), Value::from(p.min_holding_days as i64));
-    m.insert("lu_half".into(), Value::Bool(p.lu_half));
-    m.insert("position_pct".into(), Value::from(p.position_pct));
-    Value::Object(m)
+// ---------------------------------------------------------------------------
+// PyO3 entry points
+// ---------------------------------------------------------------------------
+
+#[pyfunction]
+#[pyo3(signature = (config, klines))]
+pub fn run_single_strategy_backtest_py(
+    py: Python<'_>,
+    config: &Bound<'_, pyo3::PyAny>,
+    klines: Vec<Bound<'_, pyo3::PyAny>>,
+) -> PyResult<PyObject> {
+    let cfg_v = pyany_to_json(config)?;
+    let cfg = parse_single_config(&cfg_v)?;
+    let series = parse_klines_series(&klines)?;
+
+    let view = core_api::core_run_single_strategy_backtest(
+        &series,
+        &cfg,
+        |_: usize, _: &KLineSeries, _: &SingleStrategyConfig| None,
+        |_: usize, _: &KLineSeries, _: &SingleStrategyConfig, _: f64| None,
+    )
+    .map_err(core_error_to_pyerr)?;
+
+    let v = single_view_to_value(&view);
+    Ok(json_to_py(py, &v)?.unbind())
 }
 
-fn grid_result_to_value(r: &GridSearchResult) -> Value {
-    let mut m = serde_json::Map::new();
-    m.insert("params".into(), param_set_to_value(&r.param));
-    m.insert("train_sharpe".into(), Value::from(r.train_sharpe));
-    m.insert("test_sharpe".into(), Value::from(r.test_sharpe));
-    m.insert("oos_is_ratio".into(), Value::from(r.oos_is_ratio));
-    Value::Object(m)
+#[pyfunction]
+#[pyo3(signature = (config, klines_by_code))]
+pub fn run_portfolio_backtest_py(
+    py: Python<'_>,
+    config: &Bound<'_, pyo3::PyAny>,
+    klines_by_code: &Bound<'_, pyo3::PyAny>,
+) -> PyResult<PyObject> {
+    let cfg_v = pyany_to_json(config)?;
+    let cfg = parse_portfolio_config(&cfg_v)?;
+
+    let map_dict = klines_by_code.downcast::<PyDict>()?;
+    let mut series_map: HashMap<String, KLineSeries> = HashMap::new();
+    for (key, value) in map_dict.iter() {
+        let code = key.extract::<String>()?;
+        let seq = value.extract::<Vec<Bound<'_, pyo3::PyAny>>>().map_err(|e| {
+            pyo3::exceptions::PyTypeError::new_err(format!(
+                "klines_by_code[{code}] must be list: {e}"
+            ))
+        })?;
+        let series = parse_klines_series(&seq)?;
+        series_map.insert(code, series);
+    }
+
+    let view = core_api::core_run_portfolio_backtest(
+        &series_map,
+        &cfg,
+        |_: usize, _: &KLineSeries, _: &SingleStrategyConfig| None,
+        |_: usize, _: &KLineSeries, _: &SingleStrategyConfig, _: f64| None,
+    )
+    .map_err(core_error_to_pyerr)?;
+
+    let v = portfolio_view_to_value(&view);
+    Ok(json_to_py(py, &v)?.unbind())
 }
 
-/// PyO3 包装：网格搜索 + walk-forward（Task 20）。
-///
-/// 输入：
-///   - `base_config`：dict（含 initial_cash）
-///   - `param_grid`：list[dict]，每个 dict 含一组超参
-///   - `splits`：list[dict]，每个 dict 含 train_start/train_end/test_start/test_end
-///   - `klines`：list[dict] —— 单只股票 K 线序列
-///
-/// 输出：dict 含 `all_results` (list[dict]) + `best_params` + `best_score` + `n_results`。
 #[pyfunction]
 #[pyo3(signature = (base_config, param_grid, splits, klines))]
 pub fn run_grid_search_py(
@@ -461,40 +450,9 @@ pub fn run_grid_search_py(
     let grid_rust = parse_param_grid(param_grid)?;
     let series = parse_klines_series(&klines)?;
 
-    let results = run_grid_search(&series, &grid_rust, &splits_rust, initial_cash)
-        .map_err(core_error_to_pyerr)?;
+    let view = core_api::core_run_grid_search(&series, &grid_rust, &splits_rust, initial_cash)
+        .map_err(|e: CoreError| core_error_to_pyerr(e))?;
 
-    // 选 test_sharpe 最大者
-    let best = results.iter().max_by(|a, b| {
-        a.test_sharpe
-            .partial_cmp(&b.test_sharpe)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    let mut out = serde_json::Map::new();
-    out.insert(
-        "all_results".into(),
-        Value::Array(results.iter().map(grid_result_to_value).collect()),
-    );
-    out.insert("n_results".into(), Value::from(results.len()));
-    if let Some(b) = best {
-        out.insert("best_score".into(), Value::from(b.test_sharpe));
-        out.insert("best_params".into(), param_set_to_value(&b.param));
-        out.insert(
-            "best_train_sharpe".into(),
-            Value::from(b.train_sharpe),
-        );
-        out.insert(
-            "best_oos_is_ratio".into(),
-            Value::from(b.oos_is_ratio),
-        );
-    } else {
-        out.insert("best_score".into(), Value::from(0.0));
-        out.insert(
-            "best_params".into(),
-            Value::Object(serde_json::Map::new()),
-        );
-    }
-
-    Ok(json_to_py(py, &Value::Object(out))?.unbind())
+    let v = grid_search_view_to_value(&view);
+    Ok(json_to_py(py, &v)?.unbind())
 }
