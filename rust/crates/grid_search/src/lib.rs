@@ -8,10 +8,10 @@ pub use walk_forward::{make_walk_forward_splits, WalkForwardSplit};
 
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use zt_core_types::{CoreError, KLineSeries, Result};
 use zt_backtest_engine::{
     run_single_strategy_backtest, SingleStrategyConfig, SingleStrategyResult,
 };
+use zt_core_types::{CoreError, KLineSeries, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParamSet {
@@ -94,21 +94,17 @@ pub fn run_grid_search(
 }
 
 fn run_simple(klines: &KLineSeries, cfg: &SingleStrategyConfig) -> SingleStrategyResult {
-    run_single_strategy_backtest(
-        klines,
-        cfg,
-        |_, _, _| None,
-        |_, _, _, _| None,
+    run_single_strategy_backtest(klines, cfg, |_, _, _| None, |_, _, _, _| None).unwrap_or_else(
+        |_| SingleStrategyResult {
+            net_values: vec![cfg.initial_cash; klines.len()],
+            cash_history: vec![cfg.initial_cash; klines.len()],
+            trades: vec![],
+            win_rate: 0.0,
+            sharpe_ratio: 0.0,
+            max_drawdown: 0.0,
+            final_value: cfg.initial_cash,
+        },
     )
-    .unwrap_or_else(|_| SingleStrategyResult {
-        net_values: vec![cfg.initial_cash; klines.len()],
-        cash_history: vec![cfg.initial_cash; klines.len()],
-        trades: vec![],
-        win_rate: 0.0,
-        sharpe_ratio: 0.0,
-        max_drawdown: 0.0,
-        final_value: cfg.initial_cash,
-    })
 }
 
 fn slice_series(klines: &KLineSeries, start: usize, end: usize) -> KLineSeries {

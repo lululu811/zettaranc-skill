@@ -109,9 +109,9 @@ fn json_to_py<'py>(py: Python<'py>, v: &Value) -> PyResult<Bound<'py, pyo3::PyAn
 
 fn read_f64(v: &Value, key: &str, default: f64) -> PyResult<f64> {
     match v.get(key) {
-        Some(Value::Number(n)) => n.as_f64().ok_or_else(|| {
-            pyo3::exceptions::PyValueError::new_err(format!("{key} not f64"))
-        }),
+        Some(Value::Number(n)) => n
+            .as_f64()
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err(format!("{key} not f64"))),
         Some(Value::Null) | None => Ok(default),
         Some(_) => Err(pyo3::exceptions::PyTypeError::new_err(format!(
             "{key} must be number"
@@ -226,7 +226,12 @@ fn portfolio_view_to_value(r: &core_api::PortfolioResultView) -> Value {
     );
     m.insert(
         "aggregate_equity_curve".into(),
-        Value::Array(r.aggregate_equity_curve.iter().map(|v| Value::from(*v)).collect()),
+        Value::Array(
+            r.aggregate_equity_curve
+                .iter()
+                .map(|v| Value::from(*v))
+                .collect(),
+        ),
     );
     m.insert(
         "cash_history".into(),
@@ -239,9 +244,18 @@ fn param_set_to_value(p: &ParamSet) -> Value {
     let mut m = serde_json::Map::new();
     m.insert("j_threshold".into(), Value::from(p.j_threshold));
     m.insert("stop_loss_pct".into(), Value::from(p.stop_loss_pct));
-    m.insert("vol_shrink_threshold".into(), Value::from(p.vol_shrink_threshold));
-    m.insert("bbi_break_days".into(), Value::from(p.bbi_break_days as i64));
-    m.insert("min_holding_days".into(), Value::from(p.min_holding_days as i64));
+    m.insert(
+        "vol_shrink_threshold".into(),
+        Value::from(p.vol_shrink_threshold),
+    );
+    m.insert(
+        "bbi_break_days".into(),
+        Value::from(p.bbi_break_days as i64),
+    );
+    m.insert(
+        "min_holding_days".into(),
+        Value::from(p.min_holding_days as i64),
+    );
     m.insert("lu_half".into(), Value::Bool(p.lu_half));
     m.insert("position_pct".into(), Value::from(p.position_pct));
     Value::Object(m)
@@ -267,14 +281,8 @@ fn grid_search_view_to_value(r: &core_api::GridSearchOutputView) -> Value {
     );
     out.insert("n_results".into(), Value::from(r.n_results));
     out.insert("best_score".into(), Value::from(r.best_score));
-    out.insert(
-        "best_train_sharpe".into(),
-        Value::from(r.best_train_sharpe),
-    );
-    out.insert(
-        "best_oos_is_ratio".into(),
-        Value::from(r.best_oos_is_ratio),
-    );
+    out.insert("best_train_sharpe".into(), Value::from(r.best_train_sharpe));
+    out.insert("best_oos_is_ratio".into(), Value::from(r.best_oos_is_ratio));
     if let Some(p) = &r.best_params {
         out.insert("best_params".into(), param_set_to_value(p));
     } else {
@@ -326,19 +334,23 @@ fn parse_param_grid(grid: Vec<HashMap<String, f64>>) -> PyResult<Vec<ParamSet>> 
             m.insert(k, Value::from(val));
         }
         // 兜底字段
-        m.entry("j_threshold".to_string()).or_insert(Value::from(-5.0_f64));
-        m.entry("stop_loss_pct".to_string()).or_insert(Value::from(0.05_f64));
-        m.entry("vol_shrink_threshold".to_string()).or_insert(Value::from(0.5_f64));
-        m.entry("bbi_break_days".to_string()).or_insert(Value::from(3_i64));
-        m.entry("min_holding_days".to_string()).or_insert(Value::from(3_i64));
+        m.entry("j_threshold".to_string())
+            .or_insert(Value::from(-5.0_f64));
+        m.entry("stop_loss_pct".to_string())
+            .or_insert(Value::from(0.05_f64));
+        m.entry("vol_shrink_threshold".to_string())
+            .or_insert(Value::from(0.5_f64));
+        m.entry("bbi_break_days".to_string())
+            .or_insert(Value::from(3_i64));
+        m.entry("min_holding_days".to_string())
+            .or_insert(Value::from(3_i64));
         m.entry("lu_half".to_string()).or_insert(Value::Bool(true));
-        m.entry("position_pct".to_string()).or_insert(Value::from(0.5_f64));
+        m.entry("position_pct".to_string())
+            .or_insert(Value::from(0.5_f64));
 
         let v = Value::Object(m);
         let p: ParamSet = serde_json::from_value(v).map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!(
-                "param_grid[{i}] deserialize: {e}"
-            ))
+            pyo3::exceptions::PyValueError::new_err(format!("param_grid[{i}] deserialize: {e}"))
         })?;
         out.push(p);
     }
@@ -351,16 +363,14 @@ fn parse_walk_forward_splits(v: &Value) -> PyResult<Vec<WalkForwardSplit>> {
         .ok_or_else(|| pyo3::exceptions::PyTypeError::new_err("splits must be list"))?;
     let mut out = Vec::with_capacity(arr.len());
     for (i, item) in arr.iter().enumerate() {
-        let obj = item.as_object().ok_or_else(|| {
-            pyo3::exceptions::PyTypeError::new_err("split must be dict")
-        })?;
+        let obj = item
+            .as_object()
+            .ok_or_else(|| pyo3::exceptions::PyTypeError::new_err("split must be dict"))?;
         let get = |k: &str| -> PyResult<usize> {
             obj.get(k)
                 .and_then(|v| v.as_u64())
                 .map(|u| u as usize)
-                .ok_or_else(|| {
-                    pyo3::exceptions::PyKeyError::new_err(format!("splits[{i}].{k}"))
-                })
+                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(format!("splits[{i}].{k}")))
         };
         out.push(WalkForwardSplit {
             train_start: get("train_start")?,
@@ -413,11 +423,13 @@ pub fn run_portfolio_backtest_py(
     let mut series_map: HashMap<String, KLineSeries> = HashMap::new();
     for (key, value) in map_dict.iter() {
         let code = key.extract::<String>()?;
-        let seq = value.extract::<Vec<Bound<'_, pyo3::PyAny>>>().map_err(|e| {
-            pyo3::exceptions::PyTypeError::new_err(format!(
-                "klines_by_code[{code}] must be list: {e}"
-            ))
-        })?;
+        let seq = value
+            .extract::<Vec<Bound<'_, pyo3::PyAny>>>()
+            .map_err(|e| {
+                pyo3::exceptions::PyTypeError::new_err(format!(
+                    "klines_by_code[{code}] must be list: {e}"
+                ))
+            })?;
         let series = parse_klines_series(&seq)?;
         series_map.insert(code, series);
     }

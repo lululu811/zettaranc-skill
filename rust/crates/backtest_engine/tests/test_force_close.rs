@@ -10,8 +10,7 @@
 use std::collections::HashMap;
 
 use zt_backtest_engine::{
-    run_portfolio_backtest, run_single_strategy_backtest, PortfolioConfig,
-    SingleStrategyConfig,
+    run_portfolio_backtest, run_single_strategy_backtest, PortfolioConfig, SingleStrategyConfig,
 };
 use zt_core_types::{KLine, KLineSeries};
 
@@ -154,7 +153,11 @@ fn single_mixed_exits_and_force_close_consistent() {
     .unwrap();
 
     // Only exits produce trades: 1 regular exit + 1 force-close = 2 trades.
-    assert_eq!(r.trades.len(), 2, "expected 2 trades (entries are not trades)");
+    assert_eq!(
+        r.trades.len(),
+        2,
+        "expected 2 trades (entries are not trades)"
+    );
     assert_eq!(r.trades[0].exit_reason, "regular_exit");
     assert_eq!(r.trades[1].exit_reason, "force_close");
 
@@ -186,7 +189,13 @@ fn portfolio_force_close_pnl_aggregated() {
     let r = run_portfolio_backtest(
         &map,
         &cfg,
-        |i, ks, _| if i == 10 { Some(ks.items[10].close) } else { None },
+        |i, ks, _| {
+            if i == 10 {
+                Some(ks.items[10].close)
+            } else {
+                None
+            }
+        },
         |_, _, _, _| None,
     )
     .unwrap();

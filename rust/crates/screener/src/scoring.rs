@@ -55,12 +55,18 @@ pub fn screen_stocks(
 
     // 按 total_scores 降序排序
     let mut indexed: Vec<usize> = (0..n).collect();
-    indexed.sort_by(|&a, &b| total_scores[b].partial_cmp(&total_scores[a]).unwrap_or(std::cmp::Ordering::Equal));
+    indexed.sort_by(|&a, &b| {
+        total_scores[b]
+            .partial_cmp(&total_scores[a])
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     let limit = top_n.min(n);
     let mut out = Vec::with_capacity(limit);
     for &idx in indexed.iter().take(limit) {
-        let per: Vec<f64> = (0..criteria.len()).map(|ci| per_criterion[ci][idx]).collect();
+        let per: Vec<f64> = (0..criteria.len())
+            .map(|ci| per_criterion[ci][idx])
+            .collect();
         out.push(StockScore {
             ts_code: codes.get(idx).unwrap_or("").to_string(),
             total_score: total_scores[idx],

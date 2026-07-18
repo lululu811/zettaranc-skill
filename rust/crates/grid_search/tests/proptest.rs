@@ -9,9 +9,7 @@
 
 use proptest::prelude::*;
 use zt_core_types::{CoreError, KLine, KLineSeries};
-use zt_grid_search::{
-    make_walk_forward_splits, run_grid_search, ParamSet, WalkForwardSplit,
-};
+use zt_grid_search::{make_walk_forward_splits, run_grid_search, ParamSet, WalkForwardSplit};
 
 fn make_klines(n: usize) -> KLineSeries {
     let items = (0..n)

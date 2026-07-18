@@ -48,10 +48,7 @@ fn json_to_kline(v: &serde_json::Value) -> zt_core_types::KLine {
             .and_then(|v| v.as_str())
             .unwrap_or("TEST")
             .to_string(),
-        trade_date: o
-            .get("trade_date")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0) as i32,
+        trade_date: o.get("trade_date").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
         open: fld("open"),
         high: fld("high"),
         low: fld("low"),

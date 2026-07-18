@@ -196,13 +196,9 @@ fn core_run_portfolio_backtest_handles_multiple_codes() {
     series_map.insert("000002.SZ".into(), sample_series(60));
 
     let cfg = default_portfolio_cfg();
-    let view = core_api::core_run_portfolio_backtest(
-        &series_map,
-        &cfg,
-        |_, _, _| None,
-        |_, _, _, _| None,
-    )
-    .expect("portfolio backtest should succeed");
+    let view =
+        core_api::core_run_portfolio_backtest(&series_map, &cfg, |_, _, _| None, |_, _, _, _| None)
+            .expect("portfolio backtest should succeed");
 
     // 无信号 -> per_strategy_trades 应为空（即使 initial_cash > 0）
     assert!(view.per_strategy_trades.is_empty());
@@ -219,13 +215,9 @@ fn core_run_portfolio_backtest_returns_empty_result_for_short_series() {
     let mut series_map: HashMap<String, KLineSeries> = HashMap::new();
     series_map.insert("000001.SZ".into(), sample_series(5));
     let cfg = default_portfolio_cfg();
-    let view = core_api::core_run_portfolio_backtest(
-        &series_map,
-        &cfg,
-        |_, _, _| None,
-        |_, _, _, _| None,
-    )
-    .expect("portfolio backtest returns Ok with empty result for short series");
+    let view =
+        core_api::core_run_portfolio_backtest(&series_map, &cfg, |_, _, _| None, |_, _, _, _| None)
+            .expect("portfolio backtest returns Ok with empty result for short series");
 
     assert_eq!(view.total_trades, 0);
     assert!(view.per_strategy_trades.is_empty());
@@ -242,8 +234,7 @@ fn core_run_grid_search_picks_best_by_test_sharpe() {
     let grid = vec![default_param_set(), default_param_set()];
     let splits = walk_forward_splits();
 
-    let view =
-        core_api::core_run_grid_search(&series, &grid, &splits, 100_000.0).expect("grid ok");
+    let view = core_api::core_run_grid_search(&series, &grid, &splits, 100_000.0).expect("grid ok");
 
     assert_eq!(view.n_results, grid.len() * splits.len());
     assert_eq!(view.all_results.len(), view.n_results);

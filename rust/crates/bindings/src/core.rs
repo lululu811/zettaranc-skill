@@ -246,7 +246,12 @@ pub fn core_run_grid_search(
     });
     let views: Vec<GridResultView> = results.iter().map(grid_result_to_view).collect();
     let (best_score, best_train_sharpe, best_oos_is_ratio, best_params) = if let Some(b) = best {
-        (b.test_sharpe, b.train_sharpe, b.oos_is_ratio, Some(b.param.clone()))
+        (
+            b.test_sharpe,
+            b.train_sharpe,
+            b.oos_is_ratio,
+            Some(b.param.clone()),
+        )
     } else {
         (0.0, 0.0, 0.0, None)
     };

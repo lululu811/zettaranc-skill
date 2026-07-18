@@ -5,9 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use zt_core_types::{CoreError, KLineSeries, Result};
 
-use crate::single::{
-    run_single_strategy_backtest, SingleStrategyConfig, SingleStrategyResult,
-};
+use crate::single::{run_single_strategy_backtest, SingleStrategyConfig, SingleStrategyResult};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct PortfolioConfig {
@@ -228,8 +226,7 @@ mod tests {
             max_positions: 5,
             single: SingleStrategyConfig::default(),
         };
-        let r =
-            run_portfolio_backtest(&map, &cfg, |_, _, _| None, |_, _, _, _| None).unwrap();
+        let r = run_portfolio_backtest(&map, &cfg, |_, _, _| None, |_, _, _, _| None).unwrap();
         assert_eq!(r.net_values.len(), 100);
         // 没有信号，所有股票不交易，最终净值 = 初始资金
         assert!((r.final_value - cfg.single.initial_cash).abs() < 1e-6);
@@ -251,7 +248,13 @@ mod tests {
         let r = run_portfolio_backtest(
             &map,
             &cfg,
-            |i, ks, _| if i == 10 { Some(ks.items[10].close) } else { None },
+            |i, ks, _| {
+                if i == 10 {
+                    Some(ks.items[10].close)
+                } else {
+                    None
+                }
+            },
             |_, _, _, _| None,
         )
         .unwrap();
