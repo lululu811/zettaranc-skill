@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zettaranc-skill"
-version = "3.10.2"
+version = "3.10.4"
 description = "zettaranc（万千）的思维框架与量化工具"
 readme = "README.md"
 license = {text = "MIT"}
@@ -40,6 +40,7 @@ corpus = [
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
+    "maturin>=1.5.0",
 ]
 
 [project.scripts]
@@ -105,3 +106,8 @@ fail_under = 0
 
 [tool.coverage.html]
 directory = "htmlcov"
+
+[tool.maturin]
+name = "_core_compute"
+python-source = "python"
+module-name = "_core_compute._core_compute"

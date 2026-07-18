@@ -4,5 +4,10 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 
+[lib]
+name = "_core_compute"
+crate-type = ["cdylib"]
+
 [dependencies]
 zt_core_types = { path = "../core_types" }
+pyo3 = { version = "0.22", features = ["extension-module"] }
