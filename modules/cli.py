@@ -264,10 +264,21 @@ def cmd_analyze(args):
 
 
 def cmd_screen(args):
-    """筛选股票（调 screener.screen_stocks）"""
+    """筛选股票（调 screener.screen_stocks）
+
+    Rust 路径：screen_stocks 暂未封装为 PyO3 binding（v4.0.1），所以 Rust 优先
+    计算的单项评分函数（`compute_atr_py` 等）暂未在 CLI 暴露；当 `screen_stocks_py`
+    PyO3 binding 落地后（v4.1+），这里可直接 bridge。
+    当前行为：保持 Python `screen_stocks` 路径不动（无需回退检查）。
+    """
     from modules.screener import screen_stocks
 
     criteria = STRATEGY_ALIAS.get(args.strategy, args.strategy)
+
+    # 预留 Rust hook：未来 v4.1+ 可在此处
+    # `from modules.backtest._rust_bridge import compute_func`
+    # `rust_screen = compute_func("screen_stocks_py")`
+    # 若 rust_screen 不为 None 即可走 Rust。
 
     results = screen_stocks(
         criteria=criteria,

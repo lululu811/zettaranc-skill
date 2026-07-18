@@ -84,3 +84,45 @@ def reset_cache() -> None:
     global _cached_module, _cached_resolved
     _cached_module = None
     _cached_resolved = False
+
+
+# ─────────────────────────────────────────────────────────────────────
+# CLI 切换层（v4.0.2）：compute_func(name) 给 CLI / 业务层直接取函数。
+# 复用 get_compute_module() 的 env-var 决策（rust / python / auto），
+# 只是把 "module import" 升级为 "attribute lookup"。
+# ─────────────────────────────────────────────────────────────────────
+
+# 函数级缓存：避免每次重复 getattr
+_func_cache: dict[str, object | None] = {}
+
+
+def compute_func(name: str):
+    """返回 `_core_compute.<name>` 函数；若不可用则返回 None。
+
+    设计目标（v4.0.2 CLI ↔ Rust 桥接）：
+      - CLI 业务代码可以直接 `fn = compute_func("run_single_strategy_backtest_py")`
+      - 拿到 None 即走 Python fallback；拿到 callable 即直接调
+      - 失败 silent fallback 由调用方 try/except 处理（这里只做 lookup，不吞异常）
+
+    env-var 行为复用 get_compute_module()：
+      - rust：import 失败抛 RuntimeError
+      - python：永远返回 None
+      - auto：import 失败返回 None
+    """
+    if name in _func_cache:
+        return _func_cache[name]
+
+    mod = get_compute_module()
+    if mod is None:
+        _func_cache[name] = None
+        return None
+
+    fn = getattr(mod, name, None)
+    _func_cache[name] = fn
+    return fn
+
+
+def reset_func_cache() -> None:
+    """测试用：清空函数级缓存（不影响 get_compute_module 缓存）。"""
+    global _func_cache
+    _func_cache = {}
