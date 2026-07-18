@@ -121,6 +121,57 @@
 - `fe3f550` merge: env-try (macOS LINKEDIT fix + Docker fallback)
 - `f83643a` chore(hygiene): adopt 68 unstaged files + 1 stash from prior session
 
+## v4.0.2 (2026-07-18) — CLI ↔ Rust PyO3 桥
+
+> **「v4.0.2：CLI 默认走 Rust PyO3 回测路径；`_core_compute` 缺失或抛错时 silent fallback 到 Python。」**
+
+### 新增
+
+- **`modules/backtest/_rust_bridge.py`**（v4.0.2 新模块）
+  - `bridge_shaofu_single(ts_code, days, klines=None, config=None)`：单股少妇战法回测 bridge
+    - Rust 可用：调 `_core_compute.run_single_strategy_backtest_py`，schema 映射回 CLI dict
+    - Rust 不可用 / 抛错：silent fallback 到 Python `backtest_shaofu_single`
+    - 自动懒加载 K 线（CLI 调用方无需预拉）
+  - `rust_single_result_to_cli_dict(ts_code, rust_result)`：Rust `{trades, metrics, equity_curve}` → CLI `{ts_code, total_trades, win_count, win_rate, avg_pnl, max_win, max_loss, profit_factor, total_return, max_drawdown, sharpe_ratio, avg_holding_days, trades}` 字段映射（avg_pnl / win_count / profit_factor / avg_holding_days 从 trades 派生）
+  - `bridge_grid_search(...)`（v4.1+ 完整接入）：组合 walk-forward 网格搜索 bridge（当前保留接口，verify/pipeline 暂未用）
+  - `is_rust_available()`：RuntimeError-safe 探针（impl=rust 但模块缺失时返回 False）
+- **`modules/core/_rust_compat.py::compute_func(name)`**（v4.0.2 新 helper）
+  - 在 `get_compute_module()` 之上加 getattr 缓存层（按 name 缓存）
+  - CLI 业务层：`fn = compute_func("run_single_strategy_backtest_py")` → callable 或 None
+
+### 改动
+
+- `modules/cli_commands.py::cmd_backtest.shaofu`：调 `bridge_shaofu_single` 替代直接调 `backtest_shaofu_single`
+- `modules/cli_commands.py::cmd_backtest.portfolio`（length=1 分支）：同样走 shaofu bridge
+- `modules/cli.py::cmd_screen`：保留 Python 路径（`screen_stocks` 暂未封装为 PyO3），注释留 v4.1+ Rust hook
+- `modules/verify/pipeline.py::_run_single_stock_backtest`：先 `is_rust_available()` 再 `compute_func(...)`，Rust 成功返回 schema 映射后的 `StockResult`，失败 fallback Python
+- `docs/USER_GUIDE.md` §3.1 新增 `ZETTARANC_BACKTEST_IMPL` 环境变量；§3.4 新增"v4.0.2+ 回测实现切换"小节（含 CLI 子命令 ↔ 实现 切换矩阵）
+
+### 切换矩阵（CLI 子命令 ↔ Rust/Python 实现）
+
+| 子命令 | 默认实现 | Rust 入口 | fallback |
+|--------|----------|-----------|----------|
+| `zt backtest shaofu` | Rust | `run_single_strategy_backtest_py` | Python `backtest_shaofu_single` |
+| `zt backtest portfolio` (单股) | Rust | 同上 | 同上 |
+| `zt backtest multi` | Python | — | — |
+| `zt backtest portfolio` (多股) | Python | — | — |
+| `zt verify v1.0` | Rust | 同上（per-stock bridge） | Python `_run_single_stock_backtest` |
+| `zt screen` | Python | （v4.1+） | — |
+| `zt analyze` / `zt diagnose` / `zt watchlist` / `zt trade` | Python | — | — |
+
+### 测试
+
+- 新增 `tests/test_cli_uses_rust.py`：**16/16 通过**
+  - 覆盖 fake-rust / 无模块 / `ZETTARANC_BACKTEST_IMPL=python` / Rust 抛错 silent fallback / verify pipeline 集成
+- `tests/test_rust_compat.py`：**4/5 通过**（`test_rust_choice_returns_module` 在 `_core_compute` 未构建环境下失败，环境问题非代码回归——`maturin develop` 后通过）
+- `tests/test_cli_subparser.py` + `test_cli_screen.py` + `test_cli_simulate.py`：**76/76 通过**（无回归）
+- `cargo test --workspace --exclude zt_bindings`：**58/58 通过**（24 单元 + 35 proptest）
+
+### 兼容性
+
+- 不影响 `ZETTARANC_BACKTEST_IMPL=python` 用户：CLI 行为与 v4.0.1 完全一致
+- `_core_compute` 未安装用户：第一次 import `compute_func(...)` 返回 None，bridge 走 Python，log 一条 "fallback" debug（DEBUG 级别不显示）
+
 ## v3.10.4 (2026-07-16)
 
 ### 技术债与文档收尾

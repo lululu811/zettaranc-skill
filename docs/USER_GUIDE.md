@@ -165,6 +165,43 @@ python -c "from modules.setup_wizard import test_jnb_connection; import os; prin
 | `IM_PUSH_WEBHOOK` | 否 | 无 | 飞书群机器人 webhook，`zt monitor` 触发预警时推送 |
 | `COMMENTARY_CACHE_TTL` / `SIMULATION_NARRATE_CACHE_TTL` | 否 | `3600` | 点评 / 模拟叙事缓存 TTL（秒） |
 | `ZETTARANC_ENV` | 否 | 无 | 自定义 .env 文件路径 |
+| `ZETTARANC_BACKTEST_IMPL` | 否 | `rust` | 回测实现选择：`rust`（默认，调 `_core_compute` PyO3）/ `python`（强制 Python）/ `auto`（优先 Rust，缺失时降级）。见 [v4.0.2 回测实现切换](#v402-回测实现切换) |
+
+### 3.4 v4.0.2+ 回测实现切换（Rust ↔ Python）
+
+CLI 子命令（`zt backtest shaofu` / `zt backtest portfolio` 单股 / `zt verify` / `zt simulate`）在用户已 `maturin develop --release` 安装 `_core_compute` 后默认走 Rust PyO3 路径；缺失时 silent fallback 到 Python。
+
+切换矩阵：
+
+| 子命令 | Rust 入口 | 默认走 Rust？ | Rust 不可用时 | Python 强制 |
+|--------|-----------|---------------|---------------|-------------|
+| `zt backtest shaofu <ts_code>` | `_core_compute.run_single_strategy_backtest_py` | 是 | fallback Python `backtest_shaofu_single` | `ZETTARANC_BACKTEST_IMPL=python` |
+| `zt backtest portfolio <c1,c2>` (单股) | 同上（length=1 时复用 shaofu bridge） | 是 | 同上 | 同上 |
+| `zt backtest multi` | 未封装（v4.0.2） | 否（保持 Python） | — | — |
+| `zt backtest portfolio` (多股) | `run_portfolio_backtest_py`（v4.1+） | 否（暂走 Python） | — | — |
+| `zt verify v1.0` | `run_single_strategy_backtest_py`（per-stock bridge） | 是 | fallback Python `_run_single_stock_backtest` | 同上 |
+| `zt screen` | `screen_stocks_py`（v4.1+） | 否（暂走 Python，注释已留 hook） | — | — |
+| `zt analyze` / `zt diagnose` / `zt watchlist` / `zt trade` / `zt sync` | — | 否（纯 Python） | — | — |
+
+使用方法：
+
+```bash
+# 默认 Rust（maturin 已安装 _core_compute 时）
+zt backtest shaofu 600487.SH --days 250
+
+# 强制 Python（_core_compute 已装但业务回归时）
+ZETTARANC_BACKTEST_IMPL=python zt backtest shaofu 600487.SH --days 250
+
+# Auto（_core_compute 缺失时降级，不抛错）
+ZETTARANC_BACKTEST_IMPL=auto zt verify v1.0 --limit 50 --days 250
+```
+
+技术细节：
+
+- 入口：`modules/backtest/_rust_bridge.py`（CLI ↔ Rust 切换桥）
+- env 决策：`modules/core/_rust_compat.py::compute_func(name)`（在 `get_compute_module()` 之上加 getattr 缓存层）
+- silent fallback：bridge 内部 `try/except`，Rust 抛错时 `logger.warning(...)` 后调 Python
+- 测试：`tests/test_cli_uses_rust.py`（16 个用例覆盖 fake-rust / 无模块 / `impl=python` / Rust 抛错 fallback / verify pipeline）
 
 ### 3.2 数据源优先级与降级路径
 

@@ -140,10 +140,66 @@ def _run_single_stock_backtest(
 ) -> StockResult:
     """调 backtest_shaofu_single 返回 StockResult
 
+    v4.0.2：优先走 Rust bridge（`run_single_strategy_backtest_py`），
+    Rust 不可用 / 抛错时 silent fallback 到 Python `backtest_shaofu_single`。
     任何回测异常都不抛出，整体捕获后返回 skipped=True 的 StockResult，
     保证组合回测中单股失败不会中断整个流水线。
     """
     try:
+        # v4.0.2：bridge 层 silent fallback；Python 路径保留以兼容旧行为
+        from modules.backtest._rust_bridge import (
+            compute_func,
+            is_rust_available,
+        )
+
+        # is_rust_available 内部捕获 RuntimeError（impl=rust 但模块缺失时），
+        # 这里只关心"能不能走 Rust"，不让 RuntimeError 杀掉整个 verify 流水线。
+        if is_rust_available():
+            rust_fn = compute_func("run_single_strategy_backtest_py")
+            if rust_fn is not None:
+                try:
+                    # 拉 K 线 → dict，调 Rust，schema 映射回 CLI dict
+                    from modules.indicators import get_kline_data
+
+                    klines = get_kline_data(ts_code, days)
+                    if klines:
+                        kline_dicts = [
+                            k.model_dump() if hasattr(k, "model_dump")
+                            else dict(k.__dict__) if hasattr(k, "__dict__")
+                            else {
+                                "trade_date": getattr(k, "trade_date", ""),
+                                "open": getattr(k, "open", 0.0),
+                                "high": getattr(k, "high", 0.0),
+                                "low": getattr(k, "low", 0.0),
+                                "close": getattr(k, "close", 0.0),
+                                "vol": getattr(k, "vol", 0.0),
+                            }
+                            for k in klines
+                        ]
+                        rust_result = rust_fn({}, kline_dicts)
+                        from modules.backtest._rust_bridge import (
+                            rust_single_result_to_cli_dict,
+                        )
+
+                        equity_curve = rust_result.get("equity_curve", []) or []
+                        cli_dict = rust_single_result_to_cli_dict(ts_code, rust_result)
+                        return StockResult(
+                            ts_code=ts_code,
+                            name=getattr(rust_result, "name", ""),
+                            trades=cli_dict["total_trades"],
+                            win_rate=cli_dict["win_rate"],
+                            return_pct=cli_dict["total_return"] / 100.0,
+                            sharpe=cli_dict["sharpe_ratio"],
+                            max_drawdown=cli_dict["max_drawdown"] / 100.0,
+                            skipped=False,
+                            equity_curve=list(equity_curve),
+                        )
+                except Exception as e:  # noqa: BLE001 - 单 Rust call 失败不应中断流水线
+                    logger.warning(
+                        "verify: Rust 回测 %s 失败，fallback Python: %s", ts_code, e
+                    )
+
+        # Python fallback
         # backtest_shaofu_single 返回 ShaofuBacktestResult（dataclass）
         result = backtest_shaofu_single(ts_code, days=days, config=config)
         # ShaofuBacktestResult 字段：total_trades, win_count, win_rate,

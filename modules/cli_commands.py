@@ -145,6 +145,31 @@ def _shaofu_portfolio_to_dict(result: dict) -> dict:
     }
 
 
+def _print_shaofu_summary(ts_code: str, dict_result: dict) -> None:
+    """Rust 路径的 shaofu 回测结果 → 人类可读摘要（与 Python summary_text 等价）。"""
+    print(f"\n{'=' * 60}")
+    print(f"回测结果: {ts_code}  [Rust 路径]")
+    print(f"{'=' * 60}")
+    print(f"总交易次数: {dict_result['total_trades']}")
+    print(f"盈利次数:   {dict_result['win_count']}")
+    print(f"胜率:       {dict_result['win_rate']:.1%}")
+    print(f"盈亏比:     {dict_result['profit_factor']:.2f}")
+    print(f"最大回撤:   {dict_result['max_drawdown']:.2f}%")
+    print(f"总收益率:   {dict_result['total_return']:+.2f}%")
+    print(f"夏普比率:   {dict_result['sharpe_ratio']:.2f}")
+    print(f"平均持仓:   {dict_result['avg_holding_days']:.1f}天")
+    print(f"{'=' * 60}")
+    last_trades = dict_result.get("trades", [])[-5:]
+    if last_trades:
+        print("最近5笔交易:")
+        for t in last_trades:
+            status = "[+]" if t.get("pnl_pct", 0) > 0 else "[-]"
+            print(
+                f"  {status} {t.get('entry_date', '?')}→{t.get('exit_date') or '持有中'} "
+                f"{t.get('pnl_pct', 0):+.2f}% ({t.get('exit_reason', '')})"
+            )
+
+
 def cmd_backtest(args) -> None:
     """
     回测命令
@@ -173,19 +198,27 @@ def cmd_backtest(args) -> None:
         if not ts_code:
             _error("请指定股票代码，如: backtest shaofu 600487.SH")
 
-        from .backtest_six_step import backtest_shaofu_single
+        # Rust 路径：bridge 内 silent fallback；ZETTARANC_BACKTEST_IMPL=python 时
+        # compute_func 返回 None 直接走 Python 分支。
+        from modules.backtest._rust_bridge import bridge_shaofu_single
 
-        result_sf = backtest_shaofu_single(ts_code, days=days)
+        dict_result = bridge_shaofu_single(ts_code, days=days)
+        # bridge_shaofu_single 内部：
+        #   - Rust 可用：调 _core_compute.run_single_strategy_backtest_py，
+        #                schema 映射后返回 CLI dict
+        #   - Rust 不可用 / 失败：fallback 到 Python backtest_shaofu_single，
+        #                        返回 _shaofu_result_to_dict(ShaofuBacktestResult)
+        #   - ZETTARANC_BACKTEST_IMPL=python：compute_func 返回 None 直接走 Python
 
-        if result_sf.total_trades == 0:
-            _warn(f"{ts_code} 在 {days} 天内无交易记录（数据不足或无信号触发）")
-
+        if dict_result.get("total_trades", 0) == 0:
+            _warn(
+                f"{ts_code} 在 {days} 天内无交易记录（数据不足或无信号触发）"
+            )
         if use_json:
-            _json_output(_shaofu_result_to_dict(result_sf))
+            _json_output(dict_result)
         else:
-            from .backtest_six_step import summary_text
-
-            print(summary_text(result_sf))
+            _print_shaofu_summary(ts_code, dict_result)
+        return
 
     # ── multi: 多策略融合回测 ──
     elif sub == "multi":
@@ -216,17 +249,19 @@ def cmd_backtest(args) -> None:
         if not ts_codes:
             _error("股票代码列表为空")
 
-        # 单股票时走少妇单股回测，多股票走少妇组合回测
+        # 单股票时走少妇单股回测（也走 bridge，Rust 优先），多股票走少妇组合回测
         if len(ts_codes) == 1:
-            from .backtest_six_step import backtest_shaofu_single
+            from modules.backtest._rust_bridge import bridge_shaofu_single
 
-            result_sf_single = backtest_shaofu_single(ts_codes[0], days=days)
+            dict_single = bridge_shaofu_single(ts_codes[0], days=days)
+            if dict_single.get("total_trades", 0) == 0:
+                _warn(
+                    f"{ts_codes[0]} 在 {days} 天内无交易记录（数据不足或无信号触发）"
+                )
             if use_json:
-                _json_output(_shaofu_result_to_dict(result_sf_single))
+                _json_output(dict_single)
             else:
-                from .backtest_six_step import summary_text
-
-                print(summary_text(result_sf_single))
+                _print_shaofu_summary(ts_codes[0], dict_single)
         else:
             from .backtest_six_step import backtest_shaofu_portfolio
 
