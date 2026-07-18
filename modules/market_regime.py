@@ -23,6 +23,11 @@ from enum import Enum
 
 from modules.indicators.core import DailyData, calculate_ma, calculate_slope
 from modules.indicators.price_patterns.base import calculate_dg_yellow, calculate_zg_white
+from .constants import (
+    MARKET_REGIME_WEIGHT_MA_ALIGNMENT,
+    MARKET_REGIME_WEIGHT_TREND_SLOPE,
+    MARKET_REGIME_WEIGHT_WHITE_YELLOW,
+)
 
 
 class MarketRegime(Enum):
@@ -35,9 +40,9 @@ class MarketRegime(Enum):
 
 # 默认五因子权重
 _DEFAULT_WEIGHTS = {
-    "ma_alignment": 0.30,  # 均线排列
-    "trend_slope": 0.20,  # 趋势斜率
-    "white_yellow": 0.20,  # 白线/黄线关系
+    "ma_alignment": MARKET_REGIME_WEIGHT_MA_ALIGNMENT,  # 均线排列
+    "trend_slope": MARKET_REGIME_WEIGHT_TREND_SLOPE,  # 趋势斜率
+    "white_yellow": MARKET_REGIME_WEIGHT_WHITE_YELLOW,  # 白线/黄线关系
     "volatility": 0.15,  # 波动率信号
     "volume_trend": 0.15,  # 量能趋势
 }
