@@ -1,0 +1,57 @@
+# Dockerfile.test — Linux build environment for _core_compute (PyO3)
+#
+# This is the FALLBACK build path for users on macOS whose host linker
+# (Apple ld or lld 22.x) produces a Mach-O .so with a mis-aligned
+# LC_SYMTAB.stroff that newer macOS dyld refuses to load.
+#
+# Build a wheel inside the container, then copy it out:
+#   docker build -f rust/Dockerfile.test -t zt-rust-builder .
+#   docker run --rm -v "$(pwd):/src" zt-rust-builder \
+#       bash /src/rust/scripts/build-linux.sh
+#
+# The resulting *.whl is glibc-linked; it will run on Linux but not on macOS.
+# Use it for CI / dev loop on Linux; macOS users should still use
+# rust/scripts/build_macos.sh.
+
+FROM python:3.11-slim
+
+# System deps for maturin + cargo + lld.
+# - build-essential : cc / ld / ar (we still let cargo pick linker)
+# - pkg-config     : for any future C deps in our tree
+# - libssl-dev     : not needed today; keep for future rustls etc.
+# - lld/clang      : faster + cleaner Mach-O/LLVM-style linking on Linux too
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        pkg-config \
+        libssl-dev \
+        lld \
+        clang \
+        curl \
+        ca-certificates \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust via rustup (the toolchain pinned in rust-toolchain.toml is
+# what cargo will actually use; we just need a baseline rustup here).
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none \
+    && rustup --version
+
+WORKDIR /src
+
+# Cache deps separately from source to maximise layer reuse.
+COPY rust/Cargo.toml rust/Cargo.lock rust/rust-toolchain.toml ./rust/
+COPY rust/crates ./rust/crates
+
+# Pre-build deps so source changes don't redownload the registry.
+RUN mkdir -p /tmp/warmup && cd /tmp/warmup \
+    && cargo new --bin warmup && cd warmup \
+    && cargo add anyhow@1 thiserror@1 polars@0.54 rayon@1.10 pyo3@0.22 \
+    || true
+
+# Real build: when run with the bind mount, the actual source overwrites
+# the warmup layer.
+CMD ["bash", "/src/rust/scripts/build-linux.sh"]

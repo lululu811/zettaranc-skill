@@ -86,6 +86,96 @@ npx skills add ./SKILL.md
 
 ---
 
+## Rust 核心构建（`_core_compute`）
+
+> 适用对象：在 macOS / Linux 上修改 `rust/crates/*` 后需要重新编译 PyO3 扩展的开发者。
+
+### 1. 工具链要求
+
+| 工具 | 版本 | 安装 |
+| --- | --- | --- |
+| Rust | stable（≥ 1.78；推荐 1.97+） | `rustup install stable && rustup default stable` |
+| maturin | 1.14.x | `pip install 'maturin>=1.5,<2'`（或 `brew install maturin`） |
+| PyO3 | 0.22（已在 `rust/Cargo.toml` 锁定） | 由 maturin 拉取 |
+| Python | 3.11 | `brew install python@3.11`（macOS） / 系统包（Linux） |
+| lld | 22+ | `brew install lld`（macOS） / `apt install lld`（Linux） |
+
+> **macOS 用户特别注意**：`rust-toolchain.toml` 已 pin 到 `stable`（即 1.97.x）。如果你的 `rustup default` 是别的 channel，请在 `rust/` 下用 `rustup show` 确认。
+
+### 2. macOS 构建（含 LINKEDIT 修复）
+
+macOS 15+ 的 dyld 强制要求 `LC_SYMTAB.stroff` 必须是 8 字节对齐，而 lld 22.x 输出的 .so 实际只 4 字节对齐，会直接 `dlopen` 失败并报：
+
+```
+ImportError: dlopen(...): mis-aligned LINKEDIT string pool
+```
+
+我们用一个 build 脚本把所有 workaround 串起来：
+
+```bash
+# 在 rust/ 目录下：
+./scripts/build_macos.sh
+# 等价于：maturin develop --release
+#       + python3 scripts/fix_linkedit_alignment.py <.so>
+#       + codesign --force --sign - <.so>
+#       + python -c "import _core_compute"
+```
+
+如果你想手动逐步走：
+
+```bash
+# Step 1: 装 Python 3.11 venv + maturin
+python3.11 -m venv /tmp/venv311
+/tmp/venv311/bin/pip install 'maturin>=1.5,<2'
+
+# Step 2: 构建（需要 PYO3_PYTHON 指向 3.11）
+export PYO3_PYTHON=/tmp/venv311/bin/python
+cd rust/crates/bindings
+maturin develop --release
+
+# Step 3: 修复 LINKEDIT 对齐
+python3 ../../scripts/fix_linkedit_alignment.py \
+    /tmp/venv311/lib/python3.11/site-packages/_core_compute/_core_compute.cpython-311-darwin.so
+
+# Step 4: 重新签名（修复破坏了原签名）
+codesign --remove-signature /tmp/venv311/lib/python3.11/site-packages/_core_compute/_core_compute.cpython-311-darwin.so
+codesign --force --sign - /tmp/venv311/lib/python3.11/site-packages/_core_compute/_core_compute.cpython-311-darwin.so
+
+# Step 5: 验证
+/tmp/venv311/bin/python -c "import _core_compute; print(_core_compute.rust_smoke())"
+```
+
+### 3. Linux 构建（Docker 推荐）
+
+Linux 没有 Mach-O LINKEDIT 校验问题，标准 `maturin develop/build` 即可，但推荐用我们提供的 Dockerfile 来获得一致的 Rust 工具链版本：
+
+```bash
+docker build -f rust/Dockerfile.test -t zt-rust-builder .
+docker run --rm -v "$(pwd):/src" zt-rust-builder bash /src/rust/scripts/build-linux.sh
+# 产物在 ./dist/*.whl
+```
+
+### 4. 排错清单
+
+| 报错 | 原因 | 解决 |
+| --- | --- | --- |
+| `the configured Python interpreter version (3.14) is newer than PyO3's maximum supported version (3.13)` | `python3` 默认是 3.14 | 显式 `export PYO3_PYTHON=/path/to/python3.11` |
+| `missing field 'package'` (maturin) | maturin 1.14.x 对新版 cargo workspace 字段敏感 | 切换到 `rust/crates/bindings` 子目录运行 maturin |
+| `unknown binary 'rustc' in toolchain` | rustup toolchain 没装好 | `rustup show` 检查 + `rustup default stable` |
+| `code signature invalid` | 跑了 `fix_linkedit_alignment.py` 但没重签 | `codesign --force --sign - <.so>` |
+| `symbol(s) not found` (Apple ld) | 同时启用了 `linker = rust-lld` 和 `-fuse-ld` | 二选一；推荐用 `link-arg=-fuse-ld=…` 让 clang 调度 |
+
+### 5. 跑 workspace 测试
+
+```bash
+export PYO3_PYTHON=/opt/homebrew/bin/python3.11
+cd rust
+cargo test --workspace --release
+# 应当看到 24 个 test 全过
+```
+
+---
+
 如有疑问，欢迎在 Discussions 中交流。
 
 Love and Share 🖤

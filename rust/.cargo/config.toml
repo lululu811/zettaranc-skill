@@ -1,0 +1,20 @@
+# Force clang to use lld and disable string deduplication to avoid
+# the LINKEDIT mis-alignment bug on macOS 15+.
+#
+# Symptom when using Apple ld or vanilla lld:
+#   ImportError: dlopen(...): mis-aligned LINKEDIT string pool
+#   (fileOffset=0x0005DBF4) — stroff not 8-byte aligned
+#
+# Two fixes in one config:
+#   1. `-fuse-ld=/opt/homebrew/bin/ld64.lld` — use lld 22.1.8 from Homebrew.
+#   2. `-no-deduplicate-symbol-strings` — disable lld's symbol-string-table
+#      dedup which causes stroff to land on a 4-byte boundary instead of 8.
+#
+# Update path if your Homebrew prefix differs (Apple Silicon: /opt/homebrew,
+# Intel: /usr/local).
+[target.aarch64-apple-darwin]
+rustflags = [
+  "-C", "link-arg=-fuse-ld=/opt/homebrew/bin/ld64.lld",
+  "-C", "link-arg=-Wl,-no-deduplicate-symbol-strings",
+  "-C", "link-arg=-Wl,--no-tail-merge-strings",
+]
