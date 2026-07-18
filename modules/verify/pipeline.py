@@ -10,8 +10,9 @@ from __future__ import annotations
 import logging
 import math
 import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from modules.backtest_six_step import backtest_shaofu_single
 from modules.core.metrics import TRADING_DAYS_PER_YEAR, compute_drawdown, compute_sharpe, daily_returns

@@ -276,7 +276,7 @@ def screen_stocks(
                     result = future.result()
                     if result and _filter_stock(result, criteria):
                         results.append(result[2])
-except (OSError, RuntimeError, BrokenProcessPool, ValueError, KeyError) as e:
+        except (OSError, RuntimeError, BrokenProcessPool, ValueError, KeyError) as e:
             # 并行失败回退到串行；调用方已知失败会降级处理。
             logger.warning("[engine] 并行执行失败，降级为串行: %s", e)
             # 并行失败回退到串行
