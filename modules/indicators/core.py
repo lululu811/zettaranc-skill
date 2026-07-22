@@ -276,16 +276,24 @@ def calculate_ma(prices: list[float], period: int) -> float:
 
 def calculate_ema(prices: list[float], period: int) -> float:
     """计算指数移动平均"""
+    series = calculate_ema_series(prices, period)
+    return series[-1] if series else 0
+
+
+def calculate_ema_series(prices: list[float], period: int) -> list[float]:
+    """计算完整 EMA 序列，初值与 :func:`calculate_ema` 保持一致。"""
     if len(prices) < period:
-        return 0
+        return []
 
     k = 2 / (period + 1)
     ema = prices[0]
+    series = [ema]
 
     for price in prices[1:]:
         ema = price * k + ema * (1 - k)
+        series.append(ema)
 
-    return ema
+    return series
 
 
 def calculate_sma_td(values: list[float], period: int, m: int) -> float:

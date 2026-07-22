@@ -1,4 +1,4 @@
-from ..core import DailyData, calculate_ma, calculate_ema
+from ..core import DailyData, calculate_ma, calculate_ema_series
 
 
 def calculate_zg_white(klines: list[DailyData]) -> float:
@@ -10,13 +10,9 @@ def calculate_zg_white(klines: list[DailyData]) -> float:
     if len(klines) < 10:
         return 0
     closes = [k.close for k in klines]
-    ema1 = calculate_ema(closes, 10)
-    # 再次平滑：用前10天数据计算第二次EMA
-    if len(klines) < 19:
-        return ema1
-    recent_10 = closes[-10:]
-    ema2 = calculate_ema(recent_10, 10)
-    return round(ema2, 2)
+    ema1_series = calculate_ema_series(closes, 10)
+    ema2_series = calculate_ema_series(ema1_series, 10)
+    return round(ema2_series[-1], 2) if ema2_series else 0
 
 
 def calculate_dg_yellow(klines: list[DailyData]) -> float:

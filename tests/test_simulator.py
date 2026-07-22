@@ -9,7 +9,7 @@ from dataclasses import asdict
 
 import pytest
 
-from modules.indicators import DailyData
+from modules.indicators import DailyData, calculate_zg_white
 from modules.simulator import (
     CostModel,
     MarketRegime,
@@ -22,7 +22,12 @@ from modules.simulator import (
 from modules.simulator.execution_constraints import next_trading_date
 from modules.simulator.execution_engine import execute_buy, execute_sell
 from modules.simulator.exit_manager import check_exit
-from modules.simulator.market_context import MarketContext, get_market_context, max_positions_allowed
+from modules.simulator.market_context import (
+    MarketContext,
+    _precompute_line_series,
+    get_market_context,
+    max_positions_allowed,
+)
 from modules.simulator.position_sizer import build_position, calculate_position_size
 from modules.simulator.signal_filter import SignalScore, SignalVerdict, filter_signals
 from modules.simulator.simulator import _build_result, _portfolio_value, _run_single_day
@@ -257,6 +262,13 @@ class TestExitManager:
 
 
 class TestMarketContext:
+    def test_precomputed_white_matches_double_ema(self):
+        klines = _make_klines(n=120, trend=0.005)
+        whites, _ = _precompute_line_series(klines, start=9)
+
+        for i in range(9, len(klines)):
+            assert whites[i] == calculate_zg_white(klines[: i + 1])
+
     def test_max_positions_strong(self):
         ctx = MarketContext(
             date="20260101", regime=MarketRegime.STRONG, index_trend=80, breadth=0.3, moneyflow_score=70

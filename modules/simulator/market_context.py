@@ -14,6 +14,7 @@ import sqlite3
 from ..database import get_connection
 from ..datasource import DataSource, get_datasource
 from ..indicators import DailyData, calculate_zg_white, calculate_dg_yellow, calculate_ma
+from ..indicators.core import calculate_ema_series
 from . import MarketContext, MarketRegime
 from modules.core.errors import ErrorCode, ZettarancError
 
@@ -74,23 +75,13 @@ def _precompute_line_series(klines: list[DailyData], start: int) -> tuple[dict[i
     closes = [k.close for k in klines]
     whites: dict[int, float] = {}
     yellows: dict[int, float] = {}
-    ema_k = 2 / 11  # calculate_ema(period=10) 的平滑系数
+    ema1_series = calculate_ema_series(closes, 10)
+    ema2_series = calculate_ema_series(ema1_series, 10)
 
     for i in range(max(0, start), len(klines)):
         n = i + 1
-        # 白线：calculate_zg_white 同款分支
-        if n < 10:
-            whites[i] = 0
-        elif n < 19:
-            ema = closes[0]
-            for price in closes[1 : i + 1]:
-                ema = price * ema_k + ema * (1 - ema_k)
-            whites[i] = ema
-        else:
-            ema = closes[i - 9]
-            for price in closes[i - 8 : i + 1]:
-                ema = price * ema_k + ema * (1 - ema_k)
-            whites[i] = round(ema, 2)
+        # 白线：EMA(EMA(C, 10), 10)，与 calculate_zg_white 完全一致。
+        whites[i] = round(ema2_series[i], 2) if n >= 10 else 0
         # 黄线：calculate_dg_yellow 同款分支
         if n < 114:
             yellows[i] = 0

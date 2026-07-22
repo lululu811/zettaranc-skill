@@ -353,6 +353,25 @@ class TestDoubleLine:
         white = calculate_zg_white(klines)
         assert white > 0
 
+    def test_zg_white_is_double_ema(self):
+        prices = [100 + i * i * 0.1 for i in range(30)]
+        klines = [make_kline(price=price, date=f"202601{i + 1:02d}") for i, price in enumerate(prices)]
+
+        alpha = 2 / 11
+        ema1 = prices[0]
+        ema2 = ema1
+        for price in prices[1:]:
+            ema1 = price * alpha + ema1 * (1 - alpha)
+            ema2 = ema1 * alpha + ema2 * (1 - alpha)
+
+        wrong_single_ema = prices[-10]
+        for price in prices[-9:]:
+            wrong_single_ema = price * alpha + wrong_single_ema * (1 - alpha)
+
+        white = calculate_zg_white(klines)
+        assert white == round(ema2, 2)
+        assert white != round(wrong_single_ema, 2)
+
     def test_dg_yellow(self):
         klines = make_klines(n=120, base_price=100.0, daily_pct=0.5)
         yellow = calculate_dg_yellow(klines)
