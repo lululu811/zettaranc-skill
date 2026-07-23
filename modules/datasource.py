@@ -22,6 +22,7 @@ from .bridge_client import (
 from .database import get_connection, save_klines
 from .indevs_client import IndevsClient
 from .tushare_client import TushareClient
+from .a_stock_data_client import AStockDataClient
 from modules.core.errors import ErrorCode, ZettarancError
 
 logger = logging.getLogger(__name__)
@@ -244,6 +245,78 @@ class IndevsDataSource:
         return self._client.get_kline_dicts(ts_code, days, start_date, end_date)
 
 
+class AStockDataDataSource:
+    """A-Stock-Data 免费数据源封装（无需 API Key）。
+
+    数据源映射：
+      - 实时行情 -> 腾讯财经
+      - 日K线    -> 百度股市通
+      - 股票基础信息 -> 东财 push2
+      - 资金流向  -> 东财 push2
+      - 每日基础指标 -> 腾讯财经
+    """
+
+    def __init__(self) -> None:
+        self._client = AStockDataClient()
+
+    @property
+    def name(self) -> str:
+        """数据源标识名"""
+        return "a-stock-data"
+
+    def health_check(self) -> bool:
+        """检查数据源连通性"""
+        return self._client.health_check()
+
+    def get_daily(
+        self, ts_code: str, start_date: str | None = None, end_date: str | None = None
+    ) -> pd.DataFrame | None:
+        """获取个股日线行情（OHLCV + 涨跌幅）"""
+        return self._client.get_daily(ts_code, start_date, end_date)
+
+    def get_index_daily(self, ts_code: str, start_date: str, end_date: str) -> pd.DataFrame | None:
+        """获取指数日线行情"""
+        return self._client.get_index_daily(ts_code, start_date, end_date)
+
+    def get_realtime_quote(self, ts_codes: list[str]) -> pd.DataFrame | None:
+        """获取实时行情快照"""
+        return self._client.get_realtime_quote(ts_codes)
+
+    def get_moneyflow(self, ts_code: str, trade_date: str) -> pd.DataFrame | None:
+        """获取个股资金流向"""
+        return self._client.get_moneyflow(ts_code, trade_date)
+
+    def get_daily_basic(self, ts_code: str, start_date: str, end_date: str) -> pd.DataFrame | None:
+        """获取个股每日基础指标"""
+        return self._client.get_daily_basic(ts_code, start_date, end_date)
+
+    def get_stk_factor(self, ts_code: str, start_date: str, end_date: str) -> pd.DataFrame | None:
+        """获取个股技术因子（a-stock-data 不支持，返回 None）"""
+        return None
+
+    def get_stock_basic(self, ts_code: str | None = None, name: str | None = None) -> pd.DataFrame | None:
+        """获取股票基础信息"""
+        return self._client.get_stock_basic(ts_code, name)
+
+    def get_trade_cal(self, exchange: str, start_date: str, end_date: str) -> pd.DataFrame | None:
+        """获取交易日历（a-stock-data 不支持，返回 None）"""
+        return None
+
+    def get_stock_list(self, exchange: str | None = None) -> list[dict]:
+        """获取股票列表（a-stock-data 不提供全量列表）"""
+        return []
+
+    def get_kline_dicts(
+        self,
+        ts_code: str,
+        days: int = 60,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> list[dict]:
+        """获取 K 线 dict 列表"""
+        return self._client.get_kline_dicts(ts_code, days, start_date, end_date)
+
+
 class BridgeDataSource:
     """Tushare Data Bridge HTTP API 数据源封装。
 
@@ -451,12 +524,13 @@ class SqliteDataSource:
 class CompositeDataSource:
     """组合数据源：按配置优先级自动回退。
 
-    当前实现中，indevs / bridge / SQLite 提供 ``get_stock_list`` 与
-    ``get_kline_dicts`` 两个接口的回退；其余 DataSource 方法仅在
-    ``preferred="tushare"`` 或 ``preferred="indevs"`` 时生效。
+    默认优先级（preferred="auto"）：
+      a-stock-data（免费） -> indevs -> bridge -> SQLite
+
+    a-stock-data 无需任何 API Key，使用腾讯/百度/东财等免费公开接口。
     """
 
-    VALID_PREFERRED = ("auto", "tushare", "indevs", "bridge", "sqlite")
+    VALID_PREFERRED = ("auto", "tushare", "indevs", "bridge", "sqlite", "a-stock-data")
 
     def __init__(self, preferred: str = "auto") -> None:
         if preferred not in self.VALID_PREFERRED:
@@ -469,6 +543,7 @@ class CompositeDataSource:
         self._sqlite = SqliteDataSource()
         self._tushare: TushareDataSource | None = None
         self._indevs: IndevsDataSource | None = None
+        self._a_stock_data: AStockDataDataSource | None = None
 
     @property
     def _tushare_source(self) -> TushareDataSource:
@@ -481,6 +556,12 @@ class CompositeDataSource:
         if self._indevs is None:
             self._indevs = IndevsDataSource()
         return self._indevs
+
+    @property
+    def _a_stock_data_source(self) -> AStockDataDataSource:
+        if self._a_stock_data is None:
+            self._a_stock_data = AStockDataDataSource()
+        return self._a_stock_data
 
     @property
     def name(self) -> str:
@@ -497,68 +578,127 @@ class CompositeDataSource:
             return self._tushare_source.health_check()
         if self._preferred == "indevs":
             return self._indevs_source.health_check()
-        return self._indevs_source.health_check() or self._bridge.health_check() or self._sqlite.health_check()
+        if self._preferred == "a-stock-data":
+            return self._a_stock_data_source.health_check()
+        # auto: a-stock-data -> indevs -> bridge -> sqlite
+        return (
+            self._a_stock_data_source.health_check()
+            or self._indevs_source.health_check()
+            or self._bridge.health_check()
+            or self._sqlite.health_check()
+        )
 
     def get_daily(self, ts_code: str, start_date: str, end_date: str) -> pd.DataFrame | None:
         """获取个股日线行情（OHLCV + 涨跌幅）"""
-        if self._preferred == "auto" and os.environ.get("INDEVS_API_KEY"):
-            return self._indevs_source.get_daily(ts_code, start_date, end_date)
+        if self._preferred == "a-stock-data":
+            return self._a_stock_data_source.get_daily(ts_code, start_date, end_date)
+        if self._preferred == "auto":
+            # auto 模式：优先 a-stock-data（免费），回退 indevs
+            result = self._a_stock_data_source.get_daily(ts_code, start_date, end_date)
+            if result is not None:
+                return result
+            if os.environ.get("INDEVS_API_KEY"):
+                return self._indevs_source.get_daily(ts_code, start_date, end_date)
+            return None
         if self._preferred in ("tushare", "indevs"):
             return self._indevs_source.get_daily(ts_code, start_date, end_date)
         return None
 
     def get_index_daily(self, ts_code: str, start_date: str, end_date: str) -> pd.DataFrame | None:
         """获取指数日线行情"""
-        if self._preferred == "auto" and os.environ.get("INDEVS_API_KEY"):
-            return self._indevs_source.get_index_daily(ts_code, start_date, end_date)
+        if self._preferred == "a-stock-data":
+            return self._a_stock_data_source.get_index_daily(ts_code, start_date, end_date)
+        if self._preferred == "auto":
+            result = self._a_stock_data_source.get_index_daily(ts_code, start_date, end_date)
+            if result is not None:
+                return result
+            if os.environ.get("INDEVS_API_KEY"):
+                return self._indevs_source.get_index_daily(ts_code, start_date, end_date)
+            return None
         if self._preferred in ("tushare", "indevs"):
             return self._indevs_source.get_index_daily(ts_code, start_date, end_date)
         return None
 
     def get_realtime_quote(self, ts_codes: list[str]) -> pd.DataFrame | None:
         """获取实时行情快照（多只股票批量查询）"""
-        if self._preferred == "auto" and os.environ.get("INDEVS_API_KEY"):
-            return self._indevs_source.get_realtime_quote(ts_codes)
+        if self._preferred == "a-stock-data":
+            return self._a_stock_data_source.get_realtime_quote(ts_codes)
+        if self._preferred == "auto":
+            result = self._a_stock_data_source.get_realtime_quote(ts_codes)
+            if result is not None:
+                return result
+            if os.environ.get("INDEVS_API_KEY"):
+                return self._indevs_source.get_realtime_quote(ts_codes)
+            return None
         if self._preferred in ("tushare", "indevs"):
             return self._indevs_source.get_realtime_quote(ts_codes)
         return None
 
     def get_moneyflow(self, ts_code: str, trade_date: str) -> pd.DataFrame | None:
         """获取个股资金流向（特大单 / 大单 / 中单 / 小单）"""
-        if self._preferred == "auto" and os.environ.get("INDEVS_API_KEY"):
-            return self._indevs_source.get_moneyflow(ts_code, trade_date)
+        if self._preferred == "a-stock-data":
+            return self._a_stock_data_source.get_moneyflow(ts_code, trade_date)
+        if self._preferred == "auto":
+            result = self._a_stock_data_source.get_moneyflow(ts_code, trade_date)
+            if result is not None:
+                return result
+            if os.environ.get("INDEVS_API_KEY"):
+                return self._indevs_source.get_moneyflow(ts_code, trade_date)
+            return None
         if self._preferred in ("tushare", "indevs"):
             return self._indevs_source.get_moneyflow(ts_code, trade_date)
         return None
 
     def get_daily_basic(self, ts_code: str, start_date: str, end_date: str) -> pd.DataFrame | None:
         """获取个股每日基础指标（换手率 / PE / PB / 总市值等）"""
-        if self._preferred == "auto" and os.environ.get("INDEVS_API_KEY"):
-            return self._indevs_source.get_daily_basic(ts_code, start_date, end_date)
+        if self._preferred == "a-stock-data":
+            return self._a_stock_data_source.get_daily_basic(ts_code, start_date, end_date)
+        if self._preferred == "auto":
+            result = self._a_stock_data_source.get_daily_basic(ts_code, start_date, end_date)
+            if result is not None:
+                return result
+            if os.environ.get("INDEVS_API_KEY"):
+                return self._indevs_source.get_daily_basic(ts_code, start_date, end_date)
+            return None
         if self._preferred in ("tushare", "indevs"):
             return self._indevs_source.get_daily_basic(ts_code, start_date, end_date)
         return None
 
     def get_stk_factor(self, ts_code: str, start_date: str, end_date: str) -> pd.DataFrame | None:
         """获取个股技术因子（动量 / 量价等）"""
-        if self._preferred == "auto" and os.environ.get("INDEVS_API_KEY"):
-            return self._indevs_source.get_stk_factor(ts_code, start_date, end_date)
+        if self._preferred == "a-stock-data":
+            return None  # a-stock-data 不支持
+        if self._preferred == "auto":
+            if os.environ.get("INDEVS_API_KEY"):
+                return self._indevs_source.get_stk_factor(ts_code, start_date, end_date)
+            return None
         if self._preferred in ("tushare", "indevs"):
             return self._indevs_source.get_stk_factor(ts_code, start_date, end_date)
         return None
 
     def get_stock_basic(self, ts_code: str | None = None, name: str | None = None) -> pd.DataFrame | None:
         """获取股票基础信息（行业 / 上市日期 / 股本等）"""
-        if self._preferred == "auto" and os.environ.get("INDEVS_API_KEY"):
-            return self._indevs_source.get_stock_basic(ts_code, name)
+        if self._preferred == "a-stock-data":
+            return self._a_stock_data_source.get_stock_basic(ts_code, name)
+        if self._preferred == "auto":
+            result = self._a_stock_data_source.get_stock_basic(ts_code, name)
+            if result is not None:
+                return result
+            if os.environ.get("INDEVS_API_KEY"):
+                return self._indevs_source.get_stock_basic(ts_code, name)
+            return None
         if self._preferred in ("tushare", "indevs"):
             return self._indevs_source.get_stock_basic(ts_code, name)
         return None
 
     def get_trade_cal(self, exchange: str, start_date: str, end_date: str) -> pd.DataFrame | None:
         """获取交易日历（指定交易所）"""
-        if self._preferred == "auto" and os.environ.get("INDEVS_API_KEY"):
-            return self._indevs_source.get_trade_cal(exchange, start_date, end_date)
+        if self._preferred == "a-stock-data":
+            return None  # a-stock-data 不支持
+        if self._preferred == "auto":
+            if os.environ.get("INDEVS_API_KEY"):
+                return self._indevs_source.get_trade_cal(exchange, start_date, end_date)
+            return None
         if self._preferred in ("tushare", "indevs"):
             return self._indevs_source.get_trade_cal(exchange, start_date, end_date)
         return None
@@ -567,7 +707,9 @@ class CompositeDataSource:
         """获取股票列表（按交易所）"""
         sources: list[DataSource] = []
         if self._preferred == "auto":
-            sources = [self._indevs_source, self._bridge, self._sqlite]
+            sources = [self._a_stock_data_source, self._indevs_source, self._bridge, self._sqlite]
+        elif self._preferred == "a-stock-data":
+            sources = [self._a_stock_data_source, self._indevs_source, self._bridge, self._sqlite]
         elif self._preferred == "bridge":
             sources = [self._bridge]
         elif self._preferred == "sqlite":
@@ -646,7 +788,9 @@ class CompositeDataSource:
         # 2. DB 没有数据，调 API
         sources: list[DataSource] = []
         if self._preferred == "auto":
-            sources = [self._indevs_source, self._bridge, self._sqlite]
+            sources = [self._a_stock_data_source, self._indevs_source, self._bridge, self._sqlite]
+        elif self._preferred == "a-stock-data":
+            sources = [self._a_stock_data_source, self._indevs_source, self._bridge, self._sqlite]
         elif self._preferred == "bridge":
             sources = [self._bridge]
         elif self._preferred == "sqlite":
@@ -787,7 +931,11 @@ def daily_to_dict(klines: list) -> list[dict]:
 
 
 def get_datasource(preferred: str = "auto") -> DataSource:
-    """数据源工厂函数。"""
+    """数据源工厂函数。
+
+    preferred="auto" 时默认使用 CompositeDataSource，优先级为：
+    a-stock-data（免费）-> indevs -> bridge -> sqlite
+    """
     if preferred == "tushare":
         return TushareDataSource()
     if preferred == "bridge":
@@ -796,6 +944,6 @@ def get_datasource(preferred: str = "auto") -> DataSource:
         return SqliteDataSource()
     if preferred == "indevs":
         return IndevsDataSource()
-    if os.environ.get("INDEVS_API_KEY"):
-        return CompositeDataSource("auto")
+    if preferred == "a-stock-data":
+        return AStockDataDataSource()
     return CompositeDataSource("auto")

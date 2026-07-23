@@ -2,6 +2,48 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## v4.1.0 (2026-07-23) — 免费数据源集成（a-stock-data）
+
+> **「v4.1.0：零积分、零配置即可获取 A 股实时数据」**
+
+### 新增
+
+- **a-stock-data 免费数据源**（[#simonlin1212/a-stock-data](https://github.com/simonlin1212/a-stock-data)）
+  - 新增 `modules/a_stock_data_client.py`：封装腾讯财经、百度股市通、通达信 TCP、东方财富等 15 个免费公开接口
+  - 新增 `AStockDataDataSource` 类：实现 `DataSource` Protocol，与 Tushare/Indevs 接口对齐
+  - 腾讯财经实时行情（不封 IP）、百度 K 线（带 MA 均线）、通达信 TCP K 线备用源
+  - 东方财富股票基础信息、资金流向，内置 `_em_get()` 统一限流防封
+  - 代码格式自动转换（`000001.SZ` ↔ `000001`）
+- `CompositeDataSource` 新增 `"a-stock-data"` 模式
+  - `auto` 模式默认优先级：**a-stock-data（免费）→ indevs → bridge → sqlite**
+- `DataSyncer` 默认使用 `AStockDataDataSource`，无需配置 tushare token
+- `get_datasource()` 工厂函数支持 `preferred="a-stock-data"`
+- `requirements.txt` 新增 `mootdx>=0.11.0`（通达信 TCP 客户端，K 线备用源）
+
+### 数据源映射
+
+| tushare 接口 | a-stock-data 替代 | 数据源 |
+|------|------|------|
+| `pro.daily()` | 百度 K 线 / mootdx 日 K | 百度 / 通达信 TCP |
+| `pro.realtime_quote()` | `tencent_quote()` | 腾讯财经 |
+| `pro.stock_basic()` | `eastmoney_stock_info()` | 东财 push2 |
+| `pro.moneyflow()` | `eastmoney_fund_flow_minute()` | 东财 push2 |
+| `pro.daily_basic()` | `tencent_quote()` | 腾讯财经 |
+
+### 使用方式
+
+```bash
+# 零配置即可用（无需 tushare 积分）
+pip install -r requirements.txt
+zt analyze 600519.SH  # 自动走 a-stock-data 免费数据源
+
+# 可选：指定数据源
+DATA_PREFERRED=a-stock-data zt analyze 600519.SH  # 显式指定
+DATA_PREFERRED=tushare zt analyze 600519.SH        # 切回 tushare
+```
+
+---
+
 ## v4.0.3 (2026-07-18) — 收尾技术债（PATCH）
 
 > **「v4.0.3：剩余 7 项技术债 + 2 项 bug 一次性清偿」**

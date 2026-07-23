@@ -21,12 +21,14 @@
 git clone https://github.com/lululu811/zettaranc-skill.git && cd zettaranc-skill
 pip install -r requirements.txt && pip install -e .
 
-# 2. 设置 websearch 模式（零配置，走框架与历史知识问答）
+# 2. 零配置模式（自动走免费数据源 a-stock-data，无需 tushare 积分）
 echo "DATA_MODE=websearch" > .env
 
 # 3. 立即体验
-zt analyze 600519.SH  # 用框架分析茅台，不需要行情数据
+zt analyze 600519.SH  # 用框架分析茅台，自动获取实时行情
 ```
+
+> **数据源说明**：默认集成 [a-stock-data](https://github.com/simonlin1212/a-stock-data) 免费数据源（腾讯/百度/东财/通达信），零积分即可使用实时行情、K 线、股票信息等。也可配置 `DATA_PREFERRED=tushare` 切回 tushare。详见 [CHANGELOG](docs/CHANGELOG.md)。
 
 ---
 

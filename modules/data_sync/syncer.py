@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from ..database import get_connection, get_db_path
-from ..datasource import DataSource, IndevsDataSource, TushareDataSource, get_datasource
+from ..datasource import DataSource, IndevsDataSource, TushareDataSource, AStockDataDataSource, get_datasource
 from .rate_limiter import _rate_limit_global, _MAX_SYNC_WORKERS
 from .indicator_cache import (
     _get_indicator_funcs,
@@ -47,21 +47,9 @@ class DataSyncer:
             # 优先 Indevs Replay API
             if os.environ.get("INDEVS_API_KEY"):
                 datasource = IndevsDataSource()
-            elif data_mode == "jnb":
-                if not self.token:
-                    raise ZettarancError(
-                        ErrorCode.CONFIG_MISSING,
-                        "JNB 模式下未设置 TUSHARE_TOKEN，请检查 .env 文件。",
-                    )
-                if not TUSHARE_API_URL:
-                    raise ZettarancError(
-                        ErrorCode.CONFIG_MISSING,
-                        "JNB 模式下未设置 TUSHARE_API_URL，请在 .env 中配置中转 API 地址。\n"
-                        "示例：TUSHARE_API_URL=https://tt.xiaodefa.cn",
-                    )
-                datasource = TushareDataSource(token=self.token)
             else:
-                datasource = TushareDataSource(token=self.token)
+                # 默认使用 a-stock-data（免费，无需 API Key）
+                datasource = AStockDataDataSource()
         self._datasource = datasource
         self._fetcher = DataFetcher(self._datasource)
 
