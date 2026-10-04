@@ -9,7 +9,7 @@
 - **核心交付物**：`SKILL.md`（Skill-Schema-V2 合规的角色扮演协议，被 Claude Code/Cursor 加载）——LLM 用 Z 哥角色生成点评/话术。
 - **数据层**：Python 包 `modules/`，只负责**数据准备**（指标、信号、回测、评分），不做投资话术——这是刻意分层，避免「AI 味」。
 - **可选层**：`api/`（FastAPI REST）+ `frontend/`（React 看板）+ `rust/`（Rust 加速计算核）。
-- **当前版本**：`v4.2.0`（`pyproject.toml`、`SKILL.md`、`skill.json`、`docs/CHANGELOG.md` 顶端四处一致）。
+- **当前版本**：`v4.3.1`（`pyproject.toml:7`、`SKILL.md` frontmatter、`skill.json:3`、`docs/CHANGELOG.md` 顶端四处一致；改 `pyproject.toml` 的 `version` 时必须同步这四处，`docs/INDEX.md:32` 有维护规则）。
 - **许可证**：MIT。
 
 ## Architecture & Data Flow
@@ -117,7 +117,7 @@ pip install -e ".[corpus]"             # 语料处理可选依赖（yt-dlp/faste
 
 ```bash
 zt analyze 600487.SH --days 365 --json        # 分析单股
-zt screen --strategy B1 --limit 20 --json     # 批量选股（策略别名见 cli_commands.py）
+zt screen --strategy B1 --limit 20 --json     # 批量选股（策略别名见 cli_commands/strategy_alias.py）
 zt diagnose 600487.SH --json                  # 持仓诊断
 zt backtest shaofu 600487.SH --days 250 --json  # 少妇战法回测（Rust 桥优先）
 zt simulate [codes] --days 250 --capital 100000 --json   # 模拟器
@@ -127,9 +127,10 @@ zt sync status                                   # 数据同步状态
 zt monitor --json                                # 自选股监控
 zt self-optimize run --target trading --rounds 3 # Darwin 自优化
 zt trade add "口语化交易描述"                     # 记录交易
+zt market timing --json                            # 市场择时指标（v4.3.0 新增）
 ```
 
-所有命令支持 `--json`，宿主直接解析。15 个顶层子命令：`analyze / screen / score / workflow / diagnose / watchlist / sync / track / self-optimize / backtest / trade / daily / monitor / simulate / verify`。
+所有命令支持 `--json`，宿主直接解析。16 个顶层子命令：`analyze / screen / score / workflow / diagnose / watchlist / sync / track / self-optimize / backtest / trade / daily / market / monitor / simulate / verify`。
 
 ### Web / 前端
 
@@ -182,7 +183,7 @@ RUN_REALDATA=true python -m pytest tests/test_indicators_realdata.py -v  # 真�
 | `pyproject.toml` | 构建（setuptools）+ 全部工具配置（ruff/mypy/pytest/maturin）；entry points：`zt`→`modules.cli:main`、`zt-web`→`api.main:start_web`、`zt-monitor`→`modules.monitor:main` |
 | `SKILL.md` | 角色扮演协议（核心交付物，12 项质量门校验） |
 | `skill.json` | Skill 元数据 |
-| `modules/cli.py` + `modules/cli_commands.py` | CLI 分发与 15 子命令实现 |
+| `modules/cli.py` + `modules/cli_commands/` | CLI 分发与 16 子命令实现（`cli_commands/` 为包：analyze / backtest / data / diagnose / portfolio / screen / simulate / strategy_alias / _helpers） |
 | `modules/datasource.py` | 统一数据源 + CompositeDataSource（优先级链） |
 | `modules/database.py` | SQLite 层 + `get_connection()` + `init_database()` |
 | `modules/indicators/data_layer.py` | DB-first K 线读 + 指标缓存 + `analyze_stock()` 管线 |
@@ -195,11 +196,11 @@ RUN_REALDATA=true python -m pytest tests/test_indicators_realdata.py -v  # 真�
 | `tests/conftest.py` | pytest fixtures + 数据工厂 |
 | `.env.example` | 运行时环境变量模板 |
 | `.pre-commit-config.yaml` | pre-commit 钩子（ruff/mypy/SKILL 质量门/merge-yaml-行尾检查） |
-| `docs/CHANGELOG.md` | 版本与变更日志（v4.2.0 头） |
+| `docs/CHANGELOG.md` | 版本与变更日志（v4.3.0 头） |
 
 ## Runtime / Tooling Preferences
 
-- **Python**：`requires-python >=3.12`；CLI/测试跑在 3.12/3.13（CI release matrix），Rust PyO3 构建在 3.11（`rust/Dockerfile.test`）或 3.12（CI）。**文档里仍残留「Python 3.10+」的过时说法**——以 `pyproject.toml` 的 `>=3.12` 为准。
+- **Python**：`requires-python >=3.12`；CLI/测试跑在 3.12/3.13（CI release matrix），Rust PyO3 构建在 3.11（`rust/Dockerfile.test`）或 3.12（CI）。文档口径已于 v4.3.0 统一为 3.12+，以 `pyproject.toml` 的 `>=3.12` 为准。
 - **包管理器**：**pip 为正**（`requirements.txt` 是已提交的依赖源；`requirements.txt` 比 `pyproject.toml` 多一个 `mootdx>=0.11.0`）。根目录 `uv.lock` 存在但被 `gitignore`（`/uv.lock`），且 pyproject 无 `[tool.uv]` 段——**非 canonical**，别依赖它。
 - **Rust**：需要时用 maturin 构建；`rust-toolchain.toml` 锁 1.78.0，`cargo test --workspace --exclude zt_bindings`（bindings 由 PyO3 侧构建）。
 - **前端**：Node/npm（非包管理器约束项）；frontend 依赖独立于 Python，API 依赖（fastapi/uvicorn/pydantic-settings）**不**在 `requirements.txt`。

@@ -372,6 +372,9 @@ def eastmoney_fund_flow_minute(code: str) -> list[dict]:
     }
     try:
         r = _em_get(url, params=params, headers=headers, timeout=10)
+        if r is None:
+            logger.warning("[a-stock-data] push2 资金流请求失败: 连接异常，已返回 None")
+            return []
         d = r.json()
     except Exception as e:
         logger.warning("[a-stock-data] push2 资金流请求失败: %s", e)
@@ -411,6 +414,9 @@ def stock_fund_flow_120d(code: str) -> list[dict]:
     }
     try:
         r = _em_get(url, params=params, headers=headers, timeout=10)
+        if r is None:
+            logger.warning("[a-stock-data] push2his 资金流请求失败: 连接异常，已返回 None")
+            return []
         d = r.json()
     except Exception as e:
         logger.warning("[a-stock-data] push2his 资金流请求失败: %s", e)
@@ -730,9 +736,7 @@ class AStockDataClient:
                             # 注意顺序：688 先于 6 判断，否则科创板会被误判为主板
                             "market": "科创板"
                             if code.startswith("688")
-                            else (
-                                "创业板" if code.startswith("3") else ("主板" if code.startswith("6") else "其他")
-                            ),
+                            else ("创业板" if code.startswith("3") else ("主板" if code.startswith("6") else "其他")),
                             "list_date": info.get("list_date", ""),
                             "total_share": info.get("total_shares", 0),
                             "float_share": info.get("float_shares", 0),

@@ -604,8 +604,16 @@ def make_sb1_detailed_klines(rising: bool):
         low = price - 0.5
         prev_close = klines[-1].close if klines else price
         klines.append(
-            make_kline(price=c, vol=10000, pct_chg=(c - prev_close) / prev_close * 100,
-                       prev_close=prev_close, open=o, high=h, low=low, date=f"202601{i + 1:02d}")
+            make_kline(
+                price=c,
+                vol=10000,
+                pct_chg=(c - prev_close) / prev_close * 100,
+                prev_close=prev_close,
+                open=o,
+                high=h,
+                low=low,
+                date=f"202601{i + 1:02d}",
+            )
         )
         price += 0.1
 
@@ -620,8 +628,16 @@ def make_sb1_detailed_klines(rising: bool):
         h = lo + 3.0
         prev_close = klines[-1].close
         klines.append(
-            make_kline(price=c, vol=9000, pct_chg=(c - prev_close) / prev_close * 100,
-                       prev_close=prev_close, open=o, high=h, low=lo, date=f"202602{i + 1:02d}")
+            make_kline(
+                price=c,
+                vol=9000,
+                pct_chg=(c - prev_close) / prev_close * 100,
+                prev_close=prev_close,
+                open=o,
+                high=h,
+                low=lo,
+                date=f"202602{i + 1:02d}",
+            )
         )
 
     # 放量大阴线（跌幅 -30%，量比 2 倍，击穿止损位）
@@ -633,8 +649,16 @@ def make_sb1_detailed_klines(rising: bool):
     drop_low = drop_close * 0.97
     drop_vol = prev_vol * 2.0
     klines.append(
-        make_kline(price=drop_close, vol=drop_vol, pct_chg=(drop_close - prev_close) / prev_close * 100,
-                   prev_close=prev_close, open=drop_open, high=drop_high, low=drop_low, date="20260301")
+        make_kline(
+            price=drop_close,
+            vol=drop_vol,
+            pct_chg=(drop_close - prev_close) / prev_close * 100,
+            prev_close=prev_close,
+            open=drop_open,
+            high=drop_high,
+            low=drop_low,
+            date="20260301",
+        )
     )
 
     # 大阴线后缩量企稳 2 天
@@ -646,8 +670,9 @@ def make_sb1_detailed_klines(rising: bool):
         low = min(o, c) * 0.97
         vol = drop_vol * 0.5
         klines.append(
-            make_kline(price=c, vol=vol, pct_chg=dpct, prev_close=prev_close, open=o, high=h, low=low,
-                       date=f"2026030{i + 2}")
+            make_kline(
+                price=c, vol=vol, pct_chg=dpct, prev_close=prev_close, open=o, high=h, low=low, date=f"2026030{i + 2}"
+            )
         )
 
     # 反转K线确认（今日，小阳线）
@@ -658,8 +683,16 @@ def make_sb1_detailed_klines(rising: bool):
     low = o * 0.995
     vol = drop_vol * 0.4
     klines.append(
-        make_kline(price=c, vol=vol, pct_chg=(c - prev_close) / prev_close * 100,
-                   prev_close=prev_close, open=o, high=h, low=low, date="20260305")
+        make_kline(
+            price=c,
+            vol=vol,
+            pct_chg=(c - prev_close) / prev_close * 100,
+            prev_close=prev_close,
+            open=o,
+            high=h,
+            low=low,
+            date="20260305",
+        )
     )
 
     return klines

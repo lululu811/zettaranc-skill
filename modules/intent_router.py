@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+模块说明：意图路由（v4.3+ 状态：实验性；SKILL.md:101 提及「自动分类」是规划目标，尚未消费）。
+当前仅供内部 intent_chat (modules/intent_chat.py) 使用；tests/test_intent_router.py 单测。
 意图识别与路由分发模块
 
 规则匹配优先（< 1ms，零 token 消耗），LLM 轻量分类兜底。

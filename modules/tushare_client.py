@@ -26,8 +26,6 @@ try:
 except ImportError:
     print("请先安装依赖: pip install requests pandas python-dotenv tushare")
 
-# dotenv 加载已移至 modules/__init__.py（包级别一次性加载，override=True）
-
 logger = logging.getLogger(__name__)
 
 TUSHARE_API_URL = os.environ.get("TUSHARE_API_URL", "")

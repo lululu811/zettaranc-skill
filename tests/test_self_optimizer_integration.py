@@ -17,7 +17,7 @@ from modules.self_optimizer.param_registry import get_defaults
 
 def test_phase1_baseline_with_mock_data(mock_monthly_reviews_with_poor_strategy):
     """mock 3 个月数据, baseline_score 必须在 [0, 100]."""
-    score = phase1_baseline(target="trading", review_months=3)
+    score = phase1_baseline(review_months=3)
     assert 0 <= score <= 100
     assert 25 <= score <= 40
 

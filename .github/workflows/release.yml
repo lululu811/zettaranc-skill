@@ -106,12 +106,19 @@ jobs:
 
   # ───────────────────────────────────────────────────────────
   # Job 2: 发布到 PyPI（仅稳定 tag，无 rc/alpha/beta）
+  #
+  # ⚠️ 2026-09-30 起默认禁用：PyPI Trusted Publisher 尚未在 pypi.org 配置，
+  #    发布会以 invalid-publisher 失败。wheel 已由 Job 1 构建并上传，
+  #    Job 3 会创建 GitHub Release 并附带 wheel/sdist，可手动下载安装。
+  #    配置好 Trusted Publisher（repo=lululu811/zettaranc-skill,
+  #    workflow=release.yml, environment=pypi）后把 PUBLISH_TO_PYPI 改回 'true'。
   # ───────────────────────────────────────────────────────────
   pypi-publish:
     name: Publish to PyPI
     needs: test
     runs-on: ubuntu-latest
     if: |
+      vars.PUBLISH_TO_PYPI == 'true' &&
       startsWith(github.ref, 'refs/tags/v') &&
       !contains(github.ref, 'rc') &&
       !contains(github.ref, 'alpha') &&
@@ -185,9 +192,9 @@ jobs:
   # ───────────────────────────────────────────────────────────
   clawhub-publish:
     name: Publish to ClawHub (notify)
-    needs: [pypi-publish, github-release]
+    needs: [github-release]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: always() && startsWith(github.ref, 'refs/tags/v')
     continue-on-error: true  # 占位阶段失败不影响主发布链路
     steps:
       - name: Checkout

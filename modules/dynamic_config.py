@@ -86,8 +86,7 @@ class MarketTimingWeights:
         """校验参数合法性。"""
         if self.strong_threshold <= self.weak_threshold:
             raise ValueError(
-                f"strong_threshold ({self.strong_threshold}) 必须 > "
-                f"weak_threshold ({self.weak_threshold})"
+                f"strong_threshold ({self.strong_threshold}) 必须 > weak_threshold ({self.weak_threshold})"
             )
         if self.strong_up_pct <= 0:
             raise ValueError(f"strong_up_pct 必须 > 0,实际 {self.strong_up_pct}")
@@ -95,15 +94,11 @@ class MarketTimingWeights:
             raise ValueError(f"strong_down_pct 必须 < 0,实际 {self.strong_down_pct}")
         if self.limit_up_pct <= 0 or self.limit_down_pct >= 0:
             raise ValueError(
-                f"limit_up_pct ({self.limit_up_pct}) 必须 > 0 且 "
-                f"limit_down_pct ({self.limit_down_pct}) 必须 < 0"
+                f"limit_up_pct ({self.limit_up_pct}) 必须 > 0 且 limit_down_pct ({self.limit_down_pct}) 必须 < 0"
             )
         s = self.weights_sum()
         if abs(s - 1.0) > 0.01:
-            raise ValueError(
-                f"6 个综合分权重之和应为 1.0,实际 {s:.4f};"
-                f"权重偏差 > 0.01 时综合分会被异常放大或压缩"
-            )
+            raise ValueError(f"6 个综合分权重之和应为 1.0,实际 {s:.4f};权重偏差 > 0.01 时综合分会被异常放大或压缩")
 
 
 # 项目默认权重(与原 modules/market_timing.py 内置 magic numbers 完全一致)

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """
+模块说明：活跃市值（0AMV）闸门（Backtest 专用；Simulator 不消费）。
+CLI 入口：`zt sync 0amv --csv <path> --duckdb <path>` 导入；下游 `apply_active_mv_gate` 由 b1_b2 / portfolio 调用。
+
 活跃市值（0AMV）数据加载与择时信号模块。
 
 数据源：指南针 0AMV 活跃市值指数日线 CSV（date/open/high/low/close/volume/amount）。
@@ -99,9 +102,7 @@ def _read_csv_rows(csv_path: Path) -> list[dict]:
                     }
                 )
             except KeyError as e:
-                logging.getLogger(__name__).warning(
-                    "0AMV CSV 第 %d 行缺字段 %s，已跳过", line_no, e
-                )
+                logging.getLogger(__name__).warning("0AMV CSV 第 %d 行缺字段 %s，已跳过", line_no, e)
                 continue
     return raw_rows
 
@@ -175,7 +176,7 @@ def clear_cache() -> None:
 
 
 def _load_index_and_rows(
-    path: Optional[str], duckdb_path: Optional[str]
+    path: str | None, duckdb_path: str | None
 ) -> tuple[list[ActiveMarketValuePoint], dict[str, ActiveMarketValuePoint]]:
     """返回 (rows, date→point 索引)。O(1) 查找用索引，需要 idx 算 cum 用 rows。
 
@@ -328,10 +329,7 @@ def format_active_market_value(point: ActiveMarketValuePoint) -> str:
         "NEUTRAL": "中性",
     }.get(point.signal, point.signal)
     return (
-        f"活跃市值(0AMV) · {point.date}\n"
-        f"收盘: {point.close:,.2f}\n"
-        f"日环比: {point.pct_chg:+.2f}%\n"
-        f"信号: {signal_text}"
+        f"活跃市值(0AMV) · {point.date}\n收盘: {point.close:,.2f}\n日环比: {point.pct_chg:+.2f}%\n信号: {signal_text}"
     )
 
 
@@ -352,8 +350,8 @@ def apply_active_mv_gate(
     date: str,
     *,
     enabled: bool = True,
-    duckdb_path: Optional[str] = None,
-    path: Optional[str] = None,
+    duckdb_path: str | None = None,
+    path: str | None = None,
 ) -> GateAction:
     """活跃市值全局闸门统一入口（v4.3+ 替代各 engine 自己的 _gate 实现）。
 

@@ -9,7 +9,7 @@ import sqlite3
 import threading
 import concurrent.futures
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from modules.core.errors import ZettarancError
 
@@ -289,7 +289,9 @@ class DataSyncer:
                 # 准备批量插入的数据
                 records = []
                 for row in df.itertuples(index=False):
-                    row_dict = row._asdict()
+                    # pandas-stubs 把 itertuples 返回值推成联合类型，_asdict 无法静态收窄；
+                    # 运行时恒为 namedtuple，此处显式标注以通过严格 mypy。
+                    row_dict = cast("Any", row)._asdict()
                     records.append(
                         (
                             row_dict["ts_code"],
@@ -625,7 +627,9 @@ class DataSyncer:
                 cursor = conn.cursor()
                 records = []
                 for row in df.itertuples(index=False):
-                    row_dict = row._asdict()
+                    # pandas-stubs 把 itertuples 返回值推成联合类型，_asdict 无法静态收窄；
+                    # 运行时恒为 namedtuple，此处显式标注以通过严格 mypy。
+                    row_dict = cast("Any", row)._asdict()
                     values = [row_dict.get(field_map.get(k, k), 0) for k in field_map.keys()]
                     records.append(values)
 
@@ -713,7 +717,9 @@ class DataSyncer:
             with get_connection() as conn:
                 cursor = conn.cursor()
                 for row in df.itertuples(index=False):
-                    row_dict = row._asdict()
+                    # pandas-stubs 把 itertuples 的返回值推成联合类型，_asdict 不可静态收窄；
+                    # 运行时恒为 namedtuple，这里显式标注以通过严格 mypy。
+                    row_dict = cast("Any", row)._asdict()
                     cursor.execute(
                         """
                         UPDATE daily_kline SET
@@ -777,7 +783,9 @@ class DataSyncer:
                 cursor = conn.cursor()
                 records = []
                 for row in df.itertuples(index=False):
-                    row_dict = row._asdict()
+                    # pandas-stubs 把 itertuples 返回值推成联合类型，_asdict 无法静态收窄；
+                    # 运行时恒为 namedtuple，此处显式标注以通过严格 mypy。
+                    row_dict = cast("Any", row)._asdict()
                     records.append(
                         (
                             row_dict["ts_code"],

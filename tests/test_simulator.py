@@ -1055,9 +1055,7 @@ class TestNextOpenFillTiming:
                 breadth=0.1,
                 moneyflow_score=60,
             )
-            result = run_simulation(
-                ts_codes=["600519.SH"], days=3, config=SimulationConfig(), datasource=mock_ds
-            )
+            result = run_simulation(ts_codes=["600519.SH"], days=3, config=SimulationConfig(), datasource=mock_ds)
         return result, klines, sim_dates
 
     def test_signal_on_fill_day_own_bar_must_not_fill(self):

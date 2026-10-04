@@ -126,7 +126,7 @@ def test_b1b2_backtest_uses_unified_gate():
 
     src = inspect.getsource(b2b)
     # 不应再有直接的 get_active_market_gate 字符串比较("CLEAR")
-    assert 'get_active_market_gate(' not in src or 'apply_active_mv_gate(' in src, (
+    assert "get_active_market_gate(" not in src or "apply_active_mv_gate(" in src, (
         "b1_b2_backtest 必须统一走 apply_active_mv_gate"
     )
 

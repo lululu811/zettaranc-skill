@@ -115,10 +115,12 @@ def test_mutate_n_params_are_distinct(mutator, default_params):
 
 def test_mutate_n_does_not_exceed_available_params(mutator, default_params):
     """n 超过可用参数数时不会崩溃。"""
-    # v3.7.0 + v3.7.1 后 b1 增加了 5 个 LoopConfig 字段（stop_loss_pct/bbi_break_days/min_holding_days/lu_half/position_pct）
-    # 总参数数现为 38（33+5），n=50 安全地变异全部
+    # 上限随 param_registry 注册的策略参数增长（新增策略组会带进新参数），
+    # 因此按实际参数数计算，不写死常量
     params, records = mutator.mutate_n(default_params, n=50)
-    assert len(records) <= 39  # 总参数数 + 1 缓冲
+    # default_params 是按策略组嵌套的 dict，可用变异数 = 各组叶子参数之和
+    total_params = sum(len(v) for v in default_params.values() if isinstance(v, dict))
+    assert len(records) <= total_params + 1  # 总参数数 + 1 缓冲
 
 
 # ==================== 历史记录 ====================

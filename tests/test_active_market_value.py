@@ -85,8 +85,7 @@ def test_cache_invalidation_on_file_change(tmp_path):
     """mtime 缓存:文件被改写后,应读到新数据,而不是旧缓存。"""
     csv_path = _write_csv(
         tmp_path,
-        "\ufeffdate,open,high,low,close,volume,amount\n"
-        "2026-08-01,100,102,99,101,1000,101000\n",
+        "\ufeffdate,open,high,low,close,volume,amount\n2026-08-01,100,102,99,101,1000,101000\n",
     )
     point1 = get_active_market_value("20260801", csv_path)
     assert point1 is not None and point1.close == 101.0
@@ -94,8 +93,7 @@ def test_cache_invalidation_on_file_change(tmp_path):
     # 改写文件,mtime 变化,缓存应自动失效
     csv_path_obj = Path(csv_path)
     csv_path_obj.write_text(
-        "\ufeffdate,open,high,low,close,volume,amount\n"
-        "2026-08-01,100,102,99,250,1000,250000\n",
+        "\ufeffdate,open,high,low,close,volume,amount\n2026-08-01,100,102,99,250,1000,250000\n",
         encoding="utf-8",
     )
     # 强制 mtime 推进(某些文件系统 mtime 精度 1s)
@@ -133,8 +131,7 @@ def test_get_active_market_value_by_date(tmp_path):
 def test_get_active_market_value_latest(tmp_path):
     csv_path = _write_csv(
         tmp_path,
-        "\ufeffdate,open,high,low,close,volume,amount\n"
-        "2026-08-01,100,102,99,101,1000,101000\n",
+        "\ufeffdate,open,high,low,close,volume,amount\n2026-08-01,100,102,99,101,1000,101000\n",
     )
     point = get_active_market_value(None, csv_path)
     assert point is not None
@@ -145,8 +142,7 @@ def test_get_active_market_value_missing_date(tmp_path):
     """查询不存在的日期应返回 None(不应抛异常)。"""
     csv_path = _write_csv(
         tmp_path,
-        "\ufeffdate,open,high,low,close,volume,amount\n"
-        "2026-08-01,100,102,99,101,1000,101000\n",
+        "\ufeffdate,open,high,low,close,volume,amount\n2026-08-01,100,102,99,101,1000,101000\n",
     )
     point = get_active_market_value("20990101", csv_path)
     assert point is None
@@ -169,7 +165,6 @@ def test_active_market_gate_missing_date_returns_wait(tmp_path):
     """查不到日期的 gate 行为:返回 WAIT(不开新仓)。"""
     csv_path = _write_csv(
         tmp_path,
-        "\ufeffdate,open,high,low,close,volume,amount\n"
-        "2026-08-01,100,102,99,100,1000,100000\n",
+        "\ufeffdate,open,high,low,close,volume,amount\n2026-08-01,100,102,99,100,1000,100000\n",
     )
     assert get_active_market_gate("20990101", path=csv_path) == "WAIT"

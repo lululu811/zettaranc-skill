@@ -51,9 +51,6 @@ def test_market_regime_defined_only_in_core_market_context():
 
 def test_no_import_of_market_regime_marketregime():
     """不允许 from modules.market_regime import MarketRegime (老命名)。"""
-    pattern = re.compile(
-        r"from\s+(?:\.market_regime|modules\.market_regime)\s+import\s+.*?\bMarketRegime\b(?!Classifier)"
-    )
     offenders: list[str] = []
     for p in _iter_python_files():
         # 用 AST 解析,只检查 import 语句,跳过 docstring 误伤
@@ -66,13 +63,9 @@ def test_no_import_of_market_regime_marketregime():
                 for alias in node.names:
                     if alias.name == "MarketRegime" and alias.name != "MarketRegimeClassifier":
                         offenders.append(
-                            f"{p.relative_to(PROJECT_ROOT)}:{node.lineno}: "
-                            f"from {node.module} import {alias.name}"
+                            f"{p.relative_to(PROJECT_ROOT)}:{node.lineno}: from {node.module} import {alias.name}"
                         )
-    assert not offenders, (
-        "禁止 import 已废弃的 modules.market_regime.MarketRegime;"
-        f"违规:\n  " + "\n  ".join(offenders)
-    )
+    assert not offenders, "禁止 import 已废弃的 modules.market_regime.MarketRegime;违规:\n  " + "\n  ".join(offenders)
 
 
 def test_core_market_context_market_regime_is_canonical():
@@ -92,10 +85,8 @@ def test_market_regime_module_exposes_trend_regime():
     assert TrendRegime.BEAR.value == "BEAR"
     assert TrendRegime.SIDEWAYS.value == "SIDEWAYS"
     # 分类器签名应使用 TrendRegime(from __future__ import annotations 下,annotation 是字符串)
-    import inspect
     import typing
 
-    sig = inspect.signature(MarketRegimeClassifier.classify)
     resolved = typing.get_type_hints(MarketRegimeClassifier.classify).get("return")
     assert resolved is TrendRegime
 

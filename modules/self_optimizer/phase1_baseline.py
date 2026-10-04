@@ -46,10 +46,8 @@ def _fetch_aggregate_stats(review_months: int) -> dict[str, Any]:
         }
 
 
-def phase1_baseline(target: str = "trading", review_months: int = 3) -> float:
-    """计算基线分数 (0-100)."""
-    if target != "trading":
-        raise NotImplementedError(f"V1 仅支持 trading target, 收到: {target}")
+def phase1_baseline(review_months: int = 3) -> float:
+    """计算基线分数 (0-100). V2 仅基于 trading 历史评估."""
     stats = _fetch_aggregate_stats(review_months)
     total, _ = compute_total_score("baseline", stats, proposed={})
     return total

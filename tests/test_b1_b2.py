@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from modules.indicators import DailyData
-from modules.strategies.b1_b2_confirm import B1B2Config, has_b1_in_window, is_b2_signal, is_high_open_skip
+from modules.strategies.b1_b2 import B1B2Config, has_b1_in_window, is_b2_signal, is_high_open_skip
 from modules.backtest.b1_b2_backtest import _run_stock_klines, _default_loop_config
 from modules.active_market_value import GateAction
 
@@ -176,8 +176,10 @@ def test_walkforward_happy_path_single_stock():
     # 准备一个长 K 线序列(_make_b2_klines 固定 40 天,这里直接造一个 600 天的)
     long_klines = _make_klines(600)
 
-    with patch.object(b2b, "get_kline_data", return_value=long_klines), \
-         patch.object(amv, "apply_active_mv_gate", return_value=GateAction.OPEN):
+    with (
+        patch.object(b2b, "get_kline_data", return_value=long_klines),
+        patch.object(amv, "apply_active_mv_gate", return_value=GateAction.OPEN),
+    ):
         result = b2b.run_b1_b2_walkforward(
             ts_codes=["TEST.SZ"],
             days=600,

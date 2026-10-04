@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-指数日线同步模块：优先写入 DuckDB 全市场数据库。
+模块说明：指数日线同步（CLI: `zt sync index`），与 modules/data_sync/ 同名前缀不同义。
+命名约定：data_sync = A 股个股日线（DB-first）；index_sync = 主要指数日线（DuckDB）。
+CLI 入口：`zt sync index --start 20160101 [--codes 000001.SH,...]`。
 
 数据源：hithink（同花顺官方金融数据服务）
 - 指数端点：/api/a-share-index/prices/historical

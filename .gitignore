@@ -27,6 +27,8 @@ __pycache__/
 dist/
 build/
 .venv/
+# 历史 Python 版本环境（.venv311/.venv312/.venv313）
+.venv3*/
 venv/
 env/
 
@@ -71,16 +73,14 @@ GEMINI.md
 对话实录*.md
 
 # 日志文件（临时文件，不入库）
-logs/*.log
-logs/*.jsonl
+# 整个目录不入库，含 *.log / *.jsonl / results.tsv 等
+logs/
 
 # 二进制工具（应通过包管理器安装）
 actionlint
 
 # Darwin self-optimizer artifacts (regenerated each run)
 optimization_drafts/
-logs/results.tsv
-logs/self_optimizer_state.json
 
 .worktrees/
 
@@ -92,17 +92,21 @@ frontend/frontend@0.0.0
 frontend/vite
 
 # 数据报告输出（自动生成，不入库）
+# 注意：代码实际写入 data/reports/（见 modules/core/paths.py::REPORTS_DIR），
+# 根目录 reports/ 是 2026-07 的历史优化产物，2026-09-30 已移出索引
 data/reports/
+/reports/
 .superpowers/
 design-demos/
 
-# Python venv (added 2026-07-18)
-.venv311/
+# Vite 依赖预构建缓存（应位于 node_modules/.vite，此处为误提交残留）
+.vite/
+
+# 抓取工具工作目录（firecrawl 一次性产物）
+.firecrawl/
 
 # Rust build artifacts (added 2026-07-18)
 rust/target/
-
-.venv312/
 
 # 浏览器自检缓存
 .playwright-mcp/

@@ -14,7 +14,7 @@ from .core import (
 )
 
 from .base_strategies import detect_b1, detect_b2, detect_b3, detect_sb1
-from .b1_b2_confirm import (  # noqa: F401  re-export:新 B1B2 策略公开 API(v4.3+ 推荐)
+from .b1_b2 import (  # noqa: F401  re-export:新 B1B2 策略公开 API(v4.3+ 推荐)
     B1B2Config,
     has_b1_in_window,
     is_b2_signal,

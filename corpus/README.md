@@ -1,6 +1,6 @@
 # corpus/ · 语料采集与质控工具
 
-v2.10.0 起从 `scripts/` 迁出。包含 6 个与"训练语料"采集 / 质检相关的脚本，**不属于业务数据管道**。
+v2.10.0 起从 `scripts/` 迁出。包含 7 个与「训练语料」采集 / 质检相关的脚本，**不属于业务数据管道**。
 
 ## 文件清单
 
@@ -11,14 +11,15 @@ v2.10.0 起从 `scripts/` 迁出。包含 6 个与"训练语料"采集 / 质检�
 | `download_subtitles.sh` | yt-dlp 字幕下载 shell 脚本 |
 | `srt_to_transcript.py` | SRT 字幕清洗为纯文本 transcript |
 | `merge_research.py` | 多源调研结果合并工具 |
-| `quality_check.py` | SKILL.md 质量门 8 项检查（CI 必跑） |
+| `quality_check.py` | SKILL.md 质量门 **12 项**检查（pre-commit / CI 必跑） |
+| `dual_axis_review.py` | SKILL.md 双轴评审（表达质量 + LLM 深度评审） |
 
 ## 与 `scripts/` 的区别
 
 | 目录 | 职责 | 状态 |
 |------|------|------|
-| `scripts/` | 业务数据管道（K 线同步 / 指标计算 / 报告生成） | 5 个薄壳脚本 |
-| `corpus/` | 训练语料采集 + 知识蒸馏质控 | 6 个工具 |
+| `scripts/` | 业务数据管道（K 线同步 / 指标计算 / 报告生成） | 12 个薄壳脚本 |
+| `corpus/` | 训练语料采集 + 知识蒸馏质控 | 7 个工具 |
 
 ## 调用示例
 
@@ -35,10 +36,14 @@ python srt_to_transcript.py input.srt > transcript.txt
 # 4. 调研合并
 python merge_research.py
 
-# 5. SKILL.md 质量门（CI 自动跑，本地手动验证）
+# 5. SKILL.md 质量门（pre-commit / CI 自动跑，本地手动验证）
 python quality_check.py ../SKILL.md
 python quality_check.py ../SKILL.md --json
 python quality_check.py ../SKILL.md --strict
+
+# 6. 双轴评审（--skip-llm 跳过 LLM 深度评审，无需 API Key）
+python dual_axis_review.py ../SKILL.md
+python dual_axis_review.py ../SKILL.md --skip-llm
 ```
 
 ## v2.10.0 之前的路径

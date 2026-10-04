@@ -1,73 +1,43 @@
-# React + TypeScript + Vite
+# zettaranc-skill 前端看板
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 19 + TypeScript + Vite + Tailwind 4 + ECharts 6 的可选 Web 看板。数据来自本仓库的 FastAPI 后端（`zt-web`）。
 
-Currently, two official plugins are available:
+## 前置条件
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+先启动后端（默认 8000 端口）：
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+pip install fastapi uvicorn pydantic-settings
+zt-web
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 启动
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+cd frontend
+npm install
+npm run dev
 ```
+
+访问 http://localhost:5173。`/api` 请求由 Vite 代理到 `http://localhost:8000`（见 `vite.config.ts`），无需额外配置跨域。
+
+## 命令
+
+| 命令 | 说明 |
+|---|---|
+| `npm run dev` | 启动开发服务器（端口 5173） |
+| `npm run build` | 生产构建（`tsc -b && vite build`） |
+| `npm run lint` | ESLint 检查 |
+| `npm run preview` | 预览构建产物 |
+
+前端无单元测试，质量依靠 `npm run lint` + `npm run build`（含 TypeScript 类型检查）。
+
+## 技术栈
+
+- React 19 + TypeScript
+- Vite（开发服务器 / 打包）
+- Tailwind CSS 4
+- ECharts 6（K 线、资金曲线等图表）
+- zustand（状态管理）、@tanstack/react-query（数据请求）、react-router 7（路由）
+
+依赖独立于 Python，`frontend/package.json` 自成一套，不与根 `requirements.txt` 耦合。

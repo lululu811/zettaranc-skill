@@ -49,7 +49,7 @@
 - [ ] benchmark 实测（≥8× / ≥10× / ≥30× / ≥5×）
 - [ ] python `_core_compute` 包管理（PyPI 发布？）
 
-详见 `docs/superpowers/specs/2026-07-18-env-blocker-recovery.md`
+详见 `docs/_archive/superpowers-2026q2q3/specs/2026-07-18-env-blocker-recovery.md`
 
 ### v3.10.4 技术债与文档收尾（PATCH）✅
 

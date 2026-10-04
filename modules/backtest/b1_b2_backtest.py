@@ -19,7 +19,7 @@ from typing import Any, Optional
 from ..indicators import DailyData, get_kline_data
 from ..loop_engine import LoopConfig, LoopTrade, ShaofuLoopEngine, _calc_stop_loss_price
 from ..backtest_six_step import ShaofuBacktestResult, _calc_metrics
-from ..strategies.b1_b2_confirm import B1B2Config, is_b2_signal, is_high_open_skip
+from ..strategies.b1_b2 import B1B2Config, is_b2_signal, is_high_open_skip
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,9 @@ def _run_stock_klines(
             # 活跃市值 CLEAR：无条件清仓
             if _gate(klines[i].trade_date).value == "CLEAR":
                 last = klines[i]
-                pnl_pct = (last.close - current.entry_price) / current.entry_price * 100.0 if current.entry_price else 0.0
+                pnl_pct = (
+                    (last.close - current.entry_price) / current.entry_price * 100.0 if current.entry_price else 0.0
+                )
                 current.exit_date = last.trade_date
                 current.exit_price = last.close
                 current.exit_reason = "活跃市值清仓"

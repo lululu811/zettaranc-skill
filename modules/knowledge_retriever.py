@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+模块说明：知识库检索适配器（v4.3+ 实验性，仅 intent_router 内部消费）。
+SKILL.md 主对话未直接调用；保留供未来 LLM 化升级。
 知识库检索适配器
 
 消费现有 knowledge-base 的 RAG API，

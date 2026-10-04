@@ -7,7 +7,7 @@ V1 dry-run 向后保留作为回退.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 from modules.core.errors import ErrorCode, ZettarancError
 
@@ -32,9 +32,9 @@ class SelfOptimizer:
     """Self-optimizer orchestrator.
 
     Args:
-        target: 优化目标 (trading | skill).
+        target: 优化目标 (trading). V2 移除 skill 占位.
         rounds: 最大迭代轮数 (默认 3).
-        mode: dry_run | auto_revert. V2 仅支持 dry_run.
+        mode: 仅支持 dry_run (V2 移除 auto_revert).
         review_months: 基线评估用的最近月份数 (默认 3).
         stock_pool: 回测股票池 (None = 使用 BacktestScorer 默认池).
         backtest_days: 每只股票的回测天数.
@@ -42,19 +42,17 @@ class SelfOptimizer:
 
     def __init__(
         self,
-        target: Literal["trading", "skill"] = "trading",
+        target: str = "trading",
         rounds: int = 3,
-        mode: Literal["dry_run", "auto_revert"] = "dry_run",
+        mode: str = "dry_run",
         review_months: int = 3,
         stock_pool: list[str] | None = None,
         backtest_days: int = 240,
     ) -> None:
-        if target not in ("trading", "skill"):
-            raise ZettarancError(ErrorCode.INVALID_PARAM, f"仅支持 trading/skill, 收到: {target}")
-        if mode not in ("dry_run", "auto_revert"):
-            raise ZettarancError(ErrorCode.INVALID_PARAM, f"仅支持 dry_run/auto_revert, 收到: {mode}")
-        if mode == "auto_revert":
-            raise NotImplementedError("V2 不支持 auto_revert")
+        if target != "trading":
+            raise ZettarancError(ErrorCode.INVALID_PARAM, f"V2 仅支持 trading target, 收到: {target}")
+        if mode != "dry_run":
+            raise ZettarancError(ErrorCode.INVALID_PARAM, f"V2 仅支持 dry_run mode, 收到: {mode}")
         if rounds < 1 or rounds > 10:
             raise ZettarancError(ErrorCode.INVALID_PARAM, f"rounds 必须在 [1, 10], 收到: {rounds}")
 
@@ -122,7 +120,7 @@ class SelfOptimizer:
         """Phase 1：在历史数据上跑 baseline，回测出初始分。"""
         from modules.self_optimizer.phase1_baseline import phase1_baseline
 
-        return phase1_baseline(target=self.target, review_months=self.review_months)
+        return phase1_baseline(review_months=self.review_months)
 
     def phase3_report(self, history: list[RoundResult]) -> dict:
         """Phase 3：把完整 history 写成优化报告（TSV + 草稿 + 改进日志）。"""

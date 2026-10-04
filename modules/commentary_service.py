@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+模块说明：Z哥点评服务（v4.3+ 状态：仅 API 消费；CLI 无 caller）。
+当前 caller：api/routes/commentary.py；simulator.narrator 借鉴模式但独立实现。
 Z哥点评服务
 
 基于 SKILL.md 和知识库，调用 LLM 生成 Z哥风格的股票分析点评。

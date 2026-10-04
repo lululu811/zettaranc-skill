@@ -269,7 +269,14 @@ class TestRealtimeAndBasic:
 class TestCatalogAndCalendar:
     def _ticker(self, thscode: str, name: str) -> dict:
         code, ex = thscode.split(".")
-        return {"thscode": thscode, "ticker": code, "name": name, "exchange": ex, "asset_type": "a-share", "currency": "CNY"}
+        return {
+            "thscode": thscode,
+            "ticker": code,
+            "name": name,
+            "exchange": ex,
+            "asset_type": "a-share",
+            "currency": "CNY",
+        }
 
     def test_stock_basic_by_ts_code(self, client):
         items = {"item": [self._ticker("600519.SH", "贵州茅台")]}
@@ -293,7 +300,11 @@ class TestCatalogAndCalendar:
         assert len(df) == 2
 
     def test_stock_list_pagination_stops_on_short_page(self, client):
-        page_full = {"item": [{"thscode": f"60000{i}.SH", "ticker": f"60000{i}", "name": f"s{i}", "exchange": "SH"} for i in range(2)]}
+        page_full = {
+            "item": [
+                {"thscode": f"60000{i}.SH", "ticker": f"60000{i}", "name": f"s{i}", "exchange": "SH"} for i in range(2)
+            ]
+        }
         page_short = {"item": [{"thscode": "600099.SH", "ticker": "600099", "name": "tail", "exchange": "SH"}]}
         with patch.object(m.requests, "get", side_effect=[_ok(page_full), _ok(page_short)]) as mock_get:
             records = client.list_all_a_share(exchanges=("SH",), page_size=2)
@@ -321,7 +332,17 @@ class TestCatalogAndCalendar:
         with patch.object(m.requests, "get", return_value=_ok({"item": bars})):
             dicts = client.get_kline_dicts("600487.SH", days=3)
         assert len(dicts) == 3
-        assert set(dicts[0].keys()) == {"ts_code", "trade_date", "open", "high", "low", "close", "vol", "amount", "pct_chg"}
+        assert set(dicts[0].keys()) == {
+            "ts_code",
+            "trade_date",
+            "open",
+            "high",
+            "low",
+            "close",
+            "vol",
+            "amount",
+            "pct_chg",
+        }
         latest_date = now.strftime("%Y%m%d")
         assert dicts[-1]["trade_date"] == latest_date
 

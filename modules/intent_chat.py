@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-意图识别 + RAG + LLM 聊天界面
+模块说明：意图聊天入口（v4.3+ 实验性；SKILL.md 主路由未启用）。
+CLI 直跑：`python -m modules.intent_chat [query]`；与 SKILL.md 自然语言触发互斥。
 
+意图识别 + RAG + LLM 聊天界面
 用法：
     python -m modules.intent_chat          # 交互模式
     python -m modules.intent_chat "B1 买点怎么判断"   # 单次查询

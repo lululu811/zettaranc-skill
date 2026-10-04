@@ -53,7 +53,7 @@ def test_risk_score_rising_market():
         klines.append(
             DailyData(
                 ts_code="000001.SH",
-                trade_date=f"202601{i+1:02d}",
+                trade_date=f"202601{i + 1:02d}",
                 open=price * 0.99,
                 high=price * 1.01,
                 low=price * 0.98,
@@ -99,8 +99,7 @@ def test_index_blacklist_includes_all_six_default_indices():
 
     for code in DEFAULT_INDEX_CODES:
         assert code in _INDEX_CODES_TO_EXCLUDE, (
-            f"指数 {code} 必须在 _INDEX_CODES_TO_EXCLUDE 中,"
-            f"否则会被当作个股纳入涨跌/成交统计"
+            f"指数 {code} 必须在 _INDEX_CODES_TO_EXCLUDE 中,否则会被当作个股纳入涨跌/成交统计"
         )
 
 
@@ -133,6 +132,7 @@ def test_compute_market_timing_sqlite_end_to_end(tmp_path, monkeypatch):
 
     # 插入指数 + 个股的 K 线
     import sqlite3
+
     con = sqlite3.connect(str(tmp_path / "test.db"))
     trade_date = "20260821"
     rows = [
@@ -173,8 +173,7 @@ def test_compute_market_timing_sqlite_end_to_end(tmp_path, monkeypatch):
     snapshot = _load_market_snapshot_sqlite(trade_date)
     # 关键断言:total 应只算 100 只股票,不应包含 6 个指数
     assert snapshot["total"] == 100, (
-        f"total 期望 100(只算个股,排除 6 个指数),实际 {snapshot['total']};"
-        f"如果等于 106,说明指数过滤失效"
+        f"total 期望 100(只算个股,排除 6 个指数),实际 {snapshot['total']};如果等于 106,说明指数过滤失效"
     )
     # advancers 60 + 5 涨停 65,decliners 1 跌停 + 34 跌 = 35
     assert snapshot["advancers"] == 65
@@ -187,6 +186,7 @@ def test_compute_market_timing_empty_db_raises_helpful_error(tmp_path, monkeypat
     """空 DB 时 compute_market_timing 应抛有意义的错误(不是返回周末日期)。"""
     monkeypatch.setenv("DB_PATH", str(tmp_path / "empty.db"))
     from modules import database
+
     database.init_database()
 
     # 没有任何数据 → 应抛 ValueError,而不是拿 datetime.now() 兜底

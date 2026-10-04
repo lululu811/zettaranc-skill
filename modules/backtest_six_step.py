@@ -1,4 +1,9 @@
 """
+DEPRECATED: 此模块保留为兼容性入口，已被 modules.backtest 包替代。
+新代码请直接调用 modules.backtest.* 或 modules.loop_engine.ShaofuLoopEngine。
+本模块仅承担 CLI 兼容层职责（cli_commands.backtest.cmd_backtest.portfolio 路径仍引用），
+将在 v4.5 后逐步替换为 modules/backtest/single.py 与 modules/backtest/portfolio.py。
+
 少妇战法六步闭环回测模块
 
 基于 ShaofuLoopEngine 的回测封装，支持单股票和组合回测。

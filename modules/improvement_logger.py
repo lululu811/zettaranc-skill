@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+模块说明：自我改进系统 - 日志记录（v4.3+ 状态：JSONL 文件日志，非核心追踪表依赖）。
+当前 caller：modules/harness_updater.py、modules/tracking_syncer.py、modules/review_generator.py（均写 logs/improvement_log.jsonl）。
 自我改进系统 - 日志记录模块
 
 记录所有自我改进的操作和结果

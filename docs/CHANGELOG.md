@@ -2,31 +2,58 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## v4.3.1 (2026-09-12) — 数据同步稳定性修复与文档补全
-
-### Fixed
-
-- **批量指标同步约 12% 失败 `database is locked`**：`modules/database.py::get_db_connection()` 未设置 `busy_timeout`，沿用 Python `sqlite3.connect()` 默认的 5 秒；而 5 线程（`_MAX_SYNC_WORKERS=5`）并发写 `indicator_cache` 时锁等待实测最长达 24 秒，超时即失败 → 在 `get_db_connection()` 统一 `PRAGMA busy_timeout=30000`（连接级设置，放此处以覆盖 `_save_indicator_cache` 等直连路径）。
-  - 实测（独立测试库，5 线程 × 60 只 × 120 天）：默认 5s → 失败 7/60；30s → 失败 0/60。
-  - 生产补跑验证：579 只缺漏股票全部成功，0 次锁冲突。
-  - 排查过程中两条**已排除**的推断留档于 `docs/TODO.md`：① 误认为 SQLite 默认不等待（实为 5 秒）；② 曾提议缩小事务范围（实测更慢且无效：825ms vs 403ms）。
-- **Tushare 配置文档指向失效地址**：`TUSHARE_API_URL` 的示例 `https://tt.xiaodefa.cn` 需该服务专用 token，不接受官方 token，用户配置后报 `40101`；且未说明该变量是「基础路径」——tushare SDK 会自动追加 `/{接口名}`（见 `tushare/pro/client.py:42`），因此官方端点 `https://api.tushare.pro` 会被拼成 `/daily` 而返回 404 → 文档统一改为 `https://api.waditu.com/dataapi`（官方运营中转，路径式，接受官方 token），并在 `.env.example`、`docs/CONFIG_GUIDE.md`、`docs/USER_GUIDE.md`、`README.md`、`SKILL.md` 补充该约束说明；`modules/tushare_client.py` 的 `CONFIG_MISSING` 报错信息改为可直接照抄的正确示例。
-- **文档误述 Tushare Token 为「56 位」**：无依据（实测长度不固定），移除各处位数描述。
-
-### Changed
-
-- `modules/tushare_client.py` 模块 docstring 补充 `TUSHARE_API_URL` 的语义与选型约束。
-- 版本号统一升至 **4.3.1**（此前 `pyproject.toml` / `skill.json` 为 4.3.0 而 `SKILL.md` 为 4.2.0，四处失配）。
+## v4.3.2 (2026-10-04) — 严格增量同步 + 前端改版 + 全市场选股
 
 ### Added
 
-- 新增 `docs/DATABASE_SCHEMA.md`：15 张表 / 27 个索引的完整字段说明、用途、写入时机与数据流向图。
-- 新增 `docs/TODO.md`：待优化项清单（含本次 SQLite 写锁问题的完整排查记录与已排除推断）。
-- 新增 `docs/architecture.html`：项目架构、模块组件与运行流程可视化说明。
-- 新增 `scripts/check_version_consistency.py`：校验 `pyproject.toml` / `skill.json` / `SKILL.md` / `docs/CHANGELOG.md` 四处版本号一致（不一致退出码 1），并已挂到 `.pre-commit-config.yaml`，发版漏改即被拦截。
-- 新增 `docs/STRATEGY_FORMULAS.md`：14 种选股策略的公式与参数全解，**从源码逐行提取**而非摘抄文档。含：各策略判定条件与代码行号、6 个可运行时覆盖的参数（`get_active_param`）及其默认值、三级参数可改性分级（运行时可改 / 配置可改 / 改代码可改）、基础指标公式、沙漏五因子与量比六场景完整阈值、硬过滤器、参数修改指南。附「代码与文档差异」清单（如 B1 的涨幅/振幅/换手率三项文档有而代码未实现；SB1 缩量企稳计算但未参与过滤；娜娜/异动地量等复合战法未注册到选股注册表）。
-- 新增 `tests/test_indicator_cache_integrity.py`：指标缓存的完整性与正确性校验，三个层次 —— 完整性（覆盖度/条数/无重复）、值域合法性（RSI 0-100、BOLL 三轨有序、无 NaN）、正确性（同实现重算对拍 + MA5/收盘价独立计算 + KDJ/MACD/BOLL 数学恒等式）。生产库全量校验部分以 `realdata` + `slow` 标记，需 `RUN_REALDATA=true`。
-  - 已用变异测试验证有效性：注入 `j+1`、`ma5/ma10 互换`、`boll_mid→boll_upper` 三类缺陷均被捕获。其中 `j+1` 最初逃过了「同实现重算对拍」（因两边同步出错形成自证循环），由此补入数学恒等式用例——这是本测试的关键设计点。
+- **K 线严格增量**：`zt sync sync --incremental`（`sync_all_daily_kline(incremental=True)`），每只股票从其 `daily_kline` 中最后一根 K 线的下一天续拉，不再按 `--days` 整段重拉；库里无数据的新股才回落到 `--days` 窗口。断点取自实际数据而非 `sync_log`。
+- **指标缓存增量**：`sync_indicator_cache / sync_all_indicators` 新增 `warmup`（默认 250 根预热，只参与计算、不写库）与 `incremental`（只写新增交易日，不覆盖已算好的旧值）。
+- **CLI `screen` 参数**：新增 `--param KEY=VALUE`（运行时覆盖策略参数，可重复）与 `--top`（返回条数上限，0=全部命中）。
+- **前端改版**：浅色渐变底 + 玻璃拟态卡片（对齐 dyqvideo.com/stock），涨跌色 `#e74c3c / #2ecc71`；K 线图重写为三区 grid（K线 / 成交量 / 副图指标）+ 十字光标三区联动；旧版深色终端版整份保留为 `frontend-legacy/`（独立工程，端口 5174）。
+- **选股结果持久化**：条件 + 结果快照写入 localStorage，刷新 / 返回 / 切页都不丢；结果卡片标题栏新增「重新筛选」按钮，条件变更时提示重跑。
+- fork 分支此前新增的文档与校验：`docs/STRATEGY_FORMULAS.md`（14 种策略公式全解，逐行提取自源码）、`docs/DATABASE_SCHEMA.md`、`scripts/check_version_consistency.py`（版本号四处一致性校验，已挂 pre-commit）、`tests/test_indicator_cache_integrity.py`（指标缓存完整性 / 值域 / 正确性三层校验，含数学恒等式用例）、`tests/test_sync_incremental.py`。
+
+### Fixed
+
+- **K 线写入会清空估值列**：`INSERT OR REPLACE` 先删整行再插入，未列出的列回到默认值，导致 `sync_daily_basic` 写入的 `pe / pe_ttm / pb / ps / ps_ttm / total_mv / circ_mv` 每次重拉 K 线后被清成 NULL → 改为 `UPSERT`（`ON CONFLICT(ts_code, trade_date) DO UPDATE`），只更新行情列。
+- **指标缓存小窗口滚动污染历史**：原实现按 `get_kline_data(days)` 取窗口逐日算，窗口最早一天只有 1 根历史，随着窗口每天滚动，`ma60 / ma250`、MACD 预热段等长周期字段被反复用更短历史重写（且不会再被修正）→ 改为「长历史预热 + 只写新增日」。
+- **批量写库 `database is locked`**：`get_db_connection()` 未设 `busy_timeout`（SQLite 默认 5 秒），5 线程并发写 `indicator_cache` 实测锁等待最长 24 秒，约 12% 失败 → 统一 `PRAGMA busy_timeout=30000`。实测 5 线程 × 60 只 × 120 天：默认 5s 失败 7/60 → 30s 失败 0/60。
+- **`TUSHARE_API_URL` 文档指向失效地址**：原示例 `https://tt.xiaodefa.cn` 需该服务专用 token（官方 token 报 40101）；该变量是**基础路径**，tushare SDK 会自动追加 `/{接口名}`，故 `https://api.tushare.pro` 会被拼成 `/daily` 而 404 → 统一改为 `https://api.waditu.com/dataapi`。同时移除各处「Token 56 位」的无依据表述。
+
+### Changed
+
+- **去掉选股 500 只扫描上限**：`screen_stocks(max_stocks=0)` 即全市场（5224 只，实测 4.1 秒）；Web API `/screen/run` 的 `limit` 放宽为 `0~20000`（0=全市场），返回体 `scanned` 改为真实扫描数（原写死 `min(limit, 500)`）。原上限是历史性能保护，指标走 `indicator_cache` 后已无必要——它会导致代码排位靠后的股票（如 002074.SZ）永远扫不到。
+
+## v4.3.1 (2026-09-30) — 仓库瘦身 + 文档准确性 + CI 全绿
+
+### 修复（真实 bug）
+
+- `market_timing.py` 漏导入 `MarketTimingWeights`。因 `from __future__ import annotations` 注解惰性求值，运行时 import 不报错、测试全绿，但 `typing.get_type_hints()` 会抛 `NameError`。
+- `a_stock_data_client.py` 两处空指针（`eastmoney_fund_flow_minute` / `stock_fund_flow_120d`）：`_em_get()` 返回 `Response | None` 但直接调 `.json()`，网络异常时 `AttributeError` 而非按约定降级。已补 `None` 判断。
+- `hithink_client.py` `os.environ.get()` 返回 `str | None` 赋给声明为 `str` 的 `_api_key`，补 `or ""` 兜底。
+
+### 文档
+
+- `README.md` 1476 行 → 253 行，重写为面向使用人的门面。删除 v3.x 版本流水账、架构说明、项目结构树与 4 处重复安装流程；保留少妇战法核心并补小样本风险提示。
+- 修正 9 处失效引用：`CLAUDE.md` / `GEMINI.md`（不存在且被 gitignore 排除）、`modules/data_sync.py` / `modules/screener.py`（已删 shim）、`modules/cli_commands.py`（已拆为 9 模块包）、`modules/loop_engine_enhanced.py` 等（已合并至 `zt backtest b2-confirm`）。
+- 版本号此前 6 处中 3 处停在 v4.2.0，且 `AGENTS.md` 断言「四处一致」本身是错的——本次全部对齐。
+- 补上此前完全无文档的 `zt market timing`（v4.3.0 主推功能）。
+- `CONFIG_GUIDE.md` 补数据源优先级表（hithink 为 v4.2.0 起最优先，此前完全缺失）与回测实现切换说明。
+- `docs/` 顶层 12 份 → 8 份活文档，`ROADMAP.md` / `TODO.md` / `intent-router-design.md` 移入 `_archive/`。
+- `USER_GUIDE.md` 修正乱序章节号 3.1→3.4→3.2→3.3。
+- `frontend/README.md` 删除 Vite 脚手架模板原文，改为本项目实际信息。
+
+### 仓库卫生
+
+- `.gitignore` 补 5 条规则（`.firecrawl/`、`.venv3*/` 合并、`logs/`、`/reports/`、`.vite/`），并修正行尾注释导致规则整体失效的问题。
+- 移出 19 个历史垃圾文件（`reports/` 15 个 7 月报告、`.vite/` 2 个构建缓存、`data/` 2 个残留）。根目录已跟踪文件 34 → 13 项。
+
+### CI
+
+- `Test` workflow 自 2026-08-06 起连续失败 8 次，本次全绿（7/7 job）：
+  - `ruff format` 18 个文件（纯排版，AST 验证 18/18 语义一致）
+  - `ruff check` 14 → 0；`mypy` 严格模式 36 → 0（`cast` 收窄 `itertuples` 联合类型 + `calculate_kdj` 恒返回 tuple 的历史死分支）
+- `release.yml` 门控禁用 PyPI 发布（`vars.PUBLISH_TO_PYPI`），等待 PyPI Trusted Publisher 配置；wheel 构建与 GitHub Release 不受影响。
 
 ## v4.3.0 (2026-08-29) — 量化稳定性与效率提升 + 市场择时/指数同步
 
@@ -315,8 +342,8 @@ DATA_PREFERRED=tushare zt analyze 600519.SH        # 切回 tushare
 - `scripts/snapshot_python_tests.sh` — 测试基线快照
 - `rust/crates/bindings/tests/atr_golden.rs` — Rust 端 byte-equal 比对测试
 - `.github/workflows/rust-ci.yml` — cargo fmt/clippy/test + maturin CI（macOS + Linux）
-- `docs/superpowers/specs/2026-07-18-rust-refactor-design.md` — 设计 spec
-- `docs/superpowers/plans/2026-07-18-rust-refactor.md` — 实施计划
+- `docs/_archive/superpowers-2026q2q3/specs/2026-07-18-rust-refactor-design.md` — 设计 spec
+- `docs/_archive/superpowers-2026q2q3/plans/2026-07-18-rust-refactor.md` — 实施计划
 
 ### 环境依赖
 
@@ -335,7 +362,7 @@ DATA_PREFERRED=tushare zt analyze 600519.SH        # 切回 tushare
 
 - macOS 15+ 链接器 Mach-O LINKEDIT 对齐错：见 **v4.0.1** 已解决（lld 22 + `-no-deduplicate-symbol-strings` + post-build `fix_linkedit_alignment.py` 修补）
 
-详见 `docs/superpowers/specs/2026-07-18-rust-refactor-design.md`
+详见 `docs/_archive/superpowers-2026q2q3/specs/2026-07-18-rust-refactor-design.md`
 
 ## v4.0.1 (2026-07-18) — PyO3 运行时打通
 
@@ -389,7 +416,7 @@ DATA_PREFERRED=tushare zt analyze 600519.SH        # 切回 tushare
 - `rust/scripts/build-linux.sh`（Linux fallback）
 - `rust/crates/{indicators,backtest_engine,grid_search,screener}/tests/proptest.rs`
 - `rust/crates/bindings/src/backtest_bindings.rs`（3 个 binding 实现）
-- `docs/superpowers/specs/2026-07-18-env-blocker-recovery.md`
+- `docs/_archive/superpowers-2026q2q3/specs/2026-07-18-env-blocker-recovery.md`
 
 ### Merge 记录
 
@@ -1321,7 +1348,7 @@ LoopConfig(
 
 ### 详细变更
 
-详见 [CHANGELOG-v3.0.md](CHANGELOG-v3.0.md)
+详见 (v3 历史已合并到顶部 v3.x 段)
 
 ---
 

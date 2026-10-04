@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from .indicators import (
     DailyData,
@@ -77,6 +77,23 @@ class LoopConfig:
     position_pct: float = 0.3  # 单笔仓位比例
     vol_shrink_threshold: float = 0.8  # 缩量判定阈值（当日量 / 前日量 < 此值视为缩量）
 
+    # v3.10.x: 多策略共振开关（默认全部关闭，保持原 B1 单策略行为）
+    enable_b2: bool = False  # B2（B1 后放量长阳确认）
+    enable_changan: bool = False  # 长安战法（三日 B1）
+    enable_nana: bool = False  # 娜娜图形（主升浪回踩）
+    enable_pinghang: bool = False  # 平行重炮（双阳夹阴）
+    min_signals: int = 1  # 投票入场最少策略数（>=min_signals 才入场）
+    signal_weights: dict[str, float] = field(
+        default_factory=lambda: {
+            "B1": 1.0,
+            "B2": 1.2,
+            "长安": 1.5,
+            "娜娜": 1.3,
+            "平行重炮": 1.1,
+        }
+    )
+    min_signal_strength: float = 0.0  # 信号总强度阈值（加权和低于此值则不入场）
+
     @classmethod
     def from_registry(cls, strategy_name: str = "shaofu_v1") -> LoopConfig | None:
         """
@@ -114,6 +131,8 @@ class LoopTrade:
     stop_loss_price: float  # Step 4: 收盘价止损位
     # v3.10.1：移动止损追踪入场后最高点（用于动态抬高止损价）
     highest_after_entry: float = 0.0
+    triggered_strategies: list[str] = field(default_factory=list)  # 触发的策略列表（多策略共振时使用）
+    signal_strength: float = 0.0  # 信号总强度（多策略共振时使用）
     exit_date: str = ""
     exit_price: float = 0
     exit_reason: str = ""  # "卤煮止盈" | "白线跌破" | "止损" | "白线死叉黄线"
@@ -344,6 +363,20 @@ class ShaofuLoopEngine:
                 reason_parts.append("N型上移")
             if vol_shrink:
                 reason_parts.append("缩量回调")
+
+            # 多策略共振投票（v3.10.x 合并 loop_engine_enhanced）
+            extra = self._vote_signals(klines)
+            if extra:
+                reason_parts.append(f"共振: {', '.join(extra['triggered_strategies'])}")
+                return {
+                    "is_b1": True,
+                    "j_value": j_val,
+                    "entry_price": today.close,
+                    "signal": True,
+                    "reason": "B1: " + ", ".join(reason_parts),
+                    "triggered_strategies": extra["triggered_strategies"],
+                    "signal_strength": extra["signal_strength"],
+                }
 
             return {
                 "is_b1": True,
@@ -639,9 +672,176 @@ class ShaofuLoopEngine:
         return trade, None
 
     # ----------------------------------------------------------
-    # 主循环
+    # 多策略共振（合并自 loop_engine_enhanced.py；默认关闭以保持原 B1 单策略行为）
     # ----------------------------------------------------------
 
+    def _vote_signals(self, klines: list[DailyData]) -> dict[str, Any] | None:
+        """投票决定多策略共振入场。
+
+        当 LoopConfig 中任意 enable_* 为 True 时，按权重统计触发的策略。
+        仅在触发策略数 ≥ min_signals 且加权信号强度 ≥ min_signal_strength 时返回。
+        """
+        cfg = self.config
+        any_enabled = cfg.enable_b2 or cfg.enable_changan or cfg.enable_nana or cfg.enable_pinghang
+        if not any_enabled:
+            return None
+
+        triggered: list[str] = ["B1"]
+        details: dict[str, dict[str, Any]] = {"B1": {}}
+
+        if cfg.enable_b2:
+            b2 = self._detect_b2(klines)
+            if b2:
+                triggered.append("B2")
+                details["B2"] = b2
+        if cfg.enable_changan:
+            ch = self._detect_changan(klines)
+            if ch:
+                triggered.append("长安")
+                details["长安"] = ch
+        if cfg.enable_nana:
+            n = self._detect_nana(klines)
+            if n:
+                triggered.append("娜娜")
+                details["娜娜"] = n
+        if cfg.enable_pinghang:
+            p = self._detect_pinghang(klines)
+            if p:
+                triggered.append("平行重炮")
+                details["平行重炮"] = p
+
+        if len(triggered) < cfg.min_signals:
+            return None
+
+        total_strength = sum(cfg.signal_weights.get(s, 1.0) for s in triggered)
+        if total_strength < cfg.min_signal_strength:
+            return None
+
+        return {
+            "triggered_strategies": triggered,
+            "signal_strength": total_strength,
+            "signal_details": details,
+        }
+
+    def _detect_b2(self, klines: list[DailyData]) -> dict[str, Any] | None:
+        """B2: B1 后放量长阳确认（前 5-15 日出现过 B1 + 当日涨幅≥4% + 放量）。"""
+        if len(klines) < 20:
+            return None
+        today = klines[-1]
+        yesterday = klines[-2]
+        if yesterday.close <= 0:
+            return None
+        price_change = (today.close - yesterday.close) / yesterday.close
+        if price_change < 0.04:
+            return None
+        if yesterday.vol > 0 and today.vol < yesterday.vol * 1.5:
+            return None
+        has_b1_recent = False
+        for i in range(max(0, len(klines) - 15), len(klines) - 1):
+            b1 = detect_b1_today(klines[: i + 1])
+            if b1.get("is_b1"):
+                has_b1_recent = True
+                break
+        if not has_b1_recent:
+            return None
+        return {
+            "price_change": price_change,
+            "volume_ratio": today.vol / yesterday.vol if yesterday.vol > 0 else 0,
+        }
+
+    def _detect_changan(self, klines: list[DailyData]) -> dict[str, Any] | None:
+        """长安战法：三日 B1 + 放量阳 + 缩半量。"""
+        if len(klines) < 5:
+            return None
+        day2_prev = klines[-4]
+        day2 = klines[-2]
+        day3 = klines[-1]
+        kdj = calculate_kdj(klines[:-2])
+        # calculate_kdj 恒返回 tuple[float, float, float]；else 分支为历史遗留的
+        # 对象兼容路径，用 cast 显式收窄以通过严格 mypy。
+        j_val = kdj[2] if isinstance(kdj, tuple) else cast(Any, kdj).j
+        if j_val >= -13:
+            return None
+        if day2_prev.close <= 0:
+            return None
+        day2_change = (day2.close - day2_prev.close) / day2_prev.close
+        if day2_change < 0.04:
+            return None
+        if day2.close < day2.open:
+            return None
+        if day2_prev.vol > 0 and day2.vol < day2_prev.vol * 1.3:
+            return None
+        if day2.close <= 0:
+            return None
+        day3_change = (day3.close - day2.close) / day2.close
+        if day3_change < 0 or day3_change > 0.02:
+            return None
+        if day3.close < day3.open:
+            return None
+        if day2.vol > 0 and day3.vol > day2.vol * 0.6:
+            return None
+        return {
+            "day1_j": j_val,
+            "day2_change": day2_change,
+            "day3_change": day3_change,
+        }
+
+    def _detect_nana(self, klines: list[DailyData]) -> dict[str, Any] | None:
+        """娜娜图形：放量涨 + 缩量回调 + J < 0。"""
+        if len(klines) < 10:
+            return None
+        kdj = calculate_kdj(klines)
+        # 同上：calculate_kdj 恒返回 tuple，else 分支为历史遗留兼容路径
+        j_val = kdj[2] if isinstance(kdj, tuple) else cast(Any, kdj).j
+        if j_val >= 0:
+            return None
+        has_volume_up = False
+        for i in range(max(0, len(klines) - 6), len(klines) - 2):
+            day = klines[i]
+            prev = klines[i - 1] if i > 0 else None
+            if prev and day.close > prev.close and day.vol > prev.vol:
+                has_volume_up = True
+                break
+        if not has_volume_up:
+            return None
+        shrink_days = 0
+        for i in range(len(klines) - 3, len(klines) - 1):
+            day = klines[i]
+            prev = klines[i - 1] if i > 0 else None
+            if prev and day.vol < prev.vol * 0.8:
+                shrink_days += 1
+        if shrink_days < 2:
+            return None
+        return {"j_value": j_val, "shrink_days": shrink_days}
+
+    def _detect_pinghang(self, klines: list[DailyData]) -> dict[str, Any] | None:
+        """平行重炮：双阳夹阴 + 第二阳≥4% + J < 55。"""
+        if len(klines) < 5:
+            return None
+        kdj = calculate_kdj(klines)
+        # 同上：calculate_kdj 恒返回 tuple，else 分支为历史遗留兼容路径
+        j_val = kdj[2] if isinstance(kdj, tuple) else cast(Any, kdj).j
+        if j_val >= 55:
+            return None
+        day1, day2, day3, day4 = klines[-5], klines[-4], klines[-3], klines[-2]
+        if not (
+            day1.close > day1.open and day2.close < day2.open and day3.close < day3.open and day4.close > day4.open
+        ):
+            return None
+        if day3.close <= 0:
+            return None
+        day4_change = (day4.close - day3.close) / day3.close
+        if day4_change < 0.04:
+            return None
+        if day2.vol > 0 and day1.vol < day2.vol * 1.2:
+            return None
+        if day3.vol > 0 and day4.vol < day3.vol * 1.2:
+            return None
+        return {"j_value": j_val, "day4_change": day4_change}
+
+    # ----------------------------------------------------------
+    # 主循环
+    # ----------------------------------------------------------
     def run_stock(self, klines: list[DailyData], ts_code: str = "") -> list[LoopTrade]:
         """对一只股票运行完整的六步闭环
 
@@ -671,6 +871,8 @@ class ShaofuLoopEngine:
                         entry_reason=signal.get("reason", "B1信号"),
                         stop_loss_price=stop_loss,
                         position_pct=self.config.position_pct,
+                        triggered_strategies=list(signal.get("triggered_strategies") or []),
+                        signal_strength=float(signal.get("signal_strength") or 0.0),
                     )
             else:
                 current_trade, completed = self._apply_exit_checks(klines, day_idx, current_trade)

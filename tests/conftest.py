@@ -310,7 +310,7 @@ def mock_monthly_reviews_with_poor_strategy():
 
     with get_connection() as conn:
         cursor = conn.cursor()
-        # 确保表存在 (init_database 不加载 tracking_tables.sql)
+        # 确保表存在 (init_database 不创建 monthly_reviews_self，因为它是 tracking_tables.sql 的内容)
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS monthly_reviews_self (

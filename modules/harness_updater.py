@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+模块说明：Harness Guardrails 自动更新（v4.3+ 状态：V1 兼容路径，新主流程不再消费）。
+当前 caller：self_optimizer/phase2_hillclimb.py (V1 路径) + tests/test_tracking_system.py。
 Harness 层集成模块
 
 根据复盘结果自动更新 Guardrails

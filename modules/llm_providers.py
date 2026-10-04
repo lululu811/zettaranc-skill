@@ -23,15 +23,7 @@ from modules.core.errors import ErrorCode, ZettarancError
 logger = logging.getLogger(__name__)
 
 
-class LLMProvider:
-    """LLM 生成基类"""
-
-    def generate(self, system_prompt: str, user_message: str, temperature: float = 0.7, stream: bool = False) -> str:
-        """根据 system + user 提示词调用 LLM 生成回复。子类必须实现。"""
-        raise NotImplementedError
-
-
-class MiniMaxProvider(LLMProvider):
+class MiniMaxProvider:
     """MiniMax 提供商 (OpenAI 兼容模式)"""
 
     DEFAULT_BASE_URL = "https://api.minimaxi.com/v1/chat/completions"

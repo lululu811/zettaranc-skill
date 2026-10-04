@@ -173,14 +173,15 @@
 | 路径 | 函数 | B1 lookback | 放量判定 | 麒麟阶段 | MDC 加分 | 命令 |
 |---|---|---|---|---|---|---|
 | **旧（兼容）** | `modules.strategies.base_strategies.detect_b2` | 5-15 天（硬编码） | `is_beidou` 属性 | **必传** kirin_context | 5 项（麒麟+布林+大单+DMI+开口） | `zt backtest multi` |
-| **新（推荐）** | `modules.strategies.b1_b2_confirm.is_b2_signal` | 3-5 天（`observe_min/max` 可配） | `vol/yesterday.vol >= 2.0` | 忽略 | 无 | `zt backtest b2-confirm` |
+| **新（推荐）** | `modules.strategies.b1_b2.is_b2_signal` | 3-5 天（`observe_min/max` 可配） | `vol/yesterday.vol >= 2.0` | 忽略 | 无 | `zt backtest b2-confirm` |
+
 
 **取舍**：
 - 旧路径：MDC 加分使 confidence 0.60-0.98 更平滑，但强依赖麒麟阶段（缺数据时全跳过）
 - 新路径：纯价格+量比，逻辑更纯粹，参数可调，但同一天可能出/不出与旧路径相反
 
 **当前推荐**用新路径（参数可调 + 不依赖麒麟 + 走 `zt backtest b2-confirm`）。
-旧路径保留是因为它被 `screener/criteria.py`、`backtest/portfolio.py`、`loop_engine_enhanced.py` 等 5 处引用，删除会断现有回测兼容性。
+旧路径保留是因为它被 `screener/criteria.py`、`backtest/portfolio.py` 等 5 处引用，删除会断现有回测兼容性。
 
 ---
 

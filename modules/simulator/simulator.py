@@ -386,9 +386,7 @@ def run_simulation(
             if len(signal_window) < 60:
                 continue
             signal_date = signal_window[-1].trade_date
-            sig = evaluate_stock(
-                code, signal_date, klines=signal_window, datasource=ds, config=config, context=context
-            )
+            sig = evaluate_stock(code, signal_date, klines=signal_window, datasource=ds, config=config, context=context)
             if sig.verdict == SignalVerdict.PASS:
                 candidates.append(sig)
 

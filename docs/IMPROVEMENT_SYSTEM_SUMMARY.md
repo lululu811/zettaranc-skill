@@ -198,7 +198,7 @@ zt track stats
 - `modules/review_generator.py` - 复盘报告生成模块
 - `modules/harness_updater.py` - Harness 层更新模块
 - `modules/improvement_logger.py` - 日志记录模块
-- `modules/tracking_tables.sql` - 数据库表定义
+- `modules/database.py` 内的 `init_tracking_tables()` - 数据库表定义（DDL 已合并）
 - `tests/test_tracking_system.py` - 测试用例
 
 ### 修改文件

@@ -104,10 +104,9 @@ def get_connection() -> Generator[sqlite3.Connection, None, None]:
 
 
 def init_tracking_tables(conn: sqlite3.Connection) -> None:
-    """初始化自我改进系统跟踪表（4 张表 + 索引）
+    """初始化自我改进系统跟踪表（4 张表 + 索引）。
 
-    表定义对应 modules/tracking_tables.sql，所有表名以 _self 结尾，
-    与主系统表区分。
+    所有表名以 _self 结尾，与主系统表区分。
     """
     cursor = conn.cursor()
 
@@ -629,7 +628,7 @@ def init_database() -> None:
             ON llm_response_log(model, request_date DESC)
         """)
 
-        # 12. 自我改进系统跟踪表（tracking_tables.sql）
+        # 12. 自我改进系统跟踪表（init_tracking_tables）
         init_tracking_tables(conn)
 
         print(f"数据库初始化完成: {get_db_path()}")

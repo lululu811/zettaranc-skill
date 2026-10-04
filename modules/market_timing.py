@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-市场择时指标模块。
+模块说明：大盘择时指标（市值闸门前置条件）。
+CLI 入口：`zt market timing [--date YYYYMMDD] [--index 000001.SH] [--json]`。
 
+市场择时指标模块。
 把“大盘择时”从简单的指数状态扩展到全市场维度：
 - 指数趋势（均线、斜率、白线/黄线）
 - 市场广度（涨跌家数、涨停/跌停、强势上涨/下跌家数）
@@ -25,6 +27,7 @@ from .core.market_context import MarketRegime
 from .indicators import DailyData, calculate_ma
 from .market_regime import MarketRegimeClassifier
 from .database import get_connection
+from .dynamic_config import MarketTimingWeights
 from .active_market_value import get_active_market_gate, get_active_market_value
 
 # 常见指数代码，计算市场广度时排除（与 modules.index_sync.DEFAULT_INDEX_CODES 保持一致）
@@ -179,9 +182,7 @@ def _load_index_klines_sqlite(index_code: str, days: int) -> list[DailyData]:
     return _to_daily_data_list(rows)
 
 
-def _load_market_snapshot_duckdb(
-    con: Any, trade_date: str, weights: Any = None
-) -> dict[str, float]:
+def _load_market_snapshot_duckdb(con: Any, trade_date: str, weights: Any = None) -> dict[str, float]:
     """从 DuckDB 统计指定日期全市场涨跌/成交。
 
     Args:
@@ -403,11 +404,11 @@ def _classify_regime(composite: float, weights: Any = None) -> str:
 
 
 def compute_market_timing(
-    trade_date: Optional[str] = None,
+    trade_date: str | None = None,
     index_code: str = "000001.SH",
     days: int = 120,
-    duckdb_path: Optional[str] = None,
-    weights: Optional[MarketTimingWeights] = None,
+    duckdb_path: str | None = None,
+    weights: MarketTimingWeights | None = None,
 ) -> MarketTimingIndicators:
     """计算市场择时指标。
 
@@ -429,9 +430,7 @@ def compute_market_timing(
         from modules.dynamic_config import DEFAULT_MARKET_TIMING_WEIGHTS
 
         weights = DEFAULT_MARKET_TIMING_WEIGHTS
-    using_duckdb = duckdb_path is not None
-
-    if using_duckdb:
+    if duckdb_path is not None:
         try:
             import duckdb  # noqa: PLC0415
         except ImportError as e:
@@ -439,9 +438,8 @@ def compute_market_timing(
         con = duckdb.connect(duckdb_path, read_only=True)
         try:
             if trade_date is None:
-                trade_date = str(
-                    con.execute("SELECT MAX(CAST(date AS VARCHAR)) FROM v_daily_qfq").fetchone()[0]
-                )
+                row = con.execute("SELECT MAX(CAST(date AS VARCHAR)) FROM v_daily_qfq").fetchone()
+                trade_date = str(row[0]) if row else ""
             klines = _load_index_klines_duckdb(con, index_code, days)
             # DuckDB 通常不包含指数，指数 K 线回退到项目 SQLite
             if not klines:
@@ -475,7 +473,7 @@ def compute_market_timing(
     r_score, vol_annual, drawdown = _risk_score(klines)
     s_score = _sentiment_score(snapshot)
 
-    active_mv_duckdb = duckdb_path if using_duckdb else None
+    active_mv_duckdb = duckdb_path
     active_mv = get_active_market_value(trade_date, duckdb_path=active_mv_duckdb)
     amv_score = _active_mv_score(active_mv)
     amv_pct = round(active_mv.pct_chg, 4) if active_mv else 0.0

@@ -113,7 +113,7 @@ class HithinkFinanceClient:
         base_url: str | None = None,
         timeout: float = 30.0,
     ) -> None:
-        self._api_key: str = api_key or os.environ.get("HITHINK_FINANCE_API_KEY", "")
+        self._api_key: str = api_key or os.environ.get("HITHINK_FINANCE_API_KEY", "") or ""
         self._base_url = (base_url or os.environ.get("HITHINK_FINANCE_API_URL", "") or DEFAULT_BASE_URL).rstrip("/")
         self._timeout = timeout
         self._last_request_time = 0.0

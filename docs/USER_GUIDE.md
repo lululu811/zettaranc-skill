@@ -173,9 +173,9 @@ python -c "from modules.setup_wizard import test_jnb_connection; import os; prin
 | `IM_PUSH_WEBHOOK` | 否 | 无 | 飞书群机器人 webhook，`zt monitor` 触发预警时推送 |
 | `COMMENTARY_CACHE_TTL` / `SIMULATION_NARRATE_CACHE_TTL` | 否 | `3600` | 点评 / 模拟叙事缓存 TTL（秒） |
 | `ZETTARANC_ENV` | 否 | 无 | 自定义 .env 文件路径 |
-| `ZETTARANC_BACKTEST_IMPL` | 否 | `rust` | 回测实现选择：`rust`（默认，调 `_core_compute` PyO3）/ `python`（强制 Python）/ `auto`（优先 Rust，缺失时降级）。见 [v4.0.2 回测实现切换](#v402-回测实现切换) |
+| `ZETTARANC_BACKTEST_IMPL` | 否 | `rust` | 回测实现选择：`rust`（默认，调 `_core_compute` PyO3）/ `python`（强制 Python）/ `auto`（优先 Rust，缺失时降级）。见 [3.2 回测实现切换](#32-v402-回测实现切换-rust--python) |
 
-### 3.4 v4.0.2+ 回测实现切换（Rust ↔ Python）
+### 3.2 v4.0.2+ 回测实现切换（Rust ↔ Python）
 
 CLI 子命令（`zt backtest shaofu` / `zt backtest portfolio` 单股 / `zt verify` / `zt simulate`）在用户已 `maturin develop --release` 安装 `_core_compute` 后默认走 Rust PyO3 路径；缺失时 silent fallback 到 Python。
 
@@ -211,12 +211,13 @@ ZETTARANC_BACKTEST_IMPL=auto zt verify v1.0 --limit 50 --days 250
 - silent fallback：bridge 内部 `try/except`，Rust 抛错时 `logger.warning(...)` 后调 Python
 - 测试：`tests/test_cli_uses_rust.py`（16 个用例覆盖 fake-rust / 无模块 / `impl=python` / Rust 抛错 fallback / verify pipeline）
 
-### 3.2 数据源优先级与降级路径
+### 3.3 数据源优先级与降级路径
 
 `modules/datasource.py` 的 `CompositeDataSource` 在 `auto` 模式下按以下优先级选源（token 感知）：
 
 ```
-Indevs（配置 INDEVS_API_KEY 时最优先，v3.8.1 新增）
+hithink（同花顺官方，配置 HITHINK_FINANCE_API_KEY 时最优先，v4.2.0 新增）
+  → Indevs（配置 INDEVS_API_KEY 时，v3.8.1）
   → Tushare Pro（配置 TUSHARE_TOKEN 时）
   → a-stock-data（免费源，v4.1.0 新增，零配置时的默认）
   → tushare-data-bridge（HTTP 缓存代理）
@@ -227,7 +228,7 @@ Indevs（配置 INDEVS_API_KEY 时最优先，v3.8.1 新增）
 
 自 v3.8.2 起，K 线读取统一走 **DB 优先** 策略：先查 `daily_kline` 表，DB 没有时才调 API 并把结果写回 DB 缓存。即使处于降级路径，工具也不会编造价格或信号，而是明确告知当前数据状态。
 
-### 3.3 模式切换
+### 3.4 模式切换
 
 ```bash
 # 切换到 websearch 模式（纯对话，不需要 Token）
