@@ -274,6 +274,25 @@ def calculate_ma(prices: list[float], period: int) -> float:
     return sum(prices[-period:]) / period
 
 
+def calculate_ma_series(prices: list[float], period: int) -> list[float | None]:
+    """计算完整简单均线序列（O(n) 滚动求和）
+
+    不足周期的位置为 ``None``；最后一位与 :func:`calculate_ma` 结果一致。
+    供需要整段序列的调用方（图表叠加、形态判定）使用，避免逐日切片重算。
+    """
+    n = len(prices)
+    out: list[float | None] = [None] * n
+    if period <= 0 or n < period:
+        return out
+
+    running = sum(prices[:period])
+    out[period - 1] = running / period
+    for i in range(period, n):
+        running += prices[i] - prices[i - period]
+        out[i] = running / period
+    return out
+
+
 def calculate_ema(prices: list[float], period: int) -> float:
     """计算指数移动平均"""
     series = calculate_ema_series(prices, period)

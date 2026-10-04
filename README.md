@@ -848,12 +848,51 @@ zt monitor --json --no-push                       # 单次扫描
 
 ### 数据同步
 
+> 前置：`.env` 中 `DATA_MODE=jnb` + `TUSHARE_TOKEN`（批量同步走 Tushare；免费源 `a-stock-data` 不参与全市场同步）。
+
 ```bash
-zt sync init                       # 初始化数据库
+# ── 初始化与状态 ──
+zt sync init                       # 初始化数据库（只需一次）
 zt sync status                     # 查看同步状态
-zt sync sync --ts_code 600487.SH --days 120 --indicators   # 单股 + 指标缓存
-zt sync stk-factor --ts_code 600487.SH --days 365          # Tushare 官方指标 diff 验证
+
+# ── 首次建库 / 补历史（非增量）──
+zt sync sync --days 730 --indicators
+#   落后的股票按 --days 窗口整段重拉并覆盖；--indicators 全量重算指标缓存
+
+# ── 日常盘后（推荐）：严格增量 ──
+zt sync sync --incremental --days 30 --indicators
+#   K 线：每只股票从自己最后一根 K 线的下一天续拉，不重拉历史
+#   --days 只对"库里无数据"的新股兜底（默认 730），有数据的股票忽略它
+#   指标：只重算本次有新 K 线的股票，且只写回新增交易日（带 250 根预热，不覆盖旧值）
+
+# ── 单只补数 ──
+zt sync sync 600487.SH             # 严格增量 + 默认同步指标缓存
+zt sync sync 600487.SH --days 120  # --days 仅作用于指标缓存窗口（K 线仍是增量）
+zt sync sync 600487.SH --skip-indicators
+
+# ── 其他 ──
+zt sync stk-factor 600487.SH --days 365        # Tushare 官方指标（diff 验证用）
+zt sync index --start 20160101                 # 指数日线 → DuckDB（hithink）
+zt sync 0amv                                   # 0AMV 活跃市值 CSV → DuckDB
+python scripts/sync_watchlist.py --days 730    # 补齐自选股清单中缺失的 K 线
 ```
+
+| 模式 | K 线起点 | 指标缓存 |
+|---|---|---|
+| 默认（不带 `--incremental`） | `今天 - days`，落后超 2 天的股票整段重拉 | 全量重算（`--indicators`） |
+| `--incremental` | 每只股票自己最后一根 K 线的下一天 | 只写回新增交易日 |
+
+同步后校验：
+
+```bash
+zt sync status
+sqlite3 data/stock_data.db \
+  "SELECT MAX(trade_date), COUNT(DISTINCT ts_code) FROM daily_kline;"
+sqlite3 data/stock_data.db \
+  "SELECT MAX(trade_date), COUNT(DISTINCT ts_code) FROM indicator_cache;"
+```
+
+注意：增量不重算旧行。若怀疑历史数据有误（如之前用小 `--days` 反复刷过指标），先跑一次非增量的 `zt sync sync --days 730 --indicators` 修正，之后再走增量。
 
 ---
 
@@ -1383,6 +1422,26 @@ npm run dev
 ```
 
 打开浏览器访问 http://localhost:5173 即可使用 Web 看板。
+
+> **两套前端并存**：`frontend/` 为「浅色玻璃拟态」新版；`frontend-legacy/` 是改版前的深色金融终端版（端口 5174，`/api` 同样代理到 8000），可随时并排对照。
+>
+> ```bash
+> cd frontend-legacy && npm install && npm run dev   # http://localhost:5174
+> ```
+>
+> 注：`api` 包未包含在 editable 安装中，`zt-web` 目前会报 `ModuleNotFoundError: No module named 'api'`，可临时用
+> `PYTHONPATH=. python -c "from api.main import start_web; start_web()"` 启动后端。
+
+**股票联想搜索**：顶栏与首页搜索框支持「代码 / 中文名称 / 拼音（首字母·全拼）」三种输入，输入即下拉联想（点击结果直达分析页）。
+
+```bash
+curl "http://127.0.0.1:8000/api/v1/stock/search?q=6004"      # 代码前缀
+curl "http://127.0.0.1:8000/api/v1/stock/search?q=平安"       # 名称（前缀优先，其次子串）
+curl "http://127.0.0.1:8000/api/v1/stock/search?q=payh"      # 拼音首字母
+curl "http://127.0.0.1:8000/api/v1/stock/search?q=pingan"    # 全拼
+```
+
+拼音索引基于 `pypinyin` 在首次请求时懒构建并缓存 30 分钟（`stock_basic` 更新后可调 `stock_service.invalidate_search_index()` 失效）；`pypinyin` 缺失时自动降级为「代码 + 名称」匹配。
 
 ---
 

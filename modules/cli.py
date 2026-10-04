@@ -37,24 +37,8 @@ logger = logging.getLogger(__name__)
 
 
 # CLI 中文别名 → screener 英文 criteria 的统一映射
-STRATEGY_ALIAS = {
-    "B1": "b1",
-    "B2": "b2_breakout",
-    "B3": "b3_consensus",
-    "完美图形": "perfect",
-    "超级B1": "super_b1",
-    "长安战法": "changan",
-    "建仓波": "build_wave",
-    "吸筹": "xishou",
-    "安全": "safe",
-    "超跌": "oversold",
-    "突破": "breakout",
-    "牵牛": "bull_rope",
-    "牛绳": "bull_rope",
-    "沙漏": "sandglass_perfect",
-    "沙漏评分": "sandglass_perfect",
-    "量比战法": "volume_ratio_super",
-}
+# 单一事实来源：modules/screener/aliases.py（Web API 侧复用同一份）
+from modules.screener.aliases import STRATEGY_ALIAS  # noqa: E402
 
 STRATEGY_CHOICES = list(STRATEGY_ALIAS.keys())
 
@@ -285,19 +269,49 @@ def cmd_screen(args) -> None:
 
     criteria = STRATEGY_ALIAS.get(args.strategy, args.strategy)
 
-    # 预留 Rust hook：未来 v4.1+ 可在此处
-    # `from modules.backtest._rust_bridge import compute_func`
-    # `rust_screen = compute_func("screen_stocks_py")`
-    # 若 rust_screen 不为 None 即可走 Rust。
+    # 运行时参数覆盖：--param KEY=VALUE（可重复），键名取自 param_registry
+    raw_params = getattr(args, "param", None) or []
+    overrides: dict[str, float] = {}
+    for item in raw_params:
+        if "=" not in item:
+            print(f"忽略无效参数（需 KEY=VALUE 形式）: {item}")
+            continue
+        key, _, value = item.partition("=")
+        try:
+            overrides[key.strip()] = float(value)
+        except ValueError:
+            print(f"忽略无效参数值（需数字）: {item}")
 
-    results = screen_stocks(
-        criteria=criteria,
-        max_stocks=args.limit if args.limit > 0 else 0,
-        use_parallel=not args.no_parallel,
-    )
+    # 参数组名与 criteria 同名（simple_perfect_1/2/3 各自成组）
+    param_group = criteria
 
-    # 输出前 limit 只（limit=0 时输出全部 500 上限内的命中）
-    output_limit = args.limit if args.limit > 0 else len(results)
+    def _run():
+        return screen_stocks(
+            criteria=criteria,
+            max_stocks=args.limit if args.limit > 0 else 0,
+            use_parallel=not args.no_parallel,
+        )
+
+    if overrides:
+        try:
+            from modules.self_optimizer.param_registry import get_registry, using_params
+
+            group = get_registry().get(param_group)
+            if group:
+                clean = {k: v for k, v in overrides.items() if k in group.params}
+                with using_params({param_group: clean}):
+                    results = _run()
+            else:
+                results = _run()
+        except (ImportError, TypeError, ValueError) as e:
+            logger.warning("[screen] 参数覆盖失败，按默认值运行: %s", e)
+            results = _run()
+    else:
+        results = _run()
+
+    # limit=扫描数量；--top=返回条数（0=全部命中）
+    top = getattr(args, "top", 0) or 0
+    output_limit = top if top > 0 else len(results)
 
     # ── JSON 输出 ──
     if args.json:
@@ -488,10 +502,13 @@ def cmd_sync(args) -> None:
         else:
             # 批量同步所有股票
             syncer.sync_stock_basic()
-            syncer.sync_all_daily_kline(days=args.days)
+            results = syncer.sync_all_daily_kline(days=args.days, incremental=args.incremental)
             if args.indicators and not args.skip_indicators:
-                print("正在批量同步指标缓存...")
-                syncer.sync_all_indicators()
+                # 只重算本次真正有新 K 线的股票，避免全市场重算指标
+                updated = [code for code, count in results.items() if count > 0]
+                if updated:
+                    print(f"正在同步指标缓存（{len(updated)} 只）...")
+                    syncer.sync_all_indicators(ts_codes=updated, incremental=args.incremental)
         print("同步完成")
         print(syncer.get_sync_status())
 
@@ -723,9 +740,16 @@ def build_parser() -> argparse.ArgumentParser:
     # ── screen ──
     p_screen = subparsers.add_parser("screen", help="批量选股（11 种策略）")
     p_screen.add_argument("--strategy", choices=STRATEGY_CHOICES, default="B1", help="筛选策略（11 种别名）")
-    p_screen.add_argument("--limit", type=int, default=20, help="输出数量（0=全市场 500 上限）")
+    p_screen.add_argument("--limit", type=int, default=20, help="输出数量（0=全市场，约 5200 只）")
     p_screen.add_argument("--no-parallel", action="store_true", help="禁用多进程并行")
     p_screen.add_argument("--json", action="store_true", help="JSON输出")
+    p_screen.add_argument(
+        "--param",
+        action="append",
+        metavar="KEY=VALUE",
+        help="覆盖策略参数（可重复），如 --param j_threshold=20",
+    )
+    p_screen.add_argument("--top", type=int, default=0, help="返回条数上限（0=全部命中，默认 0）")
 
     # ── score（来自 screener.py score）──
     p_score = subparsers.add_parser("score", help="单只股票综合评分")
@@ -756,6 +780,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_sync_run = p_sync_sub.add_parser("sync", help="同步日线 K 线（+ 可选指标缓存）")
     p_sync_run.add_argument("ts_code", nargs="?", help="股票代码（不传 = 全市场批量）")
     p_sync_run.add_argument("--days", type=int, default=730, help="同步天数")
+    p_sync_run.add_argument(
+        "--incremental",
+        action="store_true",
+        help="严格增量：每只股票从其最后一根 K 线的下一天续拉（默认按 --days 窗口整段重拉）",
+    )
     p_sync_run.add_argument("--indicators", action="store_true", help="批量同步完成后计算并缓存技术指标")
     p_sync_run.add_argument(
         "--skip-indicators", action="store_true", help="跳过指标缓存（单只默认同步，批量需 --indicators）"

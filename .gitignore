@@ -113,3 +113,10 @@ stock-analysis.png
 
 # 根目录 uv.lock（子包自有锁文件；2026-08-05 加入）
 /uv.lock
+
+# playwright-cli 会话产物
+.playwright-cli/
+*.playwright.png
+
+# CodeBuddy IDE 会话数据
+.codebuddy/

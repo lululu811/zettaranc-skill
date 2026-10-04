@@ -49,10 +49,10 @@ export default function SimulatorEquityCurveChart({
     if (point.regime !== currentRegime || idx === equityCurve.length - 1) {
       const endIdx = idx === equityCurve.length - 1 ? idx : idx - 1;
       const color = currentRegime === '强势'
-        ? 'rgba(34, 197, 94, 0.04)'
+        ? 'rgba(46, 204, 113, 0.10)'
         : currentRegime === '弱势'
-          ? 'rgba(239, 68, 68, 0.04)'
-          : 'rgba(245, 158, 11, 0.03)';
+          ? 'rgba(231, 76, 60, 0.10)'
+          : 'rgba(255, 159, 67, 0.08)';
       markAreas.push([
         {
           xAxis: dates[regimeStart],
@@ -74,9 +74,11 @@ export default function SimulatorEquityCurveChart({
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
-      backgroundColor: '#1a2236',
-      borderColor: '#2a3a52',
-      textStyle: { color: '#e2e8f0', fontSize: 11 },
+      backgroundColor: 'rgba(255,255,255,0.96)',
+      borderColor: '#dddddd',
+      borderWidth: 1,
+      textStyle: { color: '#333333', fontSize: 11 },
+      extraCssText: 'box-shadow: 0 8px 32px rgba(0,0,0,0.12); border-radius: 10px;',
       formatter: (params: Array<{ seriesName: string; value: number | null; axisValue: string }>) => {
         const lines = [`<div class="font-bold">${params[0]?.axisValue}</div>`];
         params.forEach((p) => {
@@ -90,7 +92,7 @@ export default function SimulatorEquityCurveChart({
     },
     legend: {
       data: ['权益', '基准', '回撤'],
-      textStyle: { color: '#94a3b8', fontSize: 11 },
+      textStyle: { color: '#666666', fontSize: 11 },
       top: 0,
     },
     grid: [
@@ -102,15 +104,15 @@ export default function SimulatorEquityCurveChart({
         type: 'category',
         data: dates,
         gridIndex: 0,
-        axisLine: { lineStyle: { color: '#2a3a52' } },
+        axisLine: { lineStyle: { color: '#dddddd' } },
         axisLabel: { show: false },
       },
       {
         type: 'category',
         data: dates,
         gridIndex: 1,
-        axisLine: { lineStyle: { color: '#2a3a52' } },
-        axisLabel: { color: '#64748b', fontSize: 10 },
+        axisLine: { lineStyle: { color: '#dddddd' } },
+        axisLabel: { color: '#666666', fontSize: 10 },
       },
     ],
     yAxis: [
@@ -118,21 +120,21 @@ export default function SimulatorEquityCurveChart({
         type: 'value',
         gridIndex: 0,
         scale: true,
-        splitLine: { lineStyle: { color: '#1e293b' } },
-        axisLabel: { color: '#64748b', fontSize: 10 },
-        axisLine: { lineStyle: { color: '#2a3a52' } },
+        splitLine: { lineStyle: { color: 'rgba(0,0,0,0.08)' } },
+        axisLabel: { color: '#666666', fontSize: 10 },
+        axisLine: { lineStyle: { color: '#dddddd' } },
       },
       {
         type: 'value',
         gridIndex: 1,
         scale: true,
-        splitLine: { lineStyle: { color: '#1e293b' } },
+        splitLine: { lineStyle: { color: 'rgba(0,0,0,0.08)' } },
         axisLabel: {
-          color: '#64748b',
+          color: '#666666',
           fontSize: 10,
           formatter: '{value}%',
         },
-        axisLine: { lineStyle: { color: '#2a3a52' } },
+        axisLine: { lineStyle: { color: '#dddddd' } },
       },
     ],
     dataZoom: [
@@ -141,10 +143,10 @@ export default function SimulatorEquityCurveChart({
         xAxisIndex: [0, 1],
         bottom: 10,
         height: 22,
-        borderColor: '#2a3a52',
-        fillerColor: 'rgba(245, 158, 11, 0.2)',
-        handleStyle: { color: '#f59e0b' },
-        textStyle: { color: '#64748b' },
+        borderColor: '#dddddd',
+        fillerColor: 'rgba(102, 126, 234, 0.14)',
+        handleStyle: { color: '#667eea' },
+        textStyle: { color: '#666666' },
       },
     ],
     series: [
@@ -155,7 +157,7 @@ export default function SimulatorEquityCurveChart({
         yAxisIndex: 0,
         data: equities,
         smooth: true,
-        lineStyle: { color: '#3b82f6', width: 2 },
+        lineStyle: { color: '#3498db', width: 2 },
         symbol: 'none',
         markArea: {
           data: markAreas,
@@ -169,7 +171,7 @@ export default function SimulatorEquityCurveChart({
         yAxisIndex: 0,
         data: benchmarkValues,
         smooth: true,
-        lineStyle: { color: '#f59e0b', width: 1.5, type: 'dashed' },
+        lineStyle: { color: '#f39c12', width: 1.5, type: 'dashed' },
         symbol: 'none',
       },
       {
@@ -179,7 +181,7 @@ export default function SimulatorEquityCurveChart({
         yAxisIndex: 1,
         data: drawdowns,
         smooth: true,
-        lineStyle: { color: '#ef4444', width: 1 },
+        lineStyle: { color: '#e74c3c', width: 1 },
         areaStyle: {
           color: {
             type: 'linear',
@@ -188,8 +190,8 @@ export default function SimulatorEquityCurveChart({
             x2: 0,
             y2: 1,
             colorStops: [
-              { offset: 0, color: 'rgba(239, 68, 68, 0.4)' },
-              { offset: 1, color: 'rgba(239, 68, 68, 0.02)' },
+              { offset: 0, color: 'rgba(231, 76, 60, 0.35)' },
+              { offset: 1, color: 'rgba(231, 76, 60, 0.02)' },
             ],
           },
         },

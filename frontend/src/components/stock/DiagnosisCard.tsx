@@ -37,7 +37,7 @@ export default function DiagnosisCard({ diagnosis }: Props) {
       <DiagnosisRow
         label="防卖飞"
         value={`${diagnosis.sell_score}/5 ${diagnosis.sell_score_desc}`}
-        color={diagnosis.sell_score >= 3 ? '#ef4444' : diagnosis.sell_score >= 2 ? '#f59e0b' : '#22c55e'}
+        color={diagnosis.sell_score >= 3 ? '#c0392b' : diagnosis.sell_score >= 2 ? '#d68910' : '#1e8449'}
       />
 
       {/* 麒麟会 */}
@@ -48,7 +48,7 @@ export default function DiagnosisCard({ diagnosis }: Props) {
 
       {/* 蜈蚣图 */}
       {diagnosis.is_centipede && (
-        <DiagnosisRow label="蜈蚣图" value="是" color="#ef4444" />
+        <DiagnosisRow label="蜈蚣图" value="是" color="#c0392b" />
       )}
 
       {/* 操作建议 */}

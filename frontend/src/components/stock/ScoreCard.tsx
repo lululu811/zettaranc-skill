@@ -6,13 +6,13 @@ interface Props {
 }
 
 export default function ScoreCard({ score }: Props) {
-  const ratingColor = score.total >= 80 ? '#22c55e' : score.total >= 65 ? '#3b82f6' : score.total >= 50 ? '#f59e0b' : score.total >= 35 ? '#f97316' : '#ef4444';
+  const ratingColor = score.total >= 80 ? '#1e8449' : score.total >= 65 ? '#2980b9' : score.total >= 50 ? '#d68910' : score.total >= 35 ? '#ca6f1e' : '#c0392b';
 
   const scoreItems = [
-    { label: 'B1', value: score.b1_score, color: '#22c55e' },
-    { label: '趋势', value: score.trend_score, color: '#3b82f6' },
-    { label: '量价', value: score.volume_score, color: '#f59e0b' },
-    { label: '风险', value: score.risk_score, color: '#ef4444' },
+    { label: 'B1', value: score.b1_score, color: '#1e8449' },
+    { label: '趋势', value: score.trend_score, color: '#2980b9' },
+    { label: '量价', value: score.volume_score, color: '#d68910' },
+    { label: '风险', value: score.risk_score, color: '#c0392b' },
   ];
 
   return (

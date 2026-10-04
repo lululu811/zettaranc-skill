@@ -14,11 +14,11 @@ export default function LoadingSpinner({ size = 'md', text }: Props) {
   return (
     <div className="flex flex-col items-center justify-center gap-3">
       <div className="relative">
-        {/* 外圈金色光晕 */}
-        <div className={`absolute inset-0 rounded-full bg-accent-gold/20 blur-md animate-pulse ${sizeMap[size]}`} />
+        {/* 外圈品牌光晕 */}
+        <div className={`absolute inset-0 rounded-full bg-brand-from/20 blur-md animate-pulse ${sizeMap[size]}`} />
         {/* 主 spinner */}
         <div
-          className={`relative animate-spin rounded-full border-border border-t-accent-gold border-r-accent-gold/60 ${sizeMap[size]}`}
+          className={`relative animate-spin rounded-full border-[rgba(0,0,0,0.10)] border-t-brand-from border-r-brand-to ${sizeMap[size]}`}
           style={{ animationDuration: '1s' }}
         />
       </div>
