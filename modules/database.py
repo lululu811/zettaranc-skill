@@ -76,6 +76,11 @@ def get_db_connection() -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
+    # busy_timeout 是连接级设置（非持久），每个连接都必须设。
+    # 批量同步 5 线程并发写时，锁等待可达 24 秒（实测），
+    # 超过 Python sqlite3 默认的 5 秒即抛 database is locked。
+    # 30 秒经实测可将失败率从 ~12% 降到 0。见 docs/TODO.md P0。
+    conn.execute("PRAGMA busy_timeout=30000;")
     return conn
 
 

@@ -32,13 +32,13 @@ export default function Sidebar() {
 
   return (
     <aside
-      className={`flex flex-col border-r border-border/40 bg-bg-secondary/40 backdrop-blur-xl z-50 overflow-hidden transition-[width] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
+      className={`glass-bar flex flex-col z-50 overflow-hidden transition-[width] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
         collapsed ? 'w-16' : 'w-56'
       }`}
     >
       {/* Logo */}
-      <div className="flex h-12 items-center gap-2 border-b border-border px-3 shrink-0">
-        <span className="text-lg text-accent-gold shrink-0">Z</span>
+      <div className="flex h-14 items-center gap-2 border-b border-border/60 px-3 shrink-0">
+        <span className="text-lg font-bold brand-gradient-text shrink-0">Z</span>
         {!collapsed && (
           <span className="text-sm font-bold text-text-primary whitespace-nowrap">哥量化</span>
         )}
@@ -53,10 +53,10 @@ export default function Sidebar() {
             end={item.path === '/'}
             title={collapsed ? item.label : undefined}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 text-sm transition-colors whitespace-nowrap ${
+              `flex items-center gap-3 px-3 py-2.5 text-sm transition-all duration-200 whitespace-nowrap ${
                 isActive
-                  ? 'bg-bg-hover text-accent-gold border-r-2 border-accent-gold'
-                  : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'
+                  ? 'mx-2 my-0.5 rounded-xl brand-gradient-bg text-white font-medium shadow-[0_8px_20px_-10px_rgba(102,126,234,0.95)]'
+                  : 'text-text-secondary hover:bg-[rgba(102,126,234,0.10)] hover:text-brand-from rounded-xl mx-2 my-0.5'
               }`
             }
           >

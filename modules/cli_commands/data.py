@@ -37,10 +37,14 @@ def cmd_sync(args) -> None:
                 syncer.sync_indicator_cache(args.ts_code, days=args.days)
         else:
             syncer.sync_stock_basic()
-            syncer.sync_all_daily_kline(days=args.days)
+            incremental = getattr(args, "incremental", False)
+            results = syncer.sync_all_daily_kline(days=args.days, incremental=incremental)
             if args.indicators and not args.skip_indicators:
-                print("正在批量同步指标缓存...")
-                syncer.sync_all_indicators()
+                # 只重算本次真正有新 K 线的股票，避免全市场重算指标
+                updated = [code for code, count in results.items() if count > 0]
+                if updated:
+                    print(f"正在批量同步指标缓存（{len(updated)} 只）...")
+                    syncer.sync_all_indicators(ts_codes=updated, incremental=incremental)
         print("同步完成")
         print(syncer.get_sync_status())
 

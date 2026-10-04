@@ -24,8 +24,8 @@ function Stat({ label, value, color, mono = true }: { label: string; value: stri
  */
 function SectionLabel({ children, accent }: { children: React.ReactNode; accent?: 'red' | 'green' | 'blue' | 'gold' | 'purple' | 'cyan' }) {
   const dotColor = {
-    red: '#ef4444', green: '#22c55e', blue: '#3b82f6',
-    gold: '#f59e0b', purple: '#a855f7', cyan: '#06b6d4',
+    red: '#c0392b', green: '#1e8449', blue: '#2980b9',
+    gold: '#d68910', purple: '#8e44ad', cyan: '#16a085',
   }[accent || 'gold'];
   return (
     <div className="flex items-center gap-2 mt-2 first:mt-0 mb-1">
@@ -41,10 +41,10 @@ function SectionLabel({ children, accent }: { children: React.ReactNode; accent?
 export default function IndicatorPanel({ indicators }: Props) {
   const { kdj, macd, bbi, rsi, bollinger, vol_ratio, double_line, brick, dmi, signal, sell_score } = indicators;
 
-  const sellColor = sell_score >= 3 ? '#ef4444' : sell_score >= 2 ? '#f59e0b' : '#22c55e';
-  const signalColor = signal === 'B1' || signal === 'B2' ? '#22c55e'
-    : signal === 'S1' || signal === 'S2' ? '#ef4444'
-    : '#94a3b8';
+  const sellColor = sell_score >= 3 ? '#c0392b' : sell_score >= 2 ? '#d68910' : '#1e8449';
+  const signalColor = signal === 'B1' || signal === 'B2' ? '#1e8449'
+    : signal === 'S1' || signal === 'S2' ? '#c0392b'
+    : '#7f8c8d';
 
   return (
     <div className="grid grid-cols-2 gap-x-1 max-h-[600px] overflow-y-auto pr-1">
@@ -66,7 +66,7 @@ export default function IndicatorPanel({ indicators }: Props) {
       <div className="col-span-2 grid grid-cols-3 gap-x-1">
         <Stat label="K" value={formatNumber(kdj.k)} />
         <Stat label="D" value={formatNumber(kdj.d)} />
-        <Stat label="J" value={formatNumber(kdj.j)} color={kdj.j < 0 ? '#22c55e' : kdj.j > 100 ? '#ef4444' : undefined} />
+        <Stat label="J" value={formatNumber(kdj.j)} color={kdj.j < 0 ? '#1e8449' : kdj.j > 100 ? '#c0392b' : undefined} />
       </div>
 
       {/* MACD */}
@@ -74,7 +74,7 @@ export default function IndicatorPanel({ indicators }: Props) {
       <div className="col-span-2 grid grid-cols-3 gap-x-1">
         <Stat label="DIF" value={formatNumber(macd.dif, 3)} />
         <Stat label="DEA" value={formatNumber(macd.dea, 3)} />
-        <Stat label="柱" value={formatNumber(macd.hist, 3)} color={(macd.hist ?? 0) >= 0 ? '#ef4444' : '#22c55e'} />
+        <Stat label="柱" value={formatNumber(macd.hist, 3)} color={(macd.hist ?? 0) >= 0 ? '#c0392b' : '#1e8449'} />
       </div>
       {(macd.gold_cross || macd.dead_cross) && (
         <div className="col-span-2 px-2 mb-1 flex items-center gap-2">
@@ -86,7 +86,7 @@ export default function IndicatorPanel({ indicators }: Props) {
       {/* RSI + BBI 合并一行 */}
       <SectionLabel accent="purple">RSI / BBI</SectionLabel>
       <div className="col-span-2 grid grid-cols-4 gap-x-1">
-        <Stat label="6"  value={formatNumber(rsi.rsi6)} color={rsi.rsi6 > 70 ? '#ef4444' : rsi.rsi6 < 30 ? '#22c55e' : undefined} />
+        <Stat label="6"  value={formatNumber(rsi.rsi6)} color={rsi.rsi6 > 70 ? '#c0392b' : rsi.rsi6 < 30 ? '#1e8449' : undefined} />
         <Stat label="12" value={formatNumber(rsi.rsi12)} />
         <Stat label="24" value={formatNumber(rsi.rsi24)} />
         <Stat label="BBI" value={formatNumber(bbi)} />
@@ -99,24 +99,24 @@ export default function IndicatorPanel({ indicators }: Props) {
         <Stat label="中" value={formatNumber(bollinger.mid)} />
         <Stat label="下" value={formatNumber(bollinger.lower)} />
         <Stat label="位" value={`${formatNumber(bollinger.position)}%`}
-              color={bollinger.position > 80 ? '#ef4444' : bollinger.position < 20 ? '#22c55e' : undefined} />
+              color={bollinger.position > 80 ? '#c0392b' : bollinger.position < 20 ? '#1e8449' : undefined} />
       </div>
 
       {/* 双线战法 + 量比 — 单独突出 */}
       <SectionLabel accent="red">双线战法</SectionLabel>
       <div className="col-span-2 grid grid-cols-4 gap-x-1">
-        <Stat label="白" value={formatNumber(double_line.white)} color="#ffffff" />
-        <Stat label="黄" value={formatNumber(double_line.yellow)} color="#fbbf24" />
-        <Stat label="比" value={formatNumber(vol_ratio)} color={(vol_ratio ?? 0) > 2 ? '#f59e0b' : undefined} />
-        <Stat label="砖" value={`${brick.count}块`} color={brick.trend === 'RED' ? '#ef4444' : brick.trend === 'GREEN' ? '#22c55e' : undefined} />
+        <Stat label="白" value={formatNumber(double_line.white)} color="#2d3436" />
+        <Stat label="黄" value={formatNumber(double_line.yellow)} color="#f39c12" />
+        <Stat label="比" value={formatNumber(vol_ratio)} color={(vol_ratio ?? 0) > 2 ? '#d68910' : undefined} />
+        <Stat label="砖" value={`${brick.count}块`} color={brick.trend === 'RED' ? '#c0392b' : brick.trend === 'GREEN' ? '#1e8449' : undefined} />
       </div>
 
       {/* DMI */}
       <SectionLabel accent="green">DMI</SectionLabel>
       <div className="col-span-2 grid grid-cols-3 gap-x-1">
-        <Stat label="+DI" value={formatNumber(dmi.plus)} color="#22c55e" />
-        <Stat label="-DI" value={formatNumber(dmi.minus)} color="#ef4444" />
-        <Stat label="ADX" value={formatNumber(dmi.adx)} color={(dmi.adx ?? 0) > 25 ? '#f59e0b' : undefined} />
+        <Stat label="+DI" value={formatNumber(dmi.plus)} color="#1e8449" />
+        <Stat label="-DI" value={formatNumber(dmi.minus)} color="#c0392b" />
+        <Stat label="ADX" value={formatNumber(dmi.adx)} color={(dmi.adx ?? 0) > 25 ? '#d68910' : undefined} />
       </div>
 
       {/* 卖出评分（横跨两列 + 进度条） */}

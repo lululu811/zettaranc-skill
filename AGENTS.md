@@ -70,7 +70,8 @@ modules/backtest/_rust_bridge.py  # is_rust_available() / try_call(name,...) →
 - 路径常量（`DATA_DIR/REGISTRY_DIR/REPORTS_DIR`）→ `modules/core/paths.py`。
 - ATR → `modules/core/atr.py`。
 - 错误 → `modules/core/errors.py`（`ZettarancError` 基类 + 统一错误码）。
-- **不要**在新代码里另立第二套 `MarketRegime`/`PerformanceMetrics`/ATR/路径常量；一律从 `modules/core` 导入。
+- 选股策略中文别名（16 个）→ `modules/screener/aliases.py` 的 `STRATEGY_ALIAS` / `STRATEGY_DESCRIPTIONS`；`modules/cli.py` 与 `api/services/screen_service.py` 都从这里导入（前端 `frontend/src/lib/constants.ts::STRATEGIES` 是镜像列表，按 criteria 去重后 14 项）。
+- **不要**在新代码里另立第二套 `MarketRegime`/`PerformanceMetrics`/ATR/路径常量/策略别名；一律从 `modules/core`、`modules/screener/aliases.py` 导入。
 
 ## Key Directories
 
@@ -87,7 +88,8 @@ modules/backtest/_rust_bridge.py  # is_rust_available() / try_call(name,...) →
 | `modules/data_sync/` | 数据同步/限流（`rate_limiter.py`、`syncer.py`、`fetcher.py`、`indicator_cache.py`） |
 | `modules/self_optimizer/` | Darwin 自优化管线（`param_registry.py`、`mutator.py`、`scorer.py`） |
 | `api/` | FastAPI REST（`main.py`、`routes/`、`services/`、`models/`、`config.py`） |
-| `frontend/` | React + Vite 看板（可选） |
+| `frontend/` | React + Vite 看板（可选，浅色玻璃拟态主题，端口 5173） |
+| `frontend-legacy/` | 改版前的深色终端版前端快照（端口 5174，`/api` 同样代理 8000），用于并排对照 |
 | `rust/` | Rust 计算核 workspace + `scripts/`（`Dockerfile.test`） |
 | `python/_core_compute/` | maturin python 源包桩（`_core_compute` 扩展的 import 壳） |
 | `knowledge/` | 交易体系知识文档（29 篇顶层 + `macro/`、`reference/`、`strategies/` 子目录） |
@@ -189,7 +191,7 @@ RUN_REALDATA=true python -m pytest tests/test_indicators_realdata.py -v  # 真�
 | `modules/core/_rust_compat.py` | Rust/Python 切换 shim（`ZETTARANC_BACKTEST_IMPL`） |
 | `api/main.py` | FastAPI 入口 + `start_web()`（uvicorn 8000，9 个 router 挂 `/api/v1`） |
 | `api/config.py` | pydantic-settings `Settings`（db_path / data_mode / cors / api_prefix） |
-| `frontend/vite.config.ts` | vite 端口 5173 + `/api` 代理到 `http://localhost:8000` |
+| `frontend/vite.config.ts` | vite 端口 5173 + `/api` 代理到 `http://localhost:8000`（`frontend-legacy/vite.config.ts` 为 5174） |
 | `rust/Cargo.toml` | Rust workspace（6 crates） |
 | `tests/conftest.py` | pytest fixtures + 数据工厂 |
 | `.env.example` | 运行时环境变量模板 |

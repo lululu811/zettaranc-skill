@@ -203,3 +203,43 @@ def _criteria_volume_ratio_super(klines, score: "StockScore") -> bool:
         score.reasons.append(f"量比战法·{vr['scenario']}(量比={vr['vol_ratio']})")
         return True
     return False
+
+
+# ---------- 简单完美图形（笔记《交易系统.md》§2.2.3 三种形态）----------
+
+
+def _apply_simple_perfect(klines, score: "StockScore", index: int, label: str) -> bool:
+    """调用 simple_perfect 模块的第 index 种形态判定，命中时把 reasons 并入 score"""
+    from .simple_perfect import (
+        detect_simple_perfect_1,
+        detect_simple_perfect_2,
+        detect_simple_perfect_3,
+    )
+
+    detectors = (detect_simple_perfect_1, detect_simple_perfect_2, detect_simple_perfect_3)
+    try:
+        result = detectors[index - 1](klines)
+    except (KeyError, ValueError, IndexError, TypeError, AttributeError, ArithmeticError) as e:
+        logger.warning("[criteria] %s 判定失败: %s", label, e)
+        return False
+
+    if not result.get("is_match"):
+        return False
+
+    score.reasons.append(f"{label}：" + "；".join(result.get("reasons", [])))
+    return True
+
+
+@_register("simple_perfect_1")
+def _criteria_simple_perfect_1(klines, score: "StockScore") -> bool:
+    return _apply_simple_perfect(klines, score, 1, "简单完美图形-1·经典")
+
+
+@_register("simple_perfect_2")
+def _criteria_simple_perfect_2(klines, score: "StockScore") -> bool:
+    return _apply_simple_perfect(klines, score, 2, "简单完美图形-2·异动后横盘")
+
+
+@_register("simple_perfect_3")
+def _criteria_simple_perfect_3(klines, score: "StockScore") -> bool:
+    return _apply_simple_perfect(klines, score, 3, "简单完美图形-3·完美绿帽")

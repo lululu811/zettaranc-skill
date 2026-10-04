@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+
 from ._helpers import json_output
 from .strategy_alias import STRATEGY_ALIAS
+
+logger = logging.getLogger(__name__)
 
 
 def cmd_screen(args) -> None:
@@ -23,14 +27,49 @@ def cmd_screen(args) -> None:
     # `rust_screen = compute_func("screen_stocks_py")`
     # 若 rust_screen 不为 None 即可走 Rust。
 
-    results = screen_stocks(
-        criteria=criteria,
-        max_stocks=args.limit if args.limit > 0 else 0,
-        use_parallel=not args.no_parallel,
-    )
+    # 运行时参数覆盖：--param KEY=VALUE（可重复），键名取自 param_registry
+    raw_params = getattr(args, "param", None) or []
+    overrides: dict[str, float] = {}
+    for item in raw_params:
+        if "=" not in item:
+            print(f"忽略无效参数（需 KEY=VALUE 形式）: {item}")
+            continue
+        key, _, value = item.partition("=")
+        try:
+            overrides[key.strip()] = float(value)
+        except ValueError:
+            print(f"忽略无效参数值（需数字）: {item}")
 
-    # 输出前 limit 只（limit=0 时输出全部 500 上限内的命中）
-    output_limit = args.limit if args.limit > 0 else len(results)
+    # 参数组名与 criteria 同名（simple_perfect_1/2/3 各自成组）
+    param_group = criteria
+
+    def _run():
+        return screen_stocks(
+            criteria=criteria,
+            max_stocks=args.limit if args.limit > 0 else 0,
+            use_parallel=not args.no_parallel,
+        )
+
+    if overrides:
+        try:
+            from modules.self_optimizer.param_registry import get_registry, using_params
+
+            group = get_registry().get(param_group)
+            if group:
+                clean = {k: v for k, v in overrides.items() if k in group.params}
+                with using_params({param_group: clean}):
+                    results = _run()
+            else:
+                results = _run()
+        except (ImportError, TypeError, ValueError) as e:
+            logger.warning("[screen] 参数覆盖失败，按默认值运行: %s", e)
+            results = _run()
+    else:
+        results = _run()
+
+    # limit=扫描数量；--top=返回条数（0=全部命中）
+    top = getattr(args, "top", 0) or 0
+    output_limit = top if top > 0 else len(results)
 
     # ── JSON 输出 ──
     if args.json:

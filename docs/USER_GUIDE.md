@@ -116,9 +116,9 @@ cp .env.example .env
 DATA_MODE=jnb
 
 # Tushare API 配置
-TUSHARE_TOKEN=你的56位token
-# Tushare 中转 API 地址
-TUSHARE_API_URL=https://tt.xiaodefa.cn
+TUSHARE_TOKEN=你的token
+# Tushare 中转 API 地址（基础路径，SDK 会自动追加 /{接口名}）
+TUSHARE_API_URL=https://api.waditu.com/dataapi
 
 # Indevs 数据源（可选，配置后数据同步优先走该源）
 # INDEVS_API_KEY=your_api_key
@@ -129,9 +129,15 @@ DATA_DIR=data
 DB_PATH=data/stock_data.db
 ```
 
-> **Token 获取**：前往 https://tushare.pro/user/token 复制你的 56 位 token。
+> **Token 获取**：前往 https://tushare.pro/user/token 复制你的 token。
 > 
-> **中转 API**：`https://tt.xiaodefa.cn` 是一个可用的中转服务示例，限流 120 次/分钟，无需高级积分。自 v2.1.1 起所有 URL 均从环境变量读取，代码中不硬编码任何域名。
+> **中转 API**：`TUSHARE_API_URL` 填的是**基础路径**，SDK 会自动追加 `/{接口名}`（如 `/daily`），源码见 `tushare/pro/client.py:42`。
+> 
+> - 推荐 `https://api.waditu.com/dataapi`（Tushare 官方运营中转，接受官方 token）
+> - **不能填** `https://api.tushare.pro`——官方端点只在根路径接受 POST，被追加路径后返回 404
+> - 历史示例 `https://tt.xiaodefa.cn` 需该服务专用 token，不接受官方 token，已失效
+> 
+> 自 v2.1.1 起所有 URL 均从环境变量读取，代码中不硬编码任何域名。
 
 ### 2.3 验证安装
 
@@ -151,8 +157,8 @@ python -c "from modules.setup_wizard import test_jnb_connection; import os; prin
 | 变量名 | 必填 | 默认值 | 说明 |
 |--------|------|--------|------|
 | `DATA_MODE` | 否 | `websearch` | `jnb` = 真实行情模式，`websearch` = 纯对话模式 |
-| `TUSHARE_TOKEN` | 是（jnb 模式且未用 Indevs） | 无 | 56 位 Tushare Token |
-| `TUSHARE_API_URL` | 是（jnb 模式且未用 Indevs） | 无 | 中转 API 地址，如 `https://tt.xiaodefa.cn` |
+| `TUSHARE_TOKEN` | 是（jnb 模式且未用 Indevs） | 无 | Tushare Token |
+| `TUSHARE_API_URL` | 是（jnb 模式且未用 Indevs） | 无 | 中转 API **基础路径**（SDK 追加 `/{接口名}`），如 `https://api.waditu.com/dataapi` |
 | `TUSHARE_VERIFY_TOKEN_URL` | 否 | 无 | 实时行情验证地址 |
 | `INDEVS_API_KEY` | 否 | 无 | Indevs Tushare Replay API Key，配置后数据同步优先走该源（v3.8.1） |
 | `INDEVS_API_URL` | 否 | `https://ai-tool.indevs.in/tushare/pro` | Indevs API 地址 |
@@ -1132,11 +1138,16 @@ zt self-optimize reset
 **Q: 测试连通性返回 False / 报 ProxyError**
 
 A: 检查以下几点：
-1. `.env` 中 `TUSHARE_TOKEN` 是否为 56 位有效 token
-2. `TUSHARE_API_URL` 是否已正确配置（例如 `https://tt.xiaodefa.cn`）
+1. `.env` 中 `TUSHARE_TOKEN` 是否为有效 token
+2. `TUSHARE_API_URL` 是否填的是**路径式基础路径**（推荐 `https://api.waditu.com/dataapi`）。
+   常见误配是填 `https://api.tushare.pro`——官方端点只接受根路径 POST，
+   而 SDK 会追加 `/{接口名}`，导致请求 `/daily` 返回 404（表现为返回 0 行而非报错）
 3. 中转服务是否正在维护
-4. 网络是否正常（如 `ping tt.xiaodefa.cn`）
+4. 网络是否正常（如 `curl https://api.waditu.com/dataapi/daily`）
 5. 若配置了 Indevs，检查 `INDEVS_API_KEY` / `INDEVS_API_URL` 是否有效
+
+> 快速定位：用 `zt sync status` 判断配置是否缺失（会报 `[CONFIG_MISSING]`）；
+> 配置齐全但取数为空，多半是第 2 条的 URL 格式问题。
 
 **Q: 报 "No module named 'dotenv'"**
 

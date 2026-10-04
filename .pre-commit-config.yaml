@@ -27,6 +27,17 @@ repos:
           - pandas-stubs
           - types-requests
 
+  # === 版本号一致性（四处必须同步：发版时最容易漏）===
+  - repo: local
+    hooks:
+      - id: check-version-consistency
+        name: 版本号一致性（pyproject / skill.json / SKILL.md / CHANGELOG）
+        entry: python3 scripts/check_version_consistency.py
+        language: system
+        pass_filenames: false
+        # 任一版本号载体或校验脚本本身改动时都跑
+        files: '^(pyproject\.toml|skill\.json|SKILL\.md|docs/CHANGELOG\.md|scripts/check_version_consistency\.py)$'
+
   # === SKILL.md 质量门（每次 commit 跑轴 A 12 项检查，~5s）===
   - repo: local
     hooks:

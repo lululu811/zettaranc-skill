@@ -12,7 +12,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 
-# 16 个 strategy 中文别名（与 cli.STRATEGY_ALIAS 保持同步）
+# 19 个 strategy 中文别名（与 cli.STRATEGY_ALIAS 保持同步）
 EXPECTED_STRATEGIES = [
     "B1",
     "B2",
@@ -30,6 +30,9 @@ EXPECTED_STRATEGIES = [
     "沙漏",
     "沙漏评分",
     "量比战法",
+    "简单完美图形-1",
+    "简单完美图形-2",
+    "简单完美图形-3",
 ]
 
 
@@ -68,10 +71,10 @@ def fake_screen_result():
 
 
 def test_strategy_alias_covers_all_sixteen():
-    """STRATEGY_ALIAS 必须覆盖 16 种 strategy"""
+    """STRATEGY_ALIAS 必须覆盖 19 种 strategy"""
     from modules.cli import STRATEGY_ALIAS
 
-    assert len(STRATEGY_ALIAS) == 16
+    assert len(STRATEGY_ALIAS) == 19
     for name in EXPECTED_STRATEGIES:
         assert name in STRATEGY_ALIAS, f"STRATEGY_ALIAS 缺 {name}"
 
@@ -105,9 +108,25 @@ def test_strategy_choices_matches_alias_keys():
     assert set(STRATEGY_CHOICES) == set(STRATEGY_ALIAS.keys())
 
 
+def test_web_api_reuses_cli_strategy_alias():
+    """Web API 必须复用同一份别名表（历史上 API 侧曾漏掉 5 个别名）"""
+    from modules.cli import STRATEGY_ALIAS
+    from modules.screener.aliases import STRATEGY_ALIAS as SOURCE
+
+    assert STRATEGY_ALIAS is SOURCE
+
+    try:
+        from api.services import screen_service
+    except ImportError:  # api 依赖（fastapi 等）未安装时跳过
+        pytest.skip("api 依赖未安装")
+
+    assert screen_service.STRATEGY_ALIAS is STRATEGY_ALIAS
+    assert len(screen_service.STRATEGY_ALIAS) == 19
+
+
 @pytest.mark.parametrize("chinese_name", EXPECTED_STRATEGIES)
 def test_screen_parser_accepts_all_strategies(chinese_name, fake_screen_result, capsys):
-    """main() parser 必须接受 11 种 strategy 中文别名"""
+    """main() parser 必须接受全部 strategy 中文别名"""
     from modules.cli import main
 
     test_args = ["zt", "screen", "--strategy", chinese_name, "--limit", "5", "--no-parallel"]

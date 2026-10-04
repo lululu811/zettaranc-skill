@@ -174,32 +174,32 @@ export default function Simulator() {
               {
                 label: '年化收益',
                 value: formatPct(((metrics?.annualized_return ?? 0) as number) * 100),
-                color: (metrics?.annualized_return ?? 0) >= 0 ? '#ef4444' : '#22c55e',
+                color: (metrics?.annualized_return ?? 0) >= 0 ? '#e74c3c' : '#2ecc71',
               },
               {
                 label: '夏普比率',
                 value: formatNumber(metrics?.sharpe_ratio ?? 0),
-                color: '#3b82f6',
+                color: '#2980b9',
               },
               {
                 label: 'Calmar',
                 value: formatNumber(metrics?.calmar_ratio ?? 0),
-                color: '#a855f7',
+                color: '#8e44ad',
               },
               {
                 label: '最大回撤',
                 value: formatPct(-Math.abs((metrics?.max_drawdown ?? 0) as number) * 100),
-                color: '#ef4444',
+                color: '#e74c3c',
               },
               {
                 label: '胜率',
                 value: formatPct(((metrics?.win_rate ?? 0) as number) * 100),
-                color: '#f59e0b',
+                color: '#d68910',
               },
               {
                 label: '总交易数',
                 value: String(summary?.total_trades ?? 0),
-                color: '#06b6d4',
+                color: '#16a085',
               },
             ].map((item) => (
               <Card key={item.label}>

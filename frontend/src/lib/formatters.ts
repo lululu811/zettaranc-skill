@@ -50,10 +50,10 @@ export function ratingStars(rating: string): string {
 // 风险等级颜色
 export function riskColor(level: string): string {
   const map: Record<string, string> = {
-    LOW: '#22c55e',
-    MEDIUM: '#f59e0b',
-    HIGH: '#f97316',
-    CRITICAL: '#ef4444',
+    LOW: '#1e8449',
+    MEDIUM: '#d68910',
+    HIGH: '#ca6f1e',
+    CRITICAL: '#c0392b',
   };
-  return map[level] || '#64748b';
+  return map[level] || '#7f8c8d';
 }

@@ -6,10 +6,21 @@ from api.models.stock import (
     StockAnalysisResponse,
     KlineChartResponse,
     FullIndicatorResponse,
+    StockSearchResponse,
 )
 from api.services import stock_service
 
 router = APIRouter()
+
+
+@router.get("/search", response_model=StockSearchResponse)
+def search_stocks(q: str = Query(default="", max_length=32), limit: int = Query(default=10, ge=1, le=50)):
+    """股票联想搜索：代码前缀 / 中文名称 / 拼音（首字母或全拼）"""
+    try:
+        items = stock_service.search_stocks(q, limit)
+        return {"query": q, "total": len(items), "items": items}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"搜索失败: {e}")
 
 
 @router.get("/analyze/{ts_code}", response_model=StockAnalysisResponse)

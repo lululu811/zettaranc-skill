@@ -2,6 +2,28 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## v4.3.2 (2026-10-04) — 严格增量同步 + 前端改版 + 全市场选股
+
+### Added
+
+- **K 线严格增量**：`zt sync sync --incremental`（`sync_all_daily_kline(incremental=True)`），每只股票从其 `daily_kline` 中最后一根 K 线的下一天续拉，不再按 `--days` 整段重拉；库里无数据的新股才回落到 `--days` 窗口。断点取自实际数据而非 `sync_log`。
+- **指标缓存增量**：`sync_indicator_cache / sync_all_indicators` 新增 `warmup`（默认 250 根预热，只参与计算、不写库）与 `incremental`（只写新增交易日，不覆盖已算好的旧值）。
+- **CLI `screen` 参数**：新增 `--param KEY=VALUE`（运行时覆盖策略参数，可重复）与 `--top`（返回条数上限，0=全部命中）。
+- **前端改版**：浅色渐变底 + 玻璃拟态卡片（对齐 dyqvideo.com/stock），涨跌色 `#e74c3c / #2ecc71`；K 线图重写为三区 grid（K线 / 成交量 / 副图指标）+ 十字光标三区联动；旧版深色终端版整份保留为 `frontend-legacy/`（独立工程，端口 5174）。
+- **选股结果持久化**：条件 + 结果快照写入 localStorage，刷新 / 返回 / 切页都不丢；结果卡片标题栏新增「重新筛选」按钮，条件变更时提示重跑。
+- fork 分支此前新增的文档与校验：`docs/STRATEGY_FORMULAS.md`（14 种策略公式全解，逐行提取自源码）、`docs/DATABASE_SCHEMA.md`、`scripts/check_version_consistency.py`（版本号四处一致性校验，已挂 pre-commit）、`tests/test_indicator_cache_integrity.py`（指标缓存完整性 / 值域 / 正确性三层校验，含数学恒等式用例）、`tests/test_sync_incremental.py`。
+
+### Fixed
+
+- **K 线写入会清空估值列**：`INSERT OR REPLACE` 先删整行再插入，未列出的列回到默认值，导致 `sync_daily_basic` 写入的 `pe / pe_ttm / pb / ps / ps_ttm / total_mv / circ_mv` 每次重拉 K 线后被清成 NULL → 改为 `UPSERT`（`ON CONFLICT(ts_code, trade_date) DO UPDATE`），只更新行情列。
+- **指标缓存小窗口滚动污染历史**：原实现按 `get_kline_data(days)` 取窗口逐日算，窗口最早一天只有 1 根历史，随着窗口每天滚动，`ma60 / ma250`、MACD 预热段等长周期字段被反复用更短历史重写（且不会再被修正）→ 改为「长历史预热 + 只写新增日」。
+- **批量写库 `database is locked`**：`get_db_connection()` 未设 `busy_timeout`（SQLite 默认 5 秒），5 线程并发写 `indicator_cache` 实测锁等待最长 24 秒，约 12% 失败 → 统一 `PRAGMA busy_timeout=30000`。实测 5 线程 × 60 只 × 120 天：默认 5s 失败 7/60 → 30s 失败 0/60。
+- **`TUSHARE_API_URL` 文档指向失效地址**：原示例 `https://tt.xiaodefa.cn` 需该服务专用 token（官方 token 报 40101）；该变量是**基础路径**，tushare SDK 会自动追加 `/{接口名}`，故 `https://api.tushare.pro` 会被拼成 `/daily` 而 404 → 统一改为 `https://api.waditu.com/dataapi`。同时移除各处「Token 56 位」的无依据表述。
+
+### Changed
+
+- **去掉选股 500 只扫描上限**：`screen_stocks(max_stocks=0)` 即全市场（5224 只，实测 4.1 秒）；Web API `/screen/run` 的 `limit` 放宽为 `0~20000`（0=全市场），返回体 `scanned` 改为真实扫描数（原写死 `min(limit, 500)`）。原上限是历史性能保护，指标走 `indicator_cache` 后已无必要——它会导致代码排位靠后的股票（如 002074.SZ）永远扫不到。
+
 ## v4.3.1 (2026-09-30) — 仓库瘦身 + 文档准确性 + CI 全绿
 
 ### 修复（真实 bug）

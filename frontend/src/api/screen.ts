@@ -6,7 +6,18 @@ export async function fetchStrategies(): Promise<StrategyInfo[]> {
   return data;
 }
 
-export async function runScreen(strategy: string, limit = 20): Promise<ScreenResult> {
-  const { data } = await api.post<ScreenResult>('/screen/run', { strategy, limit, use_parallel: true });
+export async function runScreen(
+  strategy: string,
+  limit = 100,
+  params?: Record<string, number>,
+  top = 0,
+): Promise<ScreenResult> {
+  const { data } = await api.post<ScreenResult>('/screen/run', {
+    strategy,
+    limit, // 扫描多少只股票
+    top, // 返回条数（0=全部命中）
+    use_parallel: true,
+    params: params ?? {},
+  });
   return data;
 }

@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+/* Z哥量化 — 深色金融终端主题 */
+@theme {
+  --color-bg-primary: #09090b; /* Zinc 950 */
+  --color-bg-secondary: rgba(24, 24, 27, 0.7); /* Zinc 900 transparent */
+  --color-bg-card: rgba(24, 24, 27, 0.5);
+  --color-bg-hover: rgba(39, 39, 42, 0.8);
+  --color-border: rgba(63, 63, 70, 0.5);
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+  --color-accent-red: #f43f5e; /* Rose 500 */
+  --color-accent-green: #10b981; /* Emerald 500 */
+  --color-accent-gold: #f59e0b; /* Amber 500 */
+  --color-accent-blue: #3b82f6; /* Blue 500 */
+  --color-accent-purple: #8b5cf6; /* Violet 500 */
+  --color-accent-cyan: #06b6d4; /* Cyan 500 */
+}
+
+/* 全局样式 */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: var(--color-bg-primary);
+  background-image: radial-gradient(ellipse at top right, rgba(30, 58, 138, 0.15), transparent 50%), radial-gradient(ellipse at bottom left, rgba(139, 92, 246, 0.1), transparent 50%);
+  color: var(--color-text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Menlo', monospace;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg-secondary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* 涨跌颜色 */
+.text-up { color: var(--color-accent-red); }
+.text-down { color: var(--color-accent-green); }
+.bg-up { background-color: var(--color-accent-red); }
+.bg-down { background-color: var(--color-accent-green); }
