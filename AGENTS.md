@@ -219,3 +219,17 @@ RUN_REALDATA=true python -m pytest tests/test_indicators_realdata.py -v  # 真�
   - `release.yml`：tag 驱动 `v*.*.*`，test（py3.12/3.13）→ build wheel（maturin）→ 装 wheel → 跑 `tests/test_rust_compat.py` + `tests/test_cli_uses_rust.py` → PyPI → GH Release → ClawHub。
 - **Rust 接线测试**：`tests/test_rust_compat.py`（`pytest.importorskip('_core_compute')`，设 `ZETTARANC_BACKTEST_IMPL=rust` 测 choice 逻辑）；`tests/test_cli_uses_rust.py`（monkeypatch 假 rust 模块，断言 CLI 回测真走 Rust binding）。
 - **无前端 JS 测试**；前端质量靠 `npm run lint` + `npm run build`（tsc -b）。
+
+## Agent skills
+
+### Issue tracker
+
+本仓库的 issue 与 spec 走 GitHub Issues（`lululu811/zettaranc-skill`），用 `gh` CLI 读写。详见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+默认五角色词汇：`needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`。详见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+单上下文布局：根目录一个 `CONTEXT.md` + `docs/adr/`。详见 `docs/agents/domain.md`。
