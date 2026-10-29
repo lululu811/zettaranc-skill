@@ -46,31 +46,22 @@ def test_string_to_gate_action_mapping(tmp_path):
     assert result is GateAction.OPEN, f"应为 OPEN,实际 {result}"
 
 
-def test_get_active_market_gate_returns_waits_string_maps_to_wait():
-    """get_active_market_gate 返回 "WAIT" 时,apply_active_mv_gate 返回 GateAction.WAIT。"""
+def test_get_active_market_gate_returns_waits_maps_to_wait():
+    """get_active_market_gate 返回 WAIT 时,apply_active_mv_gate 返回 GateAction.WAIT。"""
     from unittest.mock import patch
 
-    with patch("modules.active_market_value.get_active_market_gate", return_value="WAIT"):
+    with patch("modules.active_market_value.get_active_market_gate", return_value=GateAction.WAIT):
         result = apply_active_mv_gate("20260821", enabled=True)
     assert result is GateAction.WAIT
 
 
-def test_get_active_market_gate_returns_clear_string_maps_to_clear():
-    """get_active_market_gate 返回 "CLEAR" 时,apply_active_mv_gate 返回 GateAction.CLEAR。"""
+def test_get_active_market_gate_returns_clear_maps_to_clear():
+    """get_active_market_gate 返回 CLEAR 时,apply_active_mv_gate 返回 GateAction.CLEAR。"""
     from unittest.mock import patch
 
-    with patch("modules.active_market_value.get_active_market_gate", return_value="CLEAR"):
+    with patch("modules.active_market_value.get_active_market_gate", return_value=GateAction.CLEAR):
         result = apply_active_mv_gate("20260821", enabled=True)
     assert result is GateAction.CLEAR
-
-
-def test_unknown_gate_string_falls_back_to_wait():
-    """get_active_market_gate 返回未知字符串时,apply_active_mv_gate 降级为 WAIT(保守)。"""
-    from unittest.mock import patch
-
-    with patch("modules.active_market_value.get_active_market_gate", return_value="UNKNOWN"):
-        result = apply_active_mv_gate("20260821", enabled=True)
-    assert result is GateAction.WAIT
 
 
 def test_exception_during_gate_query_returns_wait():
@@ -91,6 +82,46 @@ def test_gate_action_enum_has_three_values():
     assert GateAction.OPEN.value == "OPEN"
     assert GateAction.WAIT.value == "WAIT"
     assert GateAction.CLEAR.value == "CLEAR"
+
+
+def test_gate_action_is_str_subclass():
+    """GateAction 继承 str：枚举本身就是字符串，旧的字符串比较与 isinstance 继续成立。"""
+    assert issubclass(GateAction, str)
+    assert isinstance(GateAction.OPEN, str)
+    assert GateAction.OPEN == "OPEN"
+    assert GateAction.OPEN in {"OPEN", "WAIT", "CLEAR"}
+
+
+def test_gate_action_str_format_is_plain_value():
+    """文本格式化必须输出 "OPEN" 而不是 "GateAction.OPEN"。
+
+    Enum.__str__ 在 MRO 里会赢过 str.__str__，不显式覆盖的话
+    `f"{GateAction.OPEN}"` 会打印 "GateAction.OPEN"，改掉 zt market timing 的输出。
+    """
+    assert str(GateAction.OPEN) == "OPEN"
+    assert f"{GateAction.OPEN}" == "OPEN"
+    assert f"{GateAction.CLEAR}" == "CLEAR"
+
+
+def test_get_active_market_gate_returns_enum():
+    """get_active_market_gate 直接返回 GateAction（表示层唯一化）。"""
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(
+            "\ufeffdate,open,high,low,close,volume,amount\n"
+            "2026-08-01,100,102,99,100,1000,100000\n"
+            "2026-08-02,100,102,98,98,1000,98000\n"
+            "2026-08-03,98,106,97,105,1200,126000\n"
+        )
+        csv_path = f.name
+    try:
+        result = get_active_market_gate("20260803", path=csv_path)
+        assert isinstance(result, GateAction)
+        assert result is GateAction.OPEN
+    finally:
+        Path(csv_path).unlink()
 
 
 def test_old_get_active_market_gate_still_returns_string_for_backward_compat():

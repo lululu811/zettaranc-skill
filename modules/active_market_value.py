@@ -18,7 +18,7 @@ import csv
 import logging
 import os
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -40,6 +40,48 @@ class ActiveMarketValuePoint:
     signal: str = "NEUTRAL"  # UP / DOWN / NEUTRAL
 
 
+class GateAction(StrEnum):
+    """活跃市值全局闸门动作（v4.3+ 统一闸门 API 返回值）。
+
+    - OPEN  - 允许开新仓
+    - WAIT  - 观望（不开新仓、不平仓）
+    - CLEAR - 强平（清仓所有/当前持仓）
+
+    刻意用 StrEnum：闸门动作只有这一种表示，枚举本身就是字符串，
+    既兼容既有调用方的字符串比较，也让"枚举 vs 字符串"不再是错误类别。
+    StrEnum 的 __str__ 直接给出 "OPEN"，f-string 不会打印 "GateAction.OPEN"。
+    """
+
+    OPEN = "OPEN"
+    WAIT = "WAIT"
+    CLEAR = "CLEAR"
+
+
+@dataclass(frozen=True)
+class SignalThresholds:
+    """活跃市值信号阈值：按【当日】涨跌幅判定多空。"""
+
+    up: float = 4.0
+    down: float = -2.3
+
+
+@dataclass(frozen=True)
+class GateThresholds:
+    """闸门阈值：按【两日累计】涨幅判定开仓 / 清仓。
+
+    与 :class:`SignalThresholds` 是两组不同语义的阈值——口径不同（当日 vs 两日累计），
+    用途不同（多空读数 vs 交易闸门）。数值相同纯属巧合，不可合并。
+    """
+
+    open: float = 4.0
+    clear: float = -2.3
+    open_lookback: int = 2
+
+
+SIGNAL_THRESHOLDS = SignalThresholds()
+GATE_THRESHOLDS = GateThresholds()
+
+
 def default_path() -> Path:
     """默认 CSV 路径。优先读 DATA_DIR 环境变量，缺省时回退到包内 data/ 目录。"""
     data_dir = os.getenv("DATA_DIR")
@@ -55,9 +97,9 @@ def _finalize_points(raw_rows: list[dict]) -> list[ActiveMarketValuePoint]:
     for row in raw_rows:
         close = float(row["close"])
         pct_chg = (close / prev_close - 1.0) * 100.0 if prev_close and prev_close > 0 else 0.0
-        if pct_chg >= 4.0:
+        if pct_chg >= SIGNAL_THRESHOLDS.up:
             signal = "UP"
-        elif pct_chg <= -2.3:
+        elif pct_chg <= SIGNAL_THRESHOLDS.down:
             signal = "DOWN"
         else:
             signal = "NEUTRAL"
@@ -251,8 +293,8 @@ def get_active_market_value(
 
 def get_active_market_signal(
     date: str | None = None,
-    up_threshold: float = 4.0,
-    down_threshold: float = -2.3,
+    up_threshold: float = SIGNAL_THRESHOLDS.up,
+    down_threshold: float = SIGNAL_THRESHOLDS.down,
     path: str | None = None,
     duckdb_path: str | None = None,
 ) -> str:
@@ -279,25 +321,27 @@ def _cum_pct(rows: list[ActiveMarketValuePoint], idx: int, lookback: int) -> flo
 
 def get_active_market_gate(
     date: str | None = None,
-    open_lookback: int = 2,
-    open_threshold: float = 4.0,
-    clear_threshold: float = -2.3,
+    open_lookback: int = GATE_THRESHOLDS.open_lookback,
+    open_threshold: float = GATE_THRESHOLDS.open,
+    clear_threshold: float = GATE_THRESHOLDS.clear,
     path: str | None = None,
     duckdb_path: str | None = None,
-) -> str:
+) -> GateAction:
     """活跃市值全局交易闸门。
 
     规则：
     - 累计涨幅（默认 2 日）> open_threshold（默认 +4%）→ OPEN，允许开仓
     - 当日跌幅 <= clear_threshold（默认 -2.3%） 或 累计跌幅 <= clear_threshold → CLEAR，清仓
     - 其他情况 → WAIT，不开新仓
+    - 无数据（两个数据源都空 / 日期不在索引里）→ WAIT（fail-closed）
 
     Returns:
-        OPEN / WAIT / CLEAR
+        GateAction 枚举（OPEN / WAIT / CLEAR）。枚举继承 str，历史调用方的
+        字符串比较与 isinstance 断言继续成立。
     """
     rows, index = _load_index_and_rows(path, duckdb_path)
     if not rows:
-        return "WAIT"
+        return GateAction.WAIT
 
     if date is None:
         idx = len(rows) - 1
@@ -306,19 +350,19 @@ def get_active_market_gate(
         # index 是 date→point 的 O(1) 字典，先验证存在；rows 本身 date-asc，
         # 用 bisect 把 target → idx 走 O(log n)，替代原来的 O(n) 线性扫描
         if target not in index:
-            return "WAIT"
+            return GateAction.WAIT
         idx = bisect.bisect_left([r.date for r in rows], target)
 
     point = rows[idx]
     cum = _cum_pct(rows, idx, open_lookback)
 
     if point.pct_chg <= clear_threshold:
-        return "CLEAR"
+        return GateAction.CLEAR
     if cum is not None and cum <= clear_threshold:
-        return "CLEAR"
+        return GateAction.CLEAR
     if cum is not None and cum > open_threshold:
-        return "OPEN"
-    return "WAIT"
+        return GateAction.OPEN
+    return GateAction.WAIT
 
 
 def format_active_market_value(point: ActiveMarketValuePoint) -> str:
@@ -333,19 +377,6 @@ def format_active_market_value(point: ActiveMarketValuePoint) -> str:
     )
 
 
-class GateAction(Enum):
-    """活跃市值全局闸门动作（v4.3+ 统一闸门 API 返回值）。
-
-    - OPEN  - 允许开新仓
-    - WAIT  - 观望（不开新仓、不平仓）
-    - CLEAR - 强平（清仓所有/当前持仓）
-    """
-
-    OPEN = "OPEN"
-    WAIT = "WAIT"
-    CLEAR = "CLEAR"
-
-
 def apply_active_mv_gate(
     date: str,
     *,
@@ -357,8 +388,8 @@ def apply_active_mv_gate(
 
     规则：
     - enabled=False：返回 OPEN（闸门关闭，不限制任何行为）
-    - enabled=True：调 get_active_market_gate 把字符串映射为 GateAction 枚举
-      - 任何映射失败/异常：返回 WAIT（保守：不开新仓、不强平），不抛异常阻断回测
+    - enabled=True：调 get_active_market_gate
+      - 加载异常：返回 WAIT（保守：不开新仓、不强平），不抛异常阻断回测
 
     Args:
         date: YYYYMMDD 或 YYYY-MM-DD 格式交易日
@@ -378,15 +409,10 @@ def apply_active_mv_gate(
     if not enabled:
         return GateAction.OPEN
     try:
-        gate_str = get_active_market_gate(date, duckdb_path=duckdb_path, path=path)
+        return get_active_market_gate(date, duckdb_path=duckdb_path, path=path)
     except Exception:  # noqa: BLE001
         # 闸门查询失败时保守返回 WAIT,不让异常阻断回测主流程
         return GateAction.WAIT
-    return {
-        "OPEN": GateAction.OPEN,
-        "WAIT": GateAction.WAIT,
-        "CLEAR": GateAction.CLEAR,
-    }.get(gate_str, GateAction.WAIT)
 
 
 def import_0amv_csv_to_duckdb(csv_path: str, duckdb_path: str) -> int:

@@ -10,7 +10,7 @@ status: accepted
 
 ## 决策
 
-1. **表示层唯一化**：`GateAction` 改为 `class GateAction(str, Enum)`，作为闸门动作的唯一表示；`get_active_market_gate` 也返回它。枚举本身就是 str，旧调用方的字符串比较与 `isinstance` 断言继续成立，而"枚举与字符串比较"从此不再是错误类别。附带 `__str__ = str.__str__`，保证文本格式化输出 `"OPEN"` 而非 `"GateAction.OPEN"`。
+1. **表示层唯一化**：`GateAction` 改为 `enum.StrEnum`，作为闸门动作的唯一表示；`get_active_market_gate` 也返回它。枚举本身就是 str，旧调用方的字符串比较与 `isinstance` 断言继续成立，而"枚举与字符串比较"从此不再是错误类别。`StrEnum` 的 `__str__` 直接给出 `"OPEN"`，文本格式化不会打印 `"GateAction.OPEN"`。
 
 2. **失败策略 fail-closed**：闸门关闭 → OPEN（不拦）；**无数据** → WAIT（拦）；**加载异常** → WAIT（拦）。无数据与加载失败在实现中显式区分。
 
