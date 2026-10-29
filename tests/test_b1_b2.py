@@ -192,3 +192,63 @@ def test_walkforward_happy_path_single_stock():
     # 必须有 folds 列表
     assert "folds" in result
     assert isinstance(result["folds"], list)
+
+
+# ---- CRITICAL regression：活跃市值闸门的开仓判定 ----
+# 2026-08-23 的统一重构 3e882b9 把 _gate 的返回类型从 str 改成 GateAction，
+# 迁移了 `== "CLEAR"` 却漏掉 `!= "OPEN"`。GateAction 是普通 Enum（不是 str, Enum），
+# `GateAction.OPEN != "OPEN"` 恒为 True，导致 B1/B2 的开仓判断永远为真跳过，
+# 自 v4.3.0 发布起 zt backtest b1_b2 恒返回 0 笔成交。
+# 下面的测试锁死"闸门动作 → 是否开仓"的真实行为，而不是源码文本形状。
+
+
+def test_gate_open_allows_entry():
+    """闸门 OPEN → B2 信号应当真的开仓。"""
+    klines = _make_b2_klines()
+    with patch("modules.active_market_value.apply_active_mv_gate", return_value=GateAction.OPEN):
+        trades = _run_stock_klines(klines, B1B2Config(), _default_loop_config())
+    assert len(trades) == 1, f"闸门 OPEN 时应有一笔成交，实际 {len(trades)} 笔"
+    # B2 在 index=30，次一交易日(index=31)开盘买入
+    assert trades[0].entry_date == klines[31].trade_date
+
+
+def test_gate_wait_blocks_entry():
+    """闸门 WAIT → 不允许开新仓。"""
+    klines = _make_b2_klines()
+    with patch("modules.active_market_value.apply_active_mv_gate", return_value=GateAction.WAIT):
+        trades = _run_stock_klines(klines, B1B2Config(), _default_loop_config())
+    assert trades == []
+
+
+def test_gate_clear_blocks_entry():
+    """闸门 CLEAR → 不允许开新仓（无持仓可强平时为空）。"""
+    klines = _make_b2_klines()
+    with patch("modules.active_market_value.apply_active_mv_gate", return_value=GateAction.CLEAR):
+        trades = _run_stock_klines(klines, B1B2Config(), _default_loop_config())
+    assert trades == []
+
+
+def test_gate_clear_forces_position_exit():
+    """持仓后闸门转 CLEAR → 强制平仓。"""
+    klines = _make_b2_klines()
+    entry_date = klines[31].trade_date
+
+    def gate_by_date(date, **_kwargs):
+        # 开仓日放行，之后转 CLEAR 触发强平
+        return GateAction.CLEAR if date > entry_date else GateAction.OPEN
+
+    with patch("modules.active_market_value.apply_active_mv_gate", side_effect=gate_by_date):
+        trades = _run_stock_klines(klines, B1B2Config(), _default_loop_config())
+    assert len(trades) == 1, f"应有一笔被强平的成交，实际 {len(trades)} 笔"
+    assert trades[0].exit_reason == "活跃市值清仓"
+
+
+def test_gate_disabled_allows_entry():
+    """闸门关闭（enabled=False，默认）→ 等价于 OPEN，不应阻断开仓。
+
+    闸门默认在所有入口都是关闭的，修复前即使闸门关闭也会因比较方式错误而跳过全部开仓。
+    """
+    klines = _make_b2_klines()
+    # enabled=False 时 apply_active_mv_gate 直接返回 OPEN，不查数据
+    trades = _run_stock_klines(klines, B1B2Config(), _default_loop_config())
+    assert len(trades) == 1, f"闸门关闭时应正常开仓，实际 {len(trades)} 笔"

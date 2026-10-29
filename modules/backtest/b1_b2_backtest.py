@@ -16,6 +16,7 @@ import statistics
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from ..active_market_value import GateAction
 from ..indicators import DailyData, get_kline_data
 from ..loop_engine import LoopConfig, LoopTrade, ShaofuLoopEngine, _calc_stop_loss_price
 from ..backtest_six_step import ShaofuBacktestResult, _calc_metrics
@@ -133,7 +134,8 @@ def _run_stock_klines(
                     continue
 
                 # 活跃市值闸门：非 OPEN 不允许开仓
-                if _gate(entry_k.trade_date) != "OPEN":
+                # 必须与枚举比较（GateAction.OPEN != "OPEN" 恒为 True，会把所有开仓全部跳过）
+                if _gate(entry_k.trade_date) is not GateAction.OPEN:
                     i += 1
                     continue
 

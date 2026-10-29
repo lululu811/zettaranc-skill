@@ -2,6 +2,20 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## v4.3.2 (2026-10-29) — B1/B2 回测恒 0 成交修复
+
+### 修复（真实 bug）
+
+- **B1/B2 回测自 v4.3.0 起恒定返回 0 笔成交。** `modules/backtest/b1_b2_backtest.py:136` 把活跃市值闸门的判定结果与裸字符串比较（`!= "OPEN"`），但 2026-08-23 的统一重构 `3e882b9`（目的正是"消除 0AMV gate 策略重复"）已把 `_gate` 的返回类型从 `str` 改成普通 `Enum` `GateAction`——枚举与字符串比较恒为 True，开仓判断因此永远为真跳过。同一重构迁移了 `== "CLEAR"` 却漏掉了 `!= "OPEN"`。现改为枚举比较（`is not GateAction.OPEN`），与 `modules/backtest/portfolio.py` 的判法一致。
+  - 影响面：仅 `zt backtest b1_b2` 及其导出的 `run_b1_b2_single` / `run_b1_b2_pool` / `run_b1_b2_walkforward`。`zt verify` 走 `backtest_shaofu_single`，不经过 B1/B2，验收数字不受影响。
+  - 闸门默认在所有入口都是关闭的，因此修复后 B1/B2 的行为等价于 v4.2 语义。
+- 新增 5 个闸门行为回归测试（`tests/test_b1_b2.py`）：闸门 OPEN 允许开仓 / WAIT 与 CLEAR 禁止开仓 / CLEAR 强制平仓 / 闸门关闭不阻断开仓。此前该处只有断言源码文本形状的测试——它们在 bug 存在时同样是绿的。
+
+### 文档
+
+- `AGENTS.md` 追加 `## Agent skills` 段；新增 `docs/agents/`（issue tracker / triage 标签 / 领域文档约定）。
+- 新增 `CONTEXT.md` 领域词汇表与 `docs/adr/0001-gate-action-representation-and-failure-policy.md`。
+
 ## v4.3.1 (2026-09-30) — 仓库瘦身 + 文档准确性 + CI 全绿
 
 ### 修复（真实 bug）
