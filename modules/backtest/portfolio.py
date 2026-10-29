@@ -302,7 +302,7 @@ class PortfolioBacktestEngine:
             # 活跃市值全局闸门：CLEAR 强制清仓，非 OPEN 禁止新开仓
             active_mv_allow_new = True
             if config.active_mv_enabled:
-                from modules.active_market_value import GateAction
+                from modules.active_market_gate import GateAction
 
                 active_mv_gate = self._active_mv_gate(date)
                 if active_mv_gate is GateAction.CLEAR:
@@ -562,7 +562,7 @@ class PortfolioBacktestEngine:
 
         返回 GateAction 枚举；调用方按 .value 与字符串比较，或直接 == GateAction.CLEAR。
         """
-        from modules.active_market_value import apply_active_mv_gate
+        from modules.active_market_gate import apply_active_mv_gate
 
         return apply_active_mv_gate(
             date,

@@ -28,7 +28,8 @@ from .indicators import DailyData, calculate_ma
 from .market_regime import MarketRegimeClassifier
 from .database import get_connection
 from .dynamic_config import MarketTimingWeights
-from .active_market_value import GateAction, get_active_market_gate, get_active_market_value
+from .active_market_gate import GateAction, get_active_market_gate
+from .active_market_value import get_active_market_value
 
 # 常见指数代码，计算市场广度时排除（与 modules.index_sync.DEFAULT_INDEX_CODES 保持一致）
 # 任何新增/删除默认指数时，这里必须同步更新；否则会把指数行当作"个股"纳入涨跌/成交统计。

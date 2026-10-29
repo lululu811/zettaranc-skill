@@ -110,7 +110,7 @@ def test_run_stock_klines_smoke():
 def test_date_window_start_only_no_typeerror():
     """只设 start_date、end_date=None 时不应抛 TypeError。"""
     klines = _make_b2_klines()
-    with patch("modules.active_market_value.apply_active_mv_gate", return_value=GateAction.OPEN):
+    with patch("modules.active_market_gate.apply_active_mv_gate", return_value=GateAction.OPEN):
         trades = _run_stock_klines(
             klines,
             B1B2Config(),
@@ -124,7 +124,7 @@ def test_date_window_start_only_no_typeerror():
 def test_date_window_end_only_no_typeerror():
     """只设 end_date、start_date=None 时不应抛 TypeError。"""
     klines = _make_b2_klines()
-    with patch("modules.active_market_value.apply_active_mv_gate", return_value=GateAction.OPEN):
+    with patch("modules.active_market_gate.apply_active_mv_gate", return_value=GateAction.OPEN):
         trades = _run_stock_klines(
             klines,
             B1B2Config(),
@@ -138,7 +138,7 @@ def test_date_window_end_only_no_typeerror():
 def test_date_window_both_none_no_typeerror():
     """start/end 都为 None(默认)不崩。"""
     klines = _make_b2_klines()
-    with patch("modules.active_market_value.apply_active_mv_gate", return_value=GateAction.OPEN):
+    with patch("modules.active_market_gate.apply_active_mv_gate", return_value=GateAction.OPEN):
         trades = _run_stock_klines(
             klines,
             B1B2Config(),
@@ -152,7 +152,7 @@ def test_date_window_both_none_no_typeerror():
 def test_date_window_start_after_b2_excludes_entry():
     """start_date 设到 B2 之后 → 该 B2 不应被开仓(返回 trades 为空)。"""
     klines = _make_b2_klines()
-    with patch("modules.active_market_value.apply_active_mv_gate", return_value=GateAction.OPEN):
+    with patch("modules.active_market_gate.apply_active_mv_gate", return_value=GateAction.OPEN):
         # B2 在 index=30 → 20260131;start 设到 20260201(之后),该 B2 被窗口过滤掉
         trades = _run_stock_klines(
             klines,
@@ -205,7 +205,7 @@ def test_walkforward_happy_path_single_stock():
 def test_gate_open_allows_entry():
     """闸门 OPEN → B2 信号应当真的开仓。"""
     klines = _make_b2_klines()
-    with patch("modules.active_market_value.apply_active_mv_gate", return_value=GateAction.OPEN):
+    with patch("modules.active_market_gate.apply_active_mv_gate", return_value=GateAction.OPEN):
         trades = _run_stock_klines(klines, B1B2Config(), _default_loop_config())
     assert len(trades) == 1, f"闸门 OPEN 时应有一笔成交，实际 {len(trades)} 笔"
     # B2 在 index=30，次一交易日(index=31)开盘买入
@@ -215,7 +215,7 @@ def test_gate_open_allows_entry():
 def test_gate_wait_blocks_entry():
     """闸门 WAIT → 不允许开新仓。"""
     klines = _make_b2_klines()
-    with patch("modules.active_market_value.apply_active_mv_gate", return_value=GateAction.WAIT):
+    with patch("modules.active_market_gate.apply_active_mv_gate", return_value=GateAction.WAIT):
         trades = _run_stock_klines(klines, B1B2Config(), _default_loop_config())
     assert trades == []
 
@@ -223,7 +223,7 @@ def test_gate_wait_blocks_entry():
 def test_gate_clear_blocks_entry():
     """闸门 CLEAR → 不允许开新仓（无持仓可强平时为空）。"""
     klines = _make_b2_klines()
-    with patch("modules.active_market_value.apply_active_mv_gate", return_value=GateAction.CLEAR):
+    with patch("modules.active_market_gate.apply_active_mv_gate", return_value=GateAction.CLEAR):
         trades = _run_stock_klines(klines, B1B2Config(), _default_loop_config())
     assert trades == []
 
@@ -237,7 +237,7 @@ def test_gate_clear_forces_position_exit():
         # 开仓日放行，之后转 CLEAR 触发强平
         return GateAction.CLEAR if date > entry_date else GateAction.OPEN
 
-    with patch("modules.active_market_value.apply_active_mv_gate", side_effect=gate_by_date):
+    with patch("modules.active_market_gate.apply_active_mv_gate", side_effect=gate_by_date):
         trades = _run_stock_klines(klines, B1B2Config(), _default_loop_config())
     assert len(trades) == 1, f"应有一笔被强平的成交，实际 {len(trades)} 笔"
     assert trades[0].exit_reason == "活跃市值清仓"

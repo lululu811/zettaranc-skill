@@ -16,7 +16,7 @@ import statistics
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from ..active_market_value import GateAction
+from ..active_market_gate import GateAction
 from ..indicators import DailyData, get_kline_data
 from ..loop_engine import LoopConfig, LoopTrade, ShaofuLoopEngine, _calc_stop_loss_price
 from ..backtest_six_step import ShaofuBacktestResult, _calc_metrics
@@ -83,7 +83,7 @@ def _run_stock_klines(
 
     def _gate(date: str):
         """活跃市值闸门判定(v4.3+ 统一走 apply_active_mv_gate)。"""
-        from modules.active_market_value import apply_active_mv_gate
+        from modules.active_market_gate import apply_active_mv_gate
 
         return apply_active_mv_gate(
             date,

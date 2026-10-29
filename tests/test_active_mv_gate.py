@@ -2,7 +2,7 @@
 
 - enabled=False 时永远返回 OPEN(零成本短路)
 - 任何异常降级为 WAIT(保守:不开新仓,不平仓),不阻断回测
-- 字符串 -> GateAction 映射(OPEN/WAIT/CLEAR)
+- 闸门动作只有一种表示：GateAction
 - 单股回测和组合回测都用同一个 gate 入口
 """
 
@@ -10,9 +10,11 @@ from pathlib import Path
 
 import pytest
 
-from modules.active_market_value import (
+from modules.active_market_gate import (
     GateAction,
+    GateConfig,
     apply_active_mv_gate,
+    evaluate,
     get_active_market_gate,
 )
 
@@ -29,9 +31,8 @@ def test_disabled_returns_open_regardless_of_data():
     assert result is GateAction.OPEN
 
 
-def test_string_to_gate_action_mapping(tmp_path):
-    """get_active_market_gate 返回字符串时,apply_active_mv_gate 应正确映射为枚举。"""
-    # 准备一个 CSV 触发不同 gate
+def test_apply_active_mv_gate_agrees_with_evaluate(tmp_path):
+    """兼容入口 apply_active_mv_gate 与新 interface evaluate 结论一致。"""
     csv_path = tmp_path / "0amv.csv"
     csv_path.write_text(
         "\ufeffdate,open,high,low,close,volume,amount\n"
@@ -44,34 +45,17 @@ def test_string_to_gate_action_mapping(tmp_path):
     # 2026-08-03 累计涨幅 > +4% -> OPEN
     result = apply_active_mv_gate("20260803", enabled=True, path=str(csv_path))
     assert result is GateAction.OPEN, f"应为 OPEN,实际 {result}"
-
-
-def test_get_active_market_gate_returns_waits_maps_to_wait():
-    """get_active_market_gate 返回 WAIT 时,apply_active_mv_gate 返回 GateAction.WAIT。"""
-    from unittest.mock import patch
-
-    with patch("modules.active_market_value.get_active_market_gate", return_value=GateAction.WAIT):
-        result = apply_active_mv_gate("20260821", enabled=True)
-    assert result is GateAction.WAIT
-
-
-def test_get_active_market_gate_returns_clear_maps_to_clear():
-    """get_active_market_gate 返回 CLEAR 时,apply_active_mv_gate 返回 GateAction.CLEAR。"""
-    from unittest.mock import patch
-
-    with patch("modules.active_market_value.get_active_market_gate", return_value=GateAction.CLEAR):
-        result = apply_active_mv_gate("20260821", enabled=True)
-    assert result is GateAction.CLEAR
+    assert result is evaluate("20260803", GateConfig(enabled=True, path=str(csv_path)))
 
 
 def test_exception_during_gate_query_returns_wait():
-    """get_active_market_gate 抛异常时,apply_active_mv_gate 不抛异常,降级为 WAIT。"""
+    """数据加载抛异常时,闸门不抛异常,降级为 WAIT（fail-closed）。"""
     from unittest.mock import patch
 
     def boom(*args, **kwargs):
         raise RuntimeError("simulated DB failure")
 
-    with patch("modules.active_market_value.get_active_market_gate", side_effect=boom):
+    with patch("modules.active_market_gate._load_index_and_rows", side_effect=boom):
         result = apply_active_mv_gate("20260821", enabled=True)
     assert result is GateAction.WAIT
 
