@@ -11,6 +11,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from ..active_market_gate import GateAction, TradingGate
 from ..core.metrics import TRADING_DAYS_PER_YEAR, compute_drawdown, compute_sharpe, daily_returns
 from ..core.market_context import MarketRegime
 from ..indicators import DailyData, get_kline_data
@@ -96,10 +97,9 @@ class PortfolioConfig:
     enabled_strategies: list[str] = field(default_factory=lambda: ["B1"])
     strategy_weights: dict[str, float] = field(default_factory=lambda: {"B1": 1.0, "B2": 0.8, "SB1": 1.2, "长安": 0.9})
     min_composite_score: float = 0.3
-    # 活跃市值（0AMV）全局闸门：OPEN 才允许开仓，CLEAR 强制清仓
-    active_mv_enabled: bool = False
-    active_mv_duckdb_path: str | None = None
-    active_mv_path: str | None = None
+    # 活跃市值（0AMV）全局闸门 port：OPEN 才允许开仓，CLEAR 强制清仓。
+    # None 表示闸门不存在（等价关闭）。由调用方注入，engine 不自己造。
+    gate: TradingGate | None = None
     # v3.10.0：按市场环境分组的策略权重（键: STRONG / NEUTRAL / WEAK）
     # 若某环境未配置则退回 strategy_weights
     regime_strategy_weights: dict[str, dict[str, float]] = field(
@@ -301,10 +301,8 @@ class PortfolioBacktestEngine:
 
             # 活跃市值全局闸门：CLEAR 强制清仓，非 OPEN 禁止新开仓
             active_mv_allow_new = True
-            if config.active_mv_enabled:
-                from modules.active_market_gate import GateAction
-
-                active_mv_gate = self._active_mv_gate(date)
+            if config.gate is not None:
+                active_mv_gate = config.gate.evaluate(date)
                 if active_mv_gate is GateAction.CLEAR:
                     cash = self._force_close_all_active_mv(
                         date=date,
@@ -556,20 +554,6 @@ class PortfolioBacktestEngine:
         if len(signals) > 1:
             base_score += 0.1 * (len(signals) - 1)
         return base_score
-
-    def _active_mv_gate(self, date: str):
-        """获取活跃市值全局闸门（v4.3+ 统一走 apply_active_mv_gate）。
-
-        返回 GateAction 枚举；调用方按 .value 与字符串比较，或直接 == GateAction.CLEAR。
-        """
-        from modules.active_market_gate import apply_active_mv_gate
-
-        return apply_active_mv_gate(
-            date,
-            enabled=self.portfolio_config.active_mv_enabled,
-            duckdb_path=self.portfolio_config.active_mv_duckdb_path,
-            path=self.portfolio_config.active_mv_path,
-        )
 
     def _force_close_all_active_mv(
         self,

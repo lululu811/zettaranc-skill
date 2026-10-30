@@ -6,6 +6,7 @@ import logging
 from dataclasses import asdict
 from typing import Any
 
+from ..active_market_gate import GateConfig, TradingGate
 from ._helpers import error, json_output, warn
 from .simulate import cmd_simulate
 
@@ -285,9 +286,14 @@ def cmd_backtest(args) -> None:
             min_holding_days=getattr(args, "min_hold", 2),
             position_pct=1.0,
         )
-        active_mv_enabled = getattr(args, "active_mv_gate", False)
-        active_mv_duckdb = getattr(args, "active_mv_duckdb", None)
-        active_mv_path = getattr(args, "active_mv_path", None)
+        # 闸门在此处构造一次，之后注入给 engine——engine 不自己造闸门
+        gate = TradingGate(
+            GateConfig(
+                enabled=getattr(args, "active_mv_gate", False),
+                duckdb_path=getattr(args, "active_mv_duckdb", None),
+                path=getattr(args, "active_mv_path", None),
+            )
+        )
 
         if getattr(args, "walk_forward", False):
             wf = run_b1_b2_walkforward(
@@ -297,9 +303,7 @@ def cmd_backtest(args) -> None:
                 window=getattr(args, "window", 120),
                 config=cfg,
                 loop_config=lc_cfg,
-                active_mv_enabled=active_mv_enabled,
-                active_mv_duckdb_path=active_mv_duckdb,
-                active_mv_path=active_mv_path,
+                gate=gate,
             )
             if use_json:
                 json_output(wf)
@@ -322,9 +326,7 @@ def cmd_backtest(args) -> None:
                 days=days,
                 config=cfg,
                 loop_config=lc_cfg,
-                active_mv_enabled=active_mv_enabled,
-                active_mv_duckdb_path=active_mv_duckdb,
-                active_mv_path=active_mv_path,
+                gate=gate,
             )
             if use_json:
                 json_output(
@@ -367,9 +369,7 @@ def cmd_backtest(args) -> None:
                 days=days,
                 config=cfg,
                 loop_config=lc_cfg,
-                active_mv_enabled=active_mv_enabled,
-                active_mv_duckdb_path=active_mv_duckdb,
-                active_mv_path=active_mv_path,
+                gate=gate,
             )
             if use_json:
                 json_output(_b1_b2_pool_to_dict(pool))

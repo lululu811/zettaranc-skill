@@ -401,3 +401,98 @@ class TestPortfolioEngineDateWindow:
         # 3 天总收益 21%，年化 = 1.21^(250/3) - 1
         expected_annual = (1.0 + 0.21) ** (252.0 / 3.0) - 1.0
         assert result.annualized_return == pytest.approx(expected_annual, rel=1e-6)
+
+
+class _FakeGate:
+    """假闸门 adapter —— 注入给 engine，替代真实闸门实现。
+
+    "注入而非现场创建"换来的好处：测试直接给 engine 一个满足闸门 interface
+    的替身，而不是 patch module 属性。
+    """
+
+    def __init__(self, action):
+        self.action = action
+        self.calls: list[str] = []
+
+    def evaluate(self, date: str):
+        self.calls.append(date)
+        return self.action
+
+
+class TestPortfolioInjectedGate:
+    """engine 依赖注入的闸门 port，而不是自己造闸门。"""
+
+    @staticmethod
+    def _engine_with_b1_signal(monkeypatch, gate):
+        from modules.backtest.portfolio import EntrySignal
+
+        engine = PortfolioBacktestEngine(
+            portfolio_config=PortfolioConfig(
+                initial_capital=1_000_000.0,
+                max_positions=1,
+                position_pct=1.0,
+                commission_rate=0.0,
+                min_commission=0.0,
+                min_signal_days=1,
+                gate=gate,
+            ),
+            loop_config=LoopConfig(position_pct=1.0),
+        )
+        klines = _make_klines("600519.SH", ["20260101", "20260102", "20260103"], [100.0, 101.0, 102.0])
+        monkeypatch.setattr(engine, "_load_klines", lambda *a, **k: {"600519.SH": klines})
+
+        def mock_check_multi_entry(klines_arg, idx, enabled):
+            if idx >= 1 and klines_arg[idx].trade_date == "20260102":
+                return [EntrySignal(strategy="B1", confidence=0.9, reason="J=-15", stop_loss_price=97.0)]
+            return []
+
+        monkeypatch.setattr(engine, "_check_multi_entry", mock_check_multi_entry)
+        monkeypatch.setattr(
+            engine.loop_engine,
+            "process_day",
+            lambda *a, **k: (k.get("current_trade"), None),
+        )
+        return engine
+
+    def test_gate_is_queried_each_day(self, monkeypatch):
+        """engine 每个交易日都会问一次闸门。"""
+        from modules.active_market_gate import GateAction
+
+        gate = _FakeGate(GateAction.OPEN)
+        engine = self._engine_with_b1_signal(monkeypatch, gate)
+        engine.run(["600519.SH"], days=3)
+        assert len(gate.calls) == 3
+
+    def test_gate_open_allows_new_entries(self, monkeypatch):
+        """闸门 OPEN → 允许开新仓。"""
+        from modules.active_market_gate import GateAction
+
+        gate = _FakeGate(GateAction.OPEN)
+        engine = self._engine_with_b1_signal(monkeypatch, gate)
+        result = engine.run(["600519.SH"], days=3)
+        # 第二天买入，第三天收盘价 102 → 净值高于初始资金
+        assert result.net_values[2] > 1_000_000.0
+
+    def test_gate_wait_blocks_new_entries(self, monkeypatch):
+        """闸门 WAIT → 不允许开新仓，净值不变。"""
+        from modules.active_market_gate import GateAction
+
+        gate = _FakeGate(GateAction.WAIT)
+        engine = self._engine_with_b1_signal(monkeypatch, gate)
+        result = engine.run(["600519.SH"], days=3)
+        assert result.net_values[-1] == pytest.approx(1_000_000.0, rel=1e-6)
+
+    def test_gate_clear_blocks_new_entries(self, monkeypatch):
+        """闸门 CLEAR → 不允许开新仓。"""
+        from modules.active_market_gate import GateAction
+
+        gate = _FakeGate(GateAction.CLEAR)
+        engine = self._engine_with_b1_signal(monkeypatch, gate)
+        result = engine.run(["600519.SH"], days=3)
+        assert result.net_values[-1] == pytest.approx(1_000_000.0, rel=1e-6)
+
+    def test_no_gate_means_unrestricted(self, monkeypatch):
+        """不注入闸门 → 闸门不存在，不限制任何行为。"""
+        engine = self._engine_with_b1_signal(monkeypatch, None)
+        result = engine.run(["600519.SH"], days=3)
+        assert result.net_values[2] > 1_000_000.0

@@ -116,33 +116,40 @@ def _decide(
     return GateAction.WAIT
 
 
-def evaluate(date: str | None = None, config: GateConfig | None = None) -> GateAction:
-    """闸门判定 —— 本 module 的唯一 interface。
+class TradingGate:
+    """闸门 port —— 回测 engine 依赖的是这个 interface，不是闸门实现本身。
 
-    规则：
-    - 闸门关闭（enabled=False）→ OPEN（不限制任何行为）
-    - 两日累计涨幅 > open 阈值（默认 +4%）→ OPEN，允许开仓
-    - 当日跌幅 <= clear 阈值（默认 -2.3%）或累计跌幅 <= clear 阈值 → CLEAR，清仓
-    - 其余 → WAIT，不开新仓
-    - 无数据（两个数据源都空 / 日期不在索引里）→ WAIT
-    - 加载异常 → WAIT（fail-closed：闸门存在却读不到数据时放行开仓等于伪造信号）
+    engine 在构造时接收一个 TradingGate（或任何提供 ``evaluate(date)`` 的对象），
+    循环内只查询动作；测试可以注入假闸门替身。这是"接受依赖，不要创建"——
+    engine 不再在循环里现场 import 闸门实现。
 
-    Args:
-        date: YYYYMMDD 或 YYYY-MM-DD 格式交易日；None 表示最新一日。
-        config: 闸门配置；None 等价于 GateConfig()。
-
-    Returns:
-        GateAction（OPEN / WAIT / CLEAR）。
+    config 为 None 等价于 ``GateConfig(enabled=True)``：闸门开启但没有数据源时
+    判定为 WAIT（fail-closed）。
     """
-    cfg = config or GateConfig()
-    if not cfg.enabled:
-        return GateAction.OPEN
-    try:
-        return _decide(date, GATE_THRESHOLDS, cfg.path, cfg.duckdb_path)
-    except Exception:  # noqa: BLE001
-        # 闸门查询失败时保守返回 WAIT，不让异常阻断回测主流程
-        logger.warning("[active_mv_gate] 闸门查询失败，降级为 WAIT", exc_info=True)
-        return GateAction.WAIT
+
+    def __init__(self, config: GateConfig | None = None) -> None:
+        self.config = config or GateConfig()
+
+    def evaluate(self, date: str | None = None) -> GateAction:
+        """闸门判定。
+
+        - 闸门关闭 → OPEN（不限制任何行为）
+        - 无数据 / 加载异常 → WAIT（fail-closed）
+        """
+        cfg = self.config
+        if not cfg.enabled:
+            return GateAction.OPEN
+        try:
+            return _decide(date, GATE_THRESHOLDS, cfg.path, cfg.duckdb_path)
+        except Exception:  # noqa: BLE001
+            # 闸门查询失败时保守返回 WAIT，不让异常阻断回测主流程
+            logger.warning("[active_mv_gate] 闸门查询失败，降级为 WAIT", exc_info=True)
+            return GateAction.WAIT
+
+
+def evaluate(date: str | None = None, config: GateConfig | None = None) -> GateAction:
+    """闸门判定（一次性调用）。等价于 ``TradingGate(config).evaluate(date)``。"""
+    return TradingGate(config).evaluate(date)
 
 
 # ---- 兼容层：v4.3 之前的公开 API 路径 ----

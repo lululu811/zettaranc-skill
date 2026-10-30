@@ -132,26 +132,3 @@ def test_old_get_active_market_gate_still_returns_string_for_backward_compat():
         assert result in {"OPEN", "WAIT", "CLEAR"}
     finally:
         Path(csv_path).unlink()
-
-
-def test_b1b2_backtest_uses_unified_gate():
-    """b1_b2_backtest 必须用 apply_active_mv_gate(不是再调 get_active_market_gate 自己拼字符串)。"""
-    from modules.backtest import b1_b2_backtest as b2b
-    import inspect
-
-    src = inspect.getsource(b2b)
-    # 不应再有直接的 get_active_market_gate 字符串比较("CLEAR")
-    assert "get_active_market_gate(" not in src or "apply_active_mv_gate(" in src, (
-        "b1_b2_backtest 必须统一走 apply_active_mv_gate"
-    )
-
-
-def test_portfolio_uses_unified_gate_with_gateaction_enum():
-    """portfolio.py 必须用 GateAction 枚举(不是字符串 "CLEAR")。"""
-    from modules.backtest import portfolio as pf
-    import inspect
-
-    src = inspect.getsource(pf)
-    assert "GateAction" in src, "portfolio.py 必须 import 并使用 GateAction 枚举"
-    # 不应再用字符串 "CLEAR" 直接比较
-    assert '== "CLEAR"' not in src, 'portfolio.py 不应再用字符串 == "CLEAR" 直接比较'
