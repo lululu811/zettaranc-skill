@@ -2,6 +2,30 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## v4.4.1 (2026-10-30) — 输出正确性修复
+
+### 修复（真实 bug）
+
+- **同一笔 +10% 的交易，在 API 里被报成 1000%。** 本仓库有三种交易载体，`pnl_pct` 的单位并不相同：`loop_engine.LoopTrade` 是**百分数**（10.0 = +10%），`backtest.single.Trade` 与 `simulator.TradeRecord` 是**分数**（0.1 = +10%）。四个序列化器各按不同假设换算：
+  - `api/services/backtest_service.py::_shaofu_to_response`（LoopTrade）却又乘了 100 → `pnl_pct` / `avg_pnl` / `max_win` / `max_loss` 全部大 100 倍。
+  - `api/services/backtest_service.py::_build_equity_curve_from_trades` 复利用 `capital *= (1 + pnl)` 而 `pnl` 是百分数 → **资金曲线大 10 倍**（100000 经一笔 +10% 变成 1100000 而不是 110000）。
+  - `modules/cli_commands/backtest.py::_portfolio_result_to_dict`（single.Trade）却没乘 100 → `pnl_pct` 小 100 倍。**CLI 与 API 对同一份组合结果给出的是两个不同的数**。
+  - `modules/backtest_six_step.py::summary_text` 与 `modules/backtest/single.py::summary` 把已经是百分数的值再用 `:.2%`（会再乘 100）→ 报告里显示 `+1000.00%`。
+  - 修复后各序列化器与报告口径一致：+10% 一律报 `10.0` / `+10.00%`。`api/services/simulator_service.py` 的 `×100` 本就正确（TradeRecord 是分数），保留不动并补注释，避免将来被"顺手修错"。
+- **`zt verify v1.0 --output` 被静默丢弃。** 顶层 CLI 曾把解析好的参数重新拼成 argv 交给第二个 argparse，`--output` 因此丢失——报告仍写到 `data/reports` 而不是用户指定的目录。现两边都直接调 `modules/verify/cli.py` 新增的 `run_verify_v10_command`，参数校验、报告输出目录、退出码只定义一处。
+- **命令失败时进程仍退 0。** `modules/cli.py` 的分发处丢弃了 handler 的返回值，于是 `cmd_verify_v10` 的"参数错误 → 2"与 `cmd_self_optimize` 的"未知 action → 1"全部丢失——CI 里最典型的一类假绿。现接住返回值，非 0 才 `sys.exit`；成功路径不抛 `SystemExit`，`main()` 仍可被程序内调用。
+
+### 重构
+
+- `modules/verify/cli.py`：新增 `run_verify_v10_command` 作为 `zt verify` 的唯一执行入口（参数校验 → 执行 → 输出 → 退出码）。参数默认值收敛到 `DEFAULT_*` 常量，取值范围收敛到 `*_RANGE` 常量（此前 `_bounded_int` 与 `_validate_args` 各写一遍同样的 `[10, 500]`）。
+- `modules/cli_commands/backtest.py`：`cmd_verify_v10` 不再构造 argv；`add_verify_v10_parser` 的默认值改为引用 `DEFAULT_*`。
+
+### 测试
+
+- 新增 `tests/test_output_units.py`（12 项）：把三个交易载体的 `pnl_pct` 单位约定钉死，其中一条断言"CLI 与 API 对同一份组合结果必须给出相同的 `pnl_pct`"。已验证这批测试在修复前有 8 项失败。
+- `tests/test_verify_cli.py` 新增 4 项：`--output` 指定的目录里确实出现报告、参数非法返回 2、argparse 适配层同样返回 2、合法参数返回 0。
+- `tests/test_errors.py` 新增 2 项：handler 返回 2 → `SystemExit(2)`；handler 返回 `None` → 不抛 `SystemExit`。已验证退出码测试在修复前失败。
+
 ## v4.4.0 (2026-10-30) — 活跃市值闸门判定归一（ADR-0001）
 
 活跃市值闸门（0AMV gate）的判定结果此前有三种表示（裸字符串 / 普通 `Enum` / 语义不同的 `signal`），阈值散落三处，调用方还要知道开关与两个数据源路径——判定语义跨 seam 泄漏。2026-08-23 的统一重构 `3e882b9` 正是因此把 B1/B2 的开仓判断改坏（详见 v4.3.2）。本次把闸门彻底收口。
