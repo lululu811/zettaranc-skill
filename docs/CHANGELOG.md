@@ -2,6 +2,24 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## v4.6.0 (2026-10-30) — BacktestRunner 设计 ADR 与分阶段实施计划
+
+### 新增
+
+- **`docs/adr/0002-backtest-runner-unification.md`** — 回测引擎归一的架构决策。本轮架构评审发现的核心问题不是"四套引擎各自实现"，而是**依赖方向倒挂**：`modules/backtest_six_step.py` 自称 DEPRECATED 却被 8 处生产代码调用，而它宣称的替代者 `modules/backtest/` 根本没有 shaofu 等价物——"新"包反过来 import "已弃用"的包（`backtest/b1_b2_backtest.py:22`、`backtest/_rust_bridge.py:276`）。ADR 记录了六项决策：
+  1. 唯一实现引擎收敛到 `PortfolioBacktestEngine`（唯一带费率、闸门、仓位规则与 `calmar` 的引擎，而 `verify/gates.py` 的五项硬指标要求 calmar）
+  2. `ShaofuLoopEngine` + `LoopConfig` + `LoopTrade` 继续作为共享的策略/离场内核
+  3. B1 检测统一到 `strategies.detect_b1`（此前 shaofu 路径用 `indicators.detect_b1_today`、组合路径用 `strategies.detect_b1`，两者互不调用）
+  4. 删除约 1,800 行零调用方死代码
+  5. 解除倒挂依赖：`ShaofuBacktestResult` / `_calc_metrics` / `backtest_shaofu_single` / `summary_text` 迁入 `modules/backtest/shaofu.py`，`backtest_six_step.py` 降级为兼容 re-export
+  6. 结果形状与指标聚合归一（`core/metrics.calculate_metrics` 的 SELL 过滤对 `LoopTrade` 会得到 `total_trades == 0`，需先修）
+- **`docs/BACKTEST_RUNNER_PLAN.md`** — 配套的分阶段实施计划：阶段 0 基线快照 → 1 删死代码 → 2 解除倒挂 → 3 结果形状与指标归一 → 4 换引擎 + 换 B1 检测器 → 5 Rust 对齐。每阶段列明改动清单、验证判据与回滚点。
+
+### 文档
+
+- `CONTEXT.md` 补三个领域术语：**组合回测**（共享资金池）、**等权组合回测**（各标的独立回测后加权平均）、**资金曲线**。此前仓库里两种都被叫作"组合回测"，而它们的收益数字不可比——`zt backtest portfolio` 用的是等权组合（无共享资金、无费率），`zt verify v1.0` 验收用的是真组合。
+- `docs/INDEX.md` 补 ADR 与实施计划入口。
+
 ## v4.5.0 (2026-10-30) — 数据源决议统一（读路径与写路径对齐）
 
 ### 修复（真实 bug）

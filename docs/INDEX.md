@@ -16,13 +16,14 @@
 | AI Agent 角色协议（Skill 入口） | [../SKILL.md](../SKILL.md) |
 | 领域词汇表（术语定义） | [../CONTEXT.md](../CONTEXT.md) |
 | 架构决策记录（ADR） | [adr/](adr/) |
+| 回测引擎归一的实施计划 | [BACKTEST_RUNNER_PLAN.md](BACKTEST_RUNNER_PLAN.md) |
 | 知识库（zettaranc 体系，29 篇） | [../knowledge/](../knowledge/) |
 | 语料调研 / 原始 reference | [../references/](../references/) |
 | 已归档的历史规划 | [_archive/](_archive/) |
 
 ## 文档清单
 
-### 活文档（docs/ 顶层，仅这 8 份）
+### 活文档（docs/ 顶层，仅这 9 份）
 
 - `USER_GUIDE.md` — 用户手册（CLI、子命令、`--json` 输出、典型工作流）
 - `CONFIG_GUIDE.md` — 环境变量、`.env`、数据源切换、回测实现切换
@@ -31,6 +32,7 @@
 - `WEB_ROADMAP.md` — Web 应用改造规划（进行中，2026-09-06 起）
 - `STATISTICS_VALIDATION.md` — 回测统计显著性检验（夏普 t-test / permutation / sub-period）
 - `IMPROVEMENT_SYSTEM_SUMMARY.md` — 自我改进系统设计摘要
+- `BACKTEST_RUNNER_PLAN.md` — 回测引擎归一（ADR-0002）的分阶段实施计划：每阶段的目标、验证判据与回滚点
 - `INDEX.md` — 本文件
 
 ### 根目录与子目录
