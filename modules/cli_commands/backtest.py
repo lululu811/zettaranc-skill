@@ -388,41 +388,44 @@ def cmd_backtest(args) -> None:
 
 
 def cmd_verify_v10(args) -> int:
-    """少妇战法 v1.0 验收子命令"""
-    from modules.core.paths import REPORTS_DIR
-    from modules.verify.cli import main as verify_main
+    """少妇战法 v1.0 验收子命令。
 
-    argv = []
-    if args.limit != 50:
-        argv.extend(["--limit", str(args.limit)])
-    if args.days != 250:
-        argv.extend(["--days", str(args.days)])
-    if getattr(args, "walk_forward", False):
-        argv.append("--walk-forward")
-    if getattr(args, "wf_train", 120) != 120:
-        argv.extend(["--wf-train", str(args.wf_train)])
-    if getattr(args, "wf_test", 60) != 60:
-        argv.extend(["--wf-test", str(args.wf_test)])
-    if getattr(args, "ts_codes", None):
-        argv.extend(["--ts-codes", args.ts_codes])
-    if getattr(args, "json", False):
-        argv.append("--json")
-    if getattr(args, "no_markdown", False):
-        argv.append("--no-markdown")
-    return verify_main(argv)
+    直接调 run_verify_v10_command，不再把解析好的参数重新拼成 argv 交给
+    第二个 argparse——那条往返路径会漏转发 --output，也会把退出码丢掉。
+    """
+    from modules.verify.cli import (
+        DEFAULT_DAYS,
+        DEFAULT_LIMIT,
+        DEFAULT_WF_TEST,
+        DEFAULT_WF_TRAIN,
+        run_verify_v10_command,
+    )
+
+    return run_verify_v10_command(
+        ts_codes_arg=getattr(args, "ts_codes", None),
+        limit=getattr(args, "limit", DEFAULT_LIMIT),
+        days=getattr(args, "days", DEFAULT_DAYS),
+        walk_forward=getattr(args, "walk_forward", False),
+        wf_train_days=getattr(args, "wf_train", DEFAULT_WF_TRAIN),
+        wf_test_days=getattr(args, "wf_test", DEFAULT_WF_TEST),
+        write_markdown=not getattr(args, "no_markdown", False),
+        output_dir=getattr(args, "output", None),
+        as_json=getattr(args, "json", False),
+    )
 
 
 def add_verify_v10_parser(subparsers) -> None:
     """注册 verify v1.0 验收子命令"""
     from modules.core.paths import REPORTS_DIR
+    from modules.verify.cli import DEFAULT_DAYS, DEFAULT_LIMIT, DEFAULT_WF_TEST, DEFAULT_WF_TRAIN
 
     p_verify = subparsers.add_parser("verify", help="v1.0 验收")
     p_verify.add_argument("version", choices=["v1.0"], help="验收版本")
-    p_verify.add_argument("--limit", type=int, default=50)
-    p_verify.add_argument("--days", type=int, default=250)
+    p_verify.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
+    p_verify.add_argument("--days", type=int, default=DEFAULT_DAYS)
     p_verify.add_argument("--walk-forward", action="store_true")
-    p_verify.add_argument("--wf-train", type=int, default=120)
-    p_verify.add_argument("--wf-test", type=int, default=60)
+    p_verify.add_argument("--wf-train", type=int, default=DEFAULT_WF_TRAIN)
+    p_verify.add_argument("--wf-test", type=int, default=DEFAULT_WF_TEST)
     p_verify.add_argument("--ts-codes", type=str, default=None, help="指定股票列表（逗号分隔）")
     p_verify.add_argument("--output", type=str, default=str(REPORTS_DIR), help="报告输出目录")
     p_verify.add_argument("--json", action="store_true")

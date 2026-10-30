@@ -139,3 +139,80 @@ def test_run_verify_v10_resolves_ts_codes_arg(temp_db, tmp_path):
         # 验证 get_all_stock_codes 真的可用（Bug 1 已修）
         codes = get_all_stock_codes()
         assert "999999.SH" in codes  # 我们注入的那只
+
+
+class TestVerifyOutputAndExitCode:
+    """zt verify 的 --output 转发与退出码。
+
+    背景：顶层 CLI 曾把解析好的参数重新拼成 argv 交给第二个 argparse，
+    --output 因此被静默丢弃（报告落到 data/reports 而不是用户指定的目录），
+    且 handler 的退出码在 cli.py 的分发处被丢掉——参数错误时进程仍退 0。
+    """
+
+    @staticmethod
+    def _args(**overrides):
+        from argparse import Namespace
+
+        base = {
+            "limit": 50,
+            "days": 250,
+            "walk_forward": False,
+            "wf_train": 120,
+            "wf_test": 60,
+            "ts_codes": "600519.SH",
+            "output": None,
+            "json": False,
+            "no_markdown": False,
+        }
+        base.update(overrides)
+        return Namespace(**base)
+
+    def test_cmd_verify_v10_forwards_output_dir(self, tmp_path, monkeypatch):
+        """--output 必须真的生效：报告写进用户指定的目录。"""
+        from modules.cli_commands.backtest import cmd_verify_v10
+        from modules.verify.pipeline import VerifyResult
+
+        out_dir = tmp_path / "custom_reports"
+        monkeypatch.setattr(
+            "modules.verify.cli.verify_v10_pipeline",
+            lambda **kwargs: VerifyResult(),
+        )
+
+        rc = cmd_verify_v10(self._args(output=str(out_dir)))
+
+        assert rc == 0
+        assert out_dir.is_dir(), "--output 指定的目录应被创建"
+        assert list(out_dir.glob("verify_v10_*.json")), "报告应写在 --output 指定的目录"
+        assert list(out_dir.glob("verify_v10_*.md")), "Markdown 报告同样应在那里"
+
+    def test_cmd_verify_v10_returns_2_on_invalid_param(self, capsys):
+        """参数非法 → 退出码 2（不是 0）。"""
+        from modules.cli_commands.backtest import cmd_verify_v10
+
+        rc = cmd_verify_v10(self._args(days=50))  # days 必须在 [120, 1000]
+
+        assert rc == 2
+        assert "参数错误" in capsys.readouterr().out
+
+    def test_verify_cli_main_returns_2_on_invalid_param(self, capsys):
+        """argparse 适配层同样返回 2。"""
+        from modules.verify.cli import main as verify_main
+
+        rc = verify_main(["--days", "50"])
+
+        assert rc == 2
+        assert "参数错误" in capsys.readouterr().out
+
+    def test_run_verify_v10_command_returns_0_on_valid_params(self, monkeypatch, capsys):
+        """参数合法 → 退出码 0。"""
+        from modules.verify.cli import run_verify_v10_command
+        from modules.verify.pipeline import VerifyResult
+
+        monkeypatch.setattr(
+            "modules.verify.cli.verify_v10_pipeline",
+            lambda **kwargs: VerifyResult(),
+        )
+
+        rc = run_verify_v10_command(ts_codes_arg="600519.SH", days=250)
+
+        assert rc == 0

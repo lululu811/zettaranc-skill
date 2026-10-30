@@ -18,6 +18,19 @@ from modules.loop_engine import LoopConfig
 
 logger = logging.getLogger(__name__)
 
+# 参数默认值与取值范围的唯一来源。
+# 顶层 CLI（modules/cli_commands/backtest.py）与本 module 的 argparse 适配层
+# 都从这里取，避免同一个默认值写两遍后各自漂移。
+DEFAULT_LIMIT = 50
+DEFAULT_DAYS = 250
+DEFAULT_WF_TRAIN = 120
+DEFAULT_WF_TEST = 60
+
+LIMIT_RANGE = (10, 500)
+DAYS_RANGE = (120, 1000)
+WF_TRAIN_RANGE = (60, 500)
+WF_TEST_RANGE = (30, 200)
+
 
 def _bounded_int(min_v: int, max_v: int):
     """argparse 类型：限制整数范围，超出则抛 ArgumentTypeError（argparse 内部转 SystemExit）"""
@@ -42,15 +55,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--limit",
-        type=_bounded_int(10, 500),
-        default=50,
-        help="股票数（默认 50，范围 [10, 500]）",
+        type=_bounded_int(*LIMIT_RANGE),
+        default=DEFAULT_LIMIT,
+        help=f"股票数（默认 {DEFAULT_LIMIT}，范围 {list(LIMIT_RANGE)}）",
     )
     parser.add_argument(
         "--days",
         type=int,
-        default=250,
-        help="回测天数（默认 250，范围 [120, 1000]）",
+        default=DEFAULT_DAYS,
+        help=f"回测天数（默认 {DEFAULT_DAYS}，范围 {list(DAYS_RANGE)}）",
     )
     parser.add_argument(
         "--walk-forward",
@@ -60,14 +73,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--wf-train",
         type=int,
-        default=120,
-        help="WF IS 窗口天数（默认 120）",
+        default=DEFAULT_WF_TRAIN,
+        help=f"WF IS 窗口天数（默认 {DEFAULT_WF_TRAIN}）",
     )
     parser.add_argument(
         "--wf-test",
         type=int,
-        default=60,
-        help="WF OOS 窗口天数（默认 60）",
+        default=DEFAULT_WF_TEST,
+        help=f"WF OOS 窗口天数（默认 {DEFAULT_WF_TEST}）",
     )
     parser.add_argument(
         "--ts-codes",
@@ -94,26 +107,33 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _validate_args(args: argparse.Namespace) -> None:
-    if not 10 <= args.limit <= 500:
-        raise ZettarancError(ErrorCode.INVALID_PARAM, f"--limit 必须在 [10, 500]，当前 {args.limit}")
-    if not 120 <= args.days <= 1000:
-        raise ZettarancError(ErrorCode.INVALID_PARAM, f"--days 必须在 [120, 1000]，当前 {args.days}")
-    if args.wf_train < 60 or args.wf_train > 500:
-        raise ZettarancError(ErrorCode.INVALID_PARAM, f"--wf-train 必须在 [60, 500]，当前 {args.wf_train}")
-    if args.wf_test < 30 or args.wf_test > 200:
-        raise ZettarancError(ErrorCode.INVALID_PARAM, f"--wf-test 必须在 [30, 200]，当前 {args.wf_test}")
+def _validate_params(
+    limit: int = DEFAULT_LIMIT,
+    days: int = DEFAULT_DAYS,
+    wf_train_days: int = DEFAULT_WF_TRAIN,
+    wf_test_days: int = DEFAULT_WF_TEST,
+) -> None:
+    """校验 v1.0 验收参数；非法抛 ZettarancError(INVALID_PARAM)。
+
+    范围与各 *_RANGE 常量一致。以前同一组范围在 argparse 的 _bounded_int
+    与 _validate_args 里各写一遍，改一处漏一处就会让两个入口行为分叉。
+    """
+    checks = (
+        (limit, LIMIT_RANGE, "--limit"),
+        (days, DAYS_RANGE, "--days"),
+        (wf_train_days, WF_TRAIN_RANGE, "--wf-train"),
+        (wf_test_days, WF_TEST_RANGE, "--wf-test"),
+    )
+    for value, (lo, hi), name in checks:
+        if not lo <= value <= hi:
+            raise ZettarancError(ErrorCode.INVALID_PARAM, f"{name} 必须在 [{lo}, {hi}]，当前 {value}")
 
 
-def _resolve_ts_codes(args: argparse.Namespace) -> list[str]:
-    """解析股票列表（指定 / 默认从 stock_basic 取）"""
-    if args.ts_codes:
-        return [c.strip() for c in args.ts_codes.split(",") if c.strip()]
-    # 默认从 stock_basic 取前 N 只（lazy import 避免循环）
-    from modules.database import get_all_stock_codes
-
-    all_codes = get_all_stock_codes(limit=args.limit)
-    return all_codes
+def _split_ts_codes(ts_codes_arg: str | None) -> list[str]:
+    """把逗号分隔的股票代码串拆成列表（空串返回空列表）。"""
+    if not ts_codes_arg:
+        return []
+    return [c.strip() for c in ts_codes_arg.split(",") if c.strip()]
 
 
 def run_verify_v10(
@@ -140,28 +160,55 @@ def run_verify_v10(
     return result
 
 
-def main(argv: list[str] | None = None) -> int:
-    """CLI 入口：解析命令行参数并分派到对应 verify 子命令。"""
-    parser = build_parser()
-    args = parser.parse_args(argv)
+def run_verify_v10_command(
+    *,
+    ts_codes_arg: str | None = None,
+    limit: int = DEFAULT_LIMIT,
+    days: int = DEFAULT_DAYS,
+    walk_forward: bool = False,
+    wf_train_days: int = DEFAULT_WF_TRAIN,
+    wf_test_days: int = DEFAULT_WF_TEST,
+    write_markdown: bool = True,
+    output_dir: Path | str | None = None,
+    as_json: bool = False,
+) -> int:
+    """执行 v1.0 验收并输出结果；返回进程退出码（0 成功，2 参数非法）。
+
+    **zt verify 的唯一执行入口**：argparse 适配层（本 module 的 ``main``）与
+    顶层 CLI（``modules/cli_commands/backtest.py::cmd_verify_v10``）都调它。
+
+    这样参数校验、报告输出目录、退出码只有一处定义。此前顶层 CLI 把已经
+    解析好的参数重新拼成 argv 交给第二个 argparse，既漏转发 ``--output``，
+    又让退出码在两层之间丢失。
+    """
     try:
-        _validate_args(args)
-    except ValueError as e:
+        _validate_params(
+            limit=limit,
+            days=days,
+            wf_train_days=wf_train_days,
+            wf_test_days=wf_test_days,
+        )
+    except ZettarancError as e:
         print(f"参数错误：{e}")
         return 2
 
-    ts_codes = _resolve_ts_codes(args)
+    ts_codes = _split_ts_codes(ts_codes_arg)
+    if not ts_codes:
+        from modules.database import get_all_stock_codes
+
+        ts_codes = get_all_stock_codes(limit=limit)
+
     result = run_verify_v10(
         ts_codes=ts_codes,
-        days=args.days,
-        walk_forward=args.walk_forward,
-        wf_train_days=args.wf_train,
-        wf_test_days=args.wf_test,
-        write_markdown=not args.no_markdown,
-        output_dir=args.output,
+        days=days,
+        walk_forward=walk_forward,
+        wf_train_days=wf_train_days,
+        wf_test_days=wf_test_days,
+        write_markdown=write_markdown,
+        output_dir=output_dir,
     )
 
-    if args.json:
+    if as_json:
         from .report import render_json
 
         print(render_json(result))
@@ -169,8 +216,25 @@ def main(argv: list[str] | None = None) -> int:
         passed = sum(1 for g in result.gates.values() if g.passed)
         total = len(result.gates)
         print(f"\n少妇战法 v1.0 验收：{passed}/{total} 通过")
-        print(f"报告：{args.output}/verify_v10_<timestamp>.json")
+        print(f"报告：{output_dir or REPORTS_DIR}/verify_v10_<timestamp>.json")
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI 入口：解析命令行参数并执行验收。"""
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    return run_verify_v10_command(
+        ts_codes_arg=args.ts_codes,
+        limit=args.limit,
+        days=args.days,
+        walk_forward=args.walk_forward,
+        wf_train_days=args.wf_train,
+        wf_test_days=args.wf_test,
+        write_markdown=not args.no_markdown,
+        output_dir=args.output,
+        as_json=args.json,
+    )
 
 
 if __name__ == "__main__":
