@@ -50,7 +50,11 @@ def _shaofu_result_to_dict(result: Any) -> dict:
 
 
 def _portfolio_result_to_dict(result: Any) -> dict:
-    """将 PortfolioBacktestResult 转换为可序列化的字典"""
+    """将 PortfolioBacktestResult 转换为可序列化的字典。
+
+    单位约定：trades 来自 modules.backtest.single.Trade，其 pnl_pct 是【分数】
+    （0.1 表示 +10%），输出为百分数需乘 100。
+    """
     trades = []
     for t in result.trades:
         trades.append(
@@ -61,7 +65,7 @@ def _portfolio_result_to_dict(result: Any) -> dict:
                 "exit_date": t.exit_date,
                 "exit_price": round(t.exit_price, 2) if t.exit_price else None,
                 "exit_reason": t.exit_reason,
-                "pnl_pct": round(t.pnl_pct, 2),
+                "pnl_pct": round(t.pnl_pct * 100, 2),
             }
         )
 

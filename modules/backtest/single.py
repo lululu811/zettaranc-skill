@@ -73,7 +73,8 @@ class BacktestResult:
             lines.append("最近5笔交易:")
             for t in self.trades[-5:]:
                 status = "🟢" if t.pnl > 0 else "🔴" if t.pnl < 0 else "⚪"
-                lines.append(f"  {status} {t.entry_date}→{t.exit_date or '持有中'} {t.pnl_pct:+.2f}% ({t.exit_reason})")
+                # Trade.pnl_pct 是分数（0.1 = +10%），用 :.2% 才是 10.00%
+                lines.append(f"  {status} {t.entry_date}→{t.exit_date or '持有中'} {t.pnl_pct:+.2%} ({t.exit_reason})")
 
         return "\n".join(lines)
 
@@ -347,9 +348,10 @@ class MultiStrategyBacktestResult:
             lines.append("最近5笔交易:")
             for t in self.trades[-5:]:
                 status = "🟢" if t.pnl > 0 else "🔴" if t.pnl < 0 else "⚪"
+                # Trade.pnl_pct 是分数（0.1 = +10%），用 :.2% 才是 10.00%
                 lines.append(
                     f"  {status} {t.ts_code} {t.entry_date}→{t.exit_date or '持有中'} "
-                    f"{t.pnl_pct:+.2f}% ({t.exit_reason})"
+                    f"{t.pnl_pct:+.2%} ({t.exit_reason})"
                 )
 
         return "\n".join(lines)

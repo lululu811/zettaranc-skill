@@ -53,7 +53,12 @@ def run_portfolio(ts_codes: list[str], days: int = 240, initial_capital: float =
 # ── 内部序列化 ──
 
 def _shaofu_to_response(ts_code: str, result) -> dict:
-    """将少妇战法结果转为 API 响应"""
+    """将少妇战法结果转为 API 响应。
+
+    单位约定：这里的 trades 来自 LoopTrade，其 pnl_pct 已经是【百分数】
+    （10.0 表示 +10%）；avg_pnl / max_win / max_loss 由 pnl_pct 聚合而来，
+    同为百分数。不要再乘 100。
+    """
     trades = []
     for t in result.trades:
         trades.append({
@@ -62,7 +67,7 @@ def _shaofu_to_response(ts_code: str, result) -> dict:
             "exit_date": t.exit_date,
             "exit_price": round(t.exit_price, 2) if t.exit_price else None,
             "exit_reason": t.exit_reason,
-            "pnl_pct": round(t.pnl_pct * 100, 2),
+            "pnl_pct": round(t.pnl_pct, 2),
             "holding_days": t.holding_days,
         })
 
@@ -83,9 +88,10 @@ def _shaofu_to_response(ts_code: str, result) -> dict:
             "avg_holding_days": round(result.avg_holding_days, 1),
             "annualized_return": 0,
             "win_count": result.win_count,
-            "avg_pnl": round(result.avg_pnl * 100, 2),
-            "max_win": round(result.max_win * 100, 2),
-            "max_loss": round(result.max_loss * 100, 2),
+            # avg_pnl / max_win / max_loss 是百分数（由 LoopTrade.pnl_pct 聚合而来）
+            "avg_pnl": round(result.avg_pnl, 2),
+            "max_win": round(result.max_win, 2),
+            "max_loss": round(result.max_loss, 2),
         },
         "equity_curve": equity_curve,
         "trades": trades,
@@ -93,7 +99,12 @@ def _shaofu_to_response(ts_code: str, result) -> dict:
 
 
 def _portfolio_to_response(ts_code: str, result) -> dict:
-    """将组合回测结果转为 API 响应"""
+    """将组合回测结果转为 API 响应。
+
+    单位约定：这里的 trades 来自 modules.backtest.single.Trade，其 pnl_pct 是
+    【分数】（0.1 表示 +10%），所以这里乘 100 是对的——与 _shaofu_to_response
+    的 LoopTrade（百分数）恰好相反，别照抄。
+    """
     trades = []
     for t in result.trades:
         trades.append({
@@ -144,7 +155,8 @@ def _build_equity_curve_from_trades(trades, initial_capital: float) -> list:
     capital = initial_capital
     curve = []
     for t in trades:
-        pnl = getattr(t, "pnl_pct", 0)
+        # LoopTrade.pnl_pct 是百分数（10.0 = +10%），复利需换算成小数
+        pnl = (getattr(t, "pnl_pct", 0) or 0) / 100.0
         capital *= (1 + pnl)
         exit_date = getattr(t, "exit_date", None) or getattr(t, "entry_date", "")
         curve.append([exit_date, round(capital, 2)])

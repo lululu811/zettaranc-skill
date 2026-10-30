@@ -282,11 +282,13 @@ def summary_text(result: ShaofuBacktestResult) -> str:
         f"亏损次数:     {result.loss_count}",
         f"胜率:         {result.win_rate:.1%}",
         f"盈亏比:       {result.profit_factor:.2f}",
-        f"平均盈亏:     {result.avg_pnl:+.2%}",
-        f"平均盈利:     {result.avg_win:+.2%}",
-        f"平均亏损:     {result.avg_loss:+.2%}",
-        f"最大单笔盈:   {result.max_win:+.2%}",
-        f"最大单笔亏:   {result.max_loss:+.2%}",
+        # avg_pnl / avg_win / avg_loss / max_win / max_loss 是百分数
+        # （由 LoopTrade.pnl_pct 聚合而来），不能用 :.2%（那会再乘 100）
+        f"平均盈亏:     {result.avg_pnl:+.2f}%",
+        f"平均盈利:     {result.avg_win:+.2f}%",
+        f"平均亏损:     {result.avg_loss:+.2f}%",
+        f"最大单笔盈:   {result.max_win:+.2f}%",
+        f"最大单笔亏:   {result.max_loss:+.2f}%",
         f"平均持仓天数: {result.avg_holding_days:.1f}",
         f"累计收益:     {result.total_return:+.2%}",
         f"最大回撤:     {result.max_drawdown:.2%}",
