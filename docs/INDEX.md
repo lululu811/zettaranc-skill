@@ -14,6 +14,8 @@
 | 回测统计显著性检验框架 | [STATISTICS_VALIDATION.md](STATISTICS_VALIDATION.md) |
 | 自我改进系统设计摘要 | [IMPROVEMENT_SYSTEM_SUMMARY.md](IMPROVEMENT_SYSTEM_SUMMARY.md) |
 | AI Agent 角色协议（Skill 入口） | [../SKILL.md](../SKILL.md) |
+| 领域词汇表（术语定义） | [../CONTEXT.md](../CONTEXT.md) |
+| 架构决策记录（ADR） | [adr/](adr/) |
 | 知识库（zettaranc 体系，29 篇） | [../knowledge/](../knowledge/) |
 | 语料调研 / 原始 reference | [../references/](../references/) |
 | 已归档的历史规划 | [_archive/](_archive/) |
@@ -30,6 +32,12 @@
 - `STATISTICS_VALIDATION.md` — 回测统计显著性检验（夏普 t-test / permutation / sub-period）
 - `IMPROVEMENT_SYSTEM_SUMMARY.md` — 自我改进系统设计摘要
 - `INDEX.md` — 本文件
+
+### 根目录与子目录
+
+- [`../CONTEXT.md`](../CONTEXT.md) — 领域词汇表：术语定义，不含实现细节
+- [`adr/`](adr/) — 架构决策记录（ADR）：记录"做了什么决策、为什么"，避免后来者重新发明
+- [`agents/`](agents/) — 工程技能约定：issue tracker / triage 标签 / 领域文档消费规则
 
 ### 已归档（docs/_archive/）
 

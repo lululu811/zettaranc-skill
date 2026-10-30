@@ -9,7 +9,7 @@
 - **核心交付物**：`SKILL.md`（Skill-Schema-V2 合规的角色扮演协议，被 Claude Code/Cursor 加载）——LLM 用 Z 哥角色生成点评/话术。
 - **数据层**：Python 包 `modules/`，只负责**数据准备**（指标、信号、回测、评分），不做投资话术——这是刻意分层，避免「AI 味」。
 - **可选层**：`api/`（FastAPI REST）+ `frontend/`（React 看板）+ `rust/`（Rust 加速计算核）。
-- **当前版本**：`v4.3.2`（`pyproject.toml:7`、`SKILL.md` frontmatter + 版本表、`skill.json:3`、`README.md` badge、`docs/CHANGELOG.md` 顶端、`AGENTS.md` 本行，共 **7 处**必须一致；改 `pyproject.toml` 的 `version` 时同步这 7 处，`docs/INDEX.md` 维护规则有同样的清单）。
+- **当前版本**：`v4.4.0`（`pyproject.toml:7`、`SKILL.md` frontmatter + 版本表、`skill.json:3`、`README.md` badge、`docs/CHANGELOG.md` 顶端、`AGENTS.md` 本行，共 **7 处**必须一致；改 `pyproject.toml` 的 `version` 时同步这 7 处，`docs/INDEX.md` 维护规则有同样的清单）。
 - **许可证**：MIT。
 
 ## Architecture & Data Flow
@@ -44,6 +44,7 @@ hithink（HITHINK_FINANCE_API_KEY 配置时最优先，v4.2.0）
   → strategies/__init__.py        # detect_all_strategies(ts_code, days) 折叠每日战法探测器 → 战法信号
   → screener/engine.py            # screen_stocks(criteria, ...) 并行选股
   → backtest/ + simulator/        # 单策略/组合回测/少女少妇模拟器 → 绩效结果
+                                    #   ↑ active_market_gate.py 注入闸门 port（TradingGate）控制开仓/强平
   → verify/pipeline.py            # 五项硬指标验收（v1.0）
   → CLI --json / Web API          # 宿主消费结构化数据
 ```
@@ -70,6 +71,7 @@ modules/backtest/_rust_bridge.py  # is_rust_available() / try_call(name,...) →
 - 路径常量（`DATA_DIR/REGISTRY_DIR/REPORTS_DIR`）→ `modules/core/paths.py`。
 - ATR → `modules/core/atr.py`。
 - 错误 → `modules/core/errors.py`（`ZettarancError` 基类 + 统一错误码）。
+- 活跃市值闸门 → `modules/active_market_gate.py`（`GateAction` 枚举、`GateThresholds` 阈值、`TradingGate` port、失败策略的唯一来源）。注意 `signal`（当日涨跌幅判多空）与 `gate`（两日累计判闸门）是**两组不同语义的阈值**，不可合并；详见 `CONTEXT.md` 与 `docs/adr/0001-*.md`。
 - **不要**在新代码里另立第二套 `MarketRegime`/`PerformanceMetrics`/ATR/路径常量；一律从 `modules/core` 导入。
 
 ## Key Directories
@@ -97,6 +99,9 @@ modules/backtest/_rust_bridge.py  # is_rust_available() / try_call(name,...) →
 | `scripts/` | 薄壳工具脚本（业务逻辑在 modules/） |
 | `tests/` | pytest 测试（~104 个 `test_*.py`） |
 | `docs/` | 文档（`CHANGELOG.md`、`USER_GUIDE.md`、`CONFIG_GUIDE.md`、`CONTRIBUTING.md` 等） |
+| `docs/adr/` | 架构决策记录（ADR）：决策与理由，避免后来者重新发明 |
+| `docs/agents/` | 工程技能约定：issue tracker / triage 标签 / 领域文档消费规则 |
+| `CONTEXT.md` | 领域词汇表（纯术语，不含实现细节） |
 | `data/` | SQLite 数据库与报告（**gitignored，不入库**） |
 
 ## Development Commands
@@ -183,6 +188,7 @@ RUN_REALDATA=true python -m pytest tests/test_indicators_realdata.py -v  # 真�
 | `skill.json` | Skill 元数据 |
 | `modules/cli.py` + `modules/cli_commands/` | CLI 分发与 16 子命令实现（`cli_commands/` 为包：analyze / backtest / data / diagnose / portfolio / screen / simulate / strategy_alias / _helpers） |
 | `modules/datasource.py` | 统一数据源 + CompositeDataSource（优先级链） |
+| `modules/active_market_gate.py` | 活跃市值闸门判定（唯一实现）：GateAction / 阈值 / TradingGate port |
 | `modules/database.py` | SQLite 层 + `get_connection()` + `init_database()` |
 | `modules/indicators/data_layer.py` | DB-first K 线读 + 指标缓存 + `analyze_stock()` 管线 |
 | `modules/strategies/__init__.py` | `detect_all_strategies()` 战法折叠入口 |

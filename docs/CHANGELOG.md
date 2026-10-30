@@ -2,6 +2,50 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## v4.4.0 (2026-10-30) — 活跃市值闸门判定归一（ADR-0001）
+
+活跃市值闸门（0AMV gate）的判定结果此前有三种表示（裸字符串 / 普通 `Enum` / 语义不同的 `signal`），阈值散落三处，调用方还要知道开关与两个数据源路径——判定语义跨 seam 泄漏。2026-08-23 的统一重构 `3e882b9` 正是因此把 B1/B2 的开仓判断改坏（详见 v4.3.2）。本次把闸门彻底收口。
+
+### 新增
+
+- **`modules/active_market_gate.py`** — 闸门判定的唯一实现。对外只暴露一个 interface：`evaluate(date, config) -> GateAction`。判定、阈值、失败降级策略全在 implementation 内部，调用方不必知道。
+  - `GateAction`（`enum.StrEnum`）— 闸门动作的唯一表示
+  - `GateThresholds` / `GATE_THRESHOLDS` — 闸门阈值（**两日累计**口径）
+  - `GateConfig(enabled, duckdb_path, path)` — 闸门配置
+  - `TradingGate` — 闸门 port 对象，供回测 engine 注入
+- **`CONTEXT.md`** — 领域词汇表（纯术语，不含实现细节）：活跃市值 / 闸门 / 闸门动作 / 活跃市值信号 / 闸门配置 / B1-B2 策略。
+- **`docs/adr/0001-gate-action-representation-and-failure-policy.md`** — 记录表示层、失败策略、注入方式、模块边界与阈值分组的决策与被否决的选项。
+
+### 重构
+
+- **闸门动作表示层唯一化**：`GateAction` 由普通 `Enum` 改为 `enum.StrEnum`。枚举本身就是字符串，旧调用方的字符串比较、`isinstance` 断言、集合成员判断全部继续成立，而"枚举 vs 字符串"从此不再是错误类别——这正是 `3e882b9` 漏迁一半调用点所暴露的隐患类别。`get_active_market_gate` 也直接返回枚举，删掉字符串→枚举映射表。
+- **阈值收敛为两组**：`SignalThresholds`（**当日**涨跌幅判多空）与 `GateThresholds`（**两日累计**涨幅判闸门）。两者口径与用途都不同，数值相同纯属巧合，此前 `4.0 / -2.3` 各写三遍。
+- **注入而非现场创建**：回测 engine 不再在循环里现场 import 闸门实现，改为构造时注入闸门 port。
+  - `modules/backtest/b1_b2_backtest.py`：`_run_stock_klines` / `run_b1_b2_single` / `run_b1_b2_pool` / `run_b1_b2_walkforward` 的 `active_mv_enabled` + `active_mv_duckdb_path` + `active_mv_path` 三个参数（共 12 个参数位）收敛为一个 `gate`
+  - `modules/backtest/portfolio.py`：`PortfolioConfig` 的三个 `active_mv_*` 字段收敛为一个 `gate` 字段
+  - `modules/cli_commands/backtest.py`：闸门在一处构造、三处注入；CLI flag 名不变（`--active-mv-gate` / `--active-mv-duckdb` / `--active-mv-path`）
+- **`modules/active_market_value.py`** 退为数据层（点位模型 + 加载器 + 信号 + 格式化），并用 PEP 562 的模块级 `__getattr__` 惰性转出闸门 API——`from modules.active_market_value import get_active_market_gate` 仍然可用（包已发布到 PyPI）。用惰性转出是因为闸门 module 依赖本 module 的加载器，普通 import 会形成循环导入。
+
+### 失败策略
+
+闸门一律 **fail-closed**：闸门关闭 → `OPEN`（不拦）；**无数据** → `WAIT`（拦）；**加载异常** → `WAIT`（拦）。闸门存在却读不到数据时放行开仓等于伪造信号；fail-open 会把数据同步故障静默变成"全部放行"。
+
+### 测试
+
+- 新增 `tests/test_active_market_gate.py`（10 项）：只通过 `evaluate` 与公开 API 观察行为，不断言实现细节。
+- 新增 `tests/test_verify_portfolio_engine.py::TestPortfolioInjectedGate`（5 项）：engine 每个交易日都问闸门 / OPEN 允许开仓 / WAIT 与 CLEAR 禁止开仓 / 不注入闸门即不限制。
+- b1_b2 的闸门测试改用注入的假闸门 adapter，不再 patch module 属性。
+- **删除两条源码文本断言**（`assert "get_active_market_gate(" not in src` 一类）——它们在 bug 存在时同样是绿的，已被证明测的是源码形状而非行为；现在有 17 项真实行为测试覆盖闸门。
+
+### 修复
+
+- 直接以脚本方式运行 `modules/active_market_value.py` 时，`sys.path[0]` 是 `modules/` 目录，会遮蔽标准库 `statistics`（`modules/statistics/`）。现在把 `sys.path[0]` 换成仓库根目录，`python modules/active_market_value.py` 与 `python -m modules.active_market_value` 两种方式都能跑。
+
+### 文档
+
+- `docs/INDEX.md` 补 `CONTEXT.md` 与 `docs/adr/` 入口。
+- `AGENTS.md` 补 `modules/active_market_gate.py` 到 Important Files，并把闸门判定列入「单一事实来源」。
+
 ## v4.3.2 (2026-10-29) — B1/B2 回测恒 0 成交修复
 
 ### 修复（真实 bug）
