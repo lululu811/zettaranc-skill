@@ -9,7 +9,7 @@
 - **核心交付物**：`SKILL.md`（Skill-Schema-V2 合规的角色扮演协议，被 Claude Code/Cursor 加载）——LLM 用 Z 哥角色生成点评/话术。
 - **数据层**：Python 包 `modules/`，只负责**数据准备**（指标、信号、回测、评分），不做投资话术——这是刻意分层，避免「AI 味」。
 - **可选层**：`api/`（FastAPI REST）+ `frontend/`（React 看板）+ `rust/`（Rust 加速计算核）。
-- **当前版本**：`v4.4.1`（`pyproject.toml:7`、`SKILL.md` frontmatter + 版本表、`skill.json:3`、`README.md` badge、`docs/CHANGELOG.md` 顶端、`AGENTS.md` 本行，共 **7 处**必须一致；改 `pyproject.toml` 的 `version` 时同步这 7 处，`docs/INDEX.md` 维护规则有同样的清单）。
+- **当前版本**：`v4.5.0`（`pyproject.toml:7`、`SKILL.md` frontmatter + 版本表、`skill.json:3`、`README.md` badge、`docs/CHANGELOG.md` 顶端、`AGENTS.md` 本行，共 **7 处**必须一致；改 `pyproject.toml` 的 `version` 时同步这 7 处，`docs/INDEX.md` 维护规则有同样的清单）。
 - **许可证**：MIT。
 
 ## Architecture & Data Flow
@@ -21,9 +21,9 @@
 | JNB / 真实数据 | `DATA_MODE=jnb` | 走数据源取真实行情，可算指标/战法 |
 | 普通小万 | `DATA_MODE=websearch` | 纯 LLM 对话，无事可查外部数据 |
 
-### 数据源优先级（`modules/datasource.py` 的 `CompositeDataSource`）
+### 数据源优先级（`modules/datasource_resolution.py` 统一决议）
 
-`auto` 模式按 token 感知降级：
+**「环境变量 → 用哪个 provider」只有一个定义处**：`modules/datasource_resolution.py::resolve_provider()`。读路径（`CompositeDataSource`）与写路径（`DataSyncer`）都消费它，因此两边永远选到同一个源。
 
 ```
 hithink（HITHINK_FINANCE_API_KEY 配置时最优先，v4.2.0）
@@ -33,6 +33,10 @@ hithink（HITHINK_FINANCE_API_KEY 配置时最优先，v4.2.0）
   → tushare-data-bridge（HTTP 缓存代理）
   → 本地 SQLite（data/stock_data.db，离线兜底）
 ```
+
+读路径（`CompositeDataSource`）在此基础上**按方法链式回退**；写路径（`DataSyncer`）取**同一个首选源**（单源，保留重试与退避语义）。
+
+> 改优先级只改 `resolve_provider()` 一处。`modules/data_sync/syncer.py` 与 `modules/datasource.py` 此前各抄了一份环境变量判断且已经漂移（写路径没有 hithink 分支），`zt sync` 还直接钉死 tushare——在默认 websearch 模式下 tushare 无数据后端，整次同步静默同步 0 行却打印"同步完成"。v4.5.0 起统一。
 
 约定：**DB 优先读 K 线**（先查 `daily_kline` 表，没有才调 API 并写回）。K 线读取统一走 `modules/indicators/data_layer.py::get_kline_data` 或 `modules/strategies/core.py::get_kline_data`。数据源缺 key 时**绝不编造价格/信号**，明确报告当前数据状态。
 
@@ -71,6 +75,7 @@ modules/backtest/_rust_bridge.py  # is_rust_available() / try_call(name,...) →
 - 路径常量（`DATA_DIR/REGISTRY_DIR/REPORTS_DIR`）→ `modules/core/paths.py`。
 - ATR → `modules/core/atr.py`。
 - 错误 → `modules/core/errors.py`（`ZettarancError` 基类 + 统一错误码）。
+- 数据源决议 → `modules/datasource_resolution.py`（`resolve_provider()`：读路径与写路径共用同一份"环境变量 → provider"判断）。
 - 活跃市值闸门 → `modules/active_market_gate.py`（`GateAction` 枚举、`GateThresholds` 阈值、`TradingGate` port、失败策略的唯一来源）。注意 `signal`（当日涨跌幅判多空）与 `gate`（两日累计判闸门）是**两组不同语义的阈值**，不可合并；详见 `CONTEXT.md` 与 `docs/adr/0001-*.md`。
 - **不要**在新代码里另立第二套 `MarketRegime`/`PerformanceMetrics`/ATR/路径常量；一律从 `modules/core` 导入。
 
@@ -189,6 +194,7 @@ RUN_REALDATA=true python -m pytest tests/test_indicators_realdata.py -v  # 真�
 | `modules/cli.py` + `modules/cli_commands/` | CLI 分发与 16 子命令实现（`cli_commands/` 为包：analyze / backtest / data / diagnose / portfolio / screen / simulate / strategy_alias / _helpers） |
 | `modules/datasource.py` | 统一数据源 + CompositeDataSource（优先级链） |
 | `modules/active_market_gate.py` | 活跃市值闸门判定（唯一实现）：GateAction / 阈值 / TradingGate port |
+| `modules/datasource_resolution.py` | 数据源决议（唯一实现）：resolve_provider() 决定 auto 模式用哪个 provider |
 | `modules/database.py` | SQLite 层 + `get_connection()` + `init_database()` |
 | `modules/indicators/data_layer.py` | DB-first K 线读 + 指标缓存 + `analyze_stock()` 管线 |
 | `modules/strategies/__init__.py` | `detect_all_strategies()` 战法折叠入口 |

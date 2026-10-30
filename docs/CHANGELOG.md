@@ -2,6 +2,31 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## v4.5.0 (2026-10-30) — 数据源决议统一（读路径与写路径对齐）
+
+### 修复（真实 bug）
+
+- **零配置用户的 `zt sync` 一直静默同步 0 行，却照样打印"同步完成"。** `zt sync` 曾直接钉死 `get_datasource("tushare")`，绕过了任何数据源决议；而默认的 `websearch` 模式下 `TushareClient._pro is None`（无数据后端），取数恒返回 `None`，命令却报告成功。
+  - 修复前实测：exit 0、打印"同步完成"、`stock_basic` 与 `daily_kline` 均 0 行。
+  - 修复后实测（同样零配置）：实际入库 **5579 只股票 / 333,007 行 K 线**。
+- **读路径与写路径选到不同的数据源。** `CompositeDataSource._preferred_token_source()`（读）与 `DataSyncer.__init__`（写）各抄了一份"环境变量 → provider"的判断，且已经漂移——**写路径没有 hithink 分支**：配了 `HITHINK_FINANCE_API_KEY` 的用户，`zt analyze` 走同花顺官方数据，`zt sync` 却走免费源，两边数据对不上。
+
+### 新增
+
+- **`modules/datasource_resolution.py`** — 「当前配置下该用哪个 provider」的唯一来源。纯函数，不读数据库、不构造数据源、不发请求，只把环境变量翻译成一个 provider 名。
+  - `ProviderResolution(provider, reason)` — provider 为 `None` 表示无配置，调用方回退免费源；`reason` 说明决议依据，写进日志与测试断言。
+  - `resolve_provider()` — 优先级：hithink → indevs → tushare（仅 JNB 模式）→ 无（免费源兜底）。
+
+### 重构
+
+- `CompositeDataSource._preferred_token_source()` 与 `DataSyncer.__init__()` 改为消费 `resolve_provider()`。读路径仍按方法链式回退；写路径取**同一个首选源**（单源，保留重试与退避语义——链式回退会吞掉异常，使 syncer 的重试失效）。
+- `modules/cli_commands/data.py`：`zt sync` 与 `zt status` 不再钉死数据源；`zt sync stk-factor` **保留** tushare 钉死（技术因子只有 tushare/indevs 提供，该命令本身就是"同步 Tushare 官方指标"）。
+- `zt sync` 的完成提示改为报告实际条数（`同步完成：股票 N 只，K 线 M 行`），不再只打印"同步完成"。
+
+### 测试
+
+- 新增 `tests/test_datasource_resolution.py`（31 项）：`(env → provider)` 矩阵只写一次；读路径与写路径各自的测试不再重复抄矩阵，只断言"我选出来的 == 决议结果"。已验证对旧行为有 3 项失败（hithink 漂移 + CLI 钉死）。
+
 ## v4.4.1 (2026-10-30) — 输出正确性修复
 
 ### 修复（真实 bug）
