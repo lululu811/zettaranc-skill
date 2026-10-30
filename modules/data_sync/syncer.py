@@ -14,7 +14,14 @@ from typing import Any, Optional, cast
 from modules.core.errors import ZettarancError
 
 from ..database import get_connection, get_db_path
-from ..datasource import AStockDataDataSource, DataSource, IndevsDataSource, TushareDataSource
+from ..datasource import (
+    AStockDataDataSource,
+    DataSource,
+    HithinkFinanceDataSource,
+    IndevsDataSource,
+    TushareDataSource,
+)
+from ..datasource_resolution import ProviderResolution, resolve_provider
 from .rate_limiter import _rate_limit_global, _MAX_SYNC_WORKERS
 from .indicator_cache import (
     _get_indicator_funcs,
@@ -36,34 +43,45 @@ TUSHARE_API_URL = os.environ.get("TUSHARE_API_URL", "")
 VERIFY_TOKEN_URL = os.environ.get("TUSHARE_VERIFY_TOKEN_URL", "")
 
 
+def _build_resolved_source(resolution: ProviderResolution, token: str | None) -> DataSource:
+    """按决议结果构造默认数据源；构造失败时回退免费源。
+
+    与读路径（``CompositeDataSource``）的构造方式保持一致：同一 provider
+    在两边拿到的是同一类适配器。
+    """
+    if resolution.provider == "hithink":
+        return HithinkFinanceDataSource()
+    if resolution.provider == "indevs":
+        return IndevsDataSource()
+    if resolution.provider == "tushare":
+        try:
+            return TushareDataSource(token=token)
+        except ZettarancError as e:
+            # JNB 配置不完整（缺 TUSHARE_API_URL 等）：回退免费源而非构造期崩溃
+            logger.warning("[datasyncer] tushare 配置不完整(%s)，回退 a-stock-data", e)
+            return AStockDataDataSource()
+    return AStockDataDataSource()
+
+
 class DataSyncer:
     """数据同步器"""
 
     def __init__(self, token: str | None = None, datasource: DataSource | None = None) -> None:
         self.token = token or os.environ.get("TUSHARE_TOKEN")
 
-        # 依赖注入 DataSource；默认按环境变量选择数据源（token 感知）。
-        # 注意：此处优先级与 CompositeDataSource._preferred_token_source 保持同步
-        # （indevs -> JNB 模式的 tushare -> a-stock-data 兜底），改动时需镜像。
+        # 依赖注入 DataSource；未显式注入时按【与读路径同一套】决议选源。
+        # 决议规则集中在 modules/datasource_resolution.py——此前此处与
+        # CompositeDataSource._preferred_token_source 各抄了一份环境变量判断，
+        # 且已经漂移（本处没有 hithink 分支），导致读路径与写路径选到不同的源：
+        # 配了 HITHINK_FINANCE_API_KEY 的用户 analyze 走同花顺、sync 走免费源。
         if datasource is None:
-            # 优先 Indevs Replay API
-            if os.environ.get("INDEVS_API_KEY"):
-                datasource = IndevsDataSource()
-            elif token is not None:
-                # 显式传入 token：用户明确要求 tushare（websearch 模式下其方法返回 None 由调用方处理）
+            if token is not None:
+                # 显式传入 token：调用方的明确意图，直接用 tushare
                 datasource = TushareDataSource(token=self.token)
-            elif os.environ.get("DATA_MODE", "websearch") == "jnb" and self.token:
-                # JNB 模式配置了 TUSHARE_TOKEN：保持 tushare 数据源，老用户行为不变
-                try:
-                    datasource = TushareDataSource(token=self.token)
-                except ZettarancError as e:
-                    # JNB 配置不完整（缺 TUSHARE_API_URL 等）：回退免费源而非构造期崩溃
-                    logger.warning("[datasyncer] tushare 配置不完整(%s)，回退 a-stock-data", e)
-                    datasource = AStockDataDataSource()
             else:
-                # 零配置 / websearch 模式仅有环境变量 token（无数据后端）：
-                # 默认 a-stock-data（免费，无需 API Key），与父版本 auto 行为一致
-                datasource = AStockDataDataSource()
+                resolution = resolve_provider()
+                datasource = _build_resolved_source(resolution, self.token)
+                logger.info("[datasyncer] 数据源决议：%s", resolution.describe())
         self._datasource = datasource
         self._fetcher = DataFetcher(self._datasource)
 

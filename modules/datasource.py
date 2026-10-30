@@ -25,6 +25,7 @@ from .indevs_client import IndevsClient
 from .tushare_client import TushareClient
 from .a_stock_data_client import AStockDataClient
 from modules.core.errors import ErrorCode, ZettarancError
+from modules.datasource_resolution import resolve_provider
 
 logger = logging.getLogger(__name__)
 
@@ -668,20 +669,19 @@ class CompositeDataSource:
         return self._hithink
 
     def _preferred_token_source(self) -> DataSource | None:
-        """按环境变量返回 auto 模式的优先数据源。
+        """按统一决议返回 auto 模式的优先数据源。
 
-        配置了 HITHINK_FINANCE_API_KEY 时用 hithink（同花顺官方）最优先；
-        否则配置了 INDEVS_API_KEY 时用 indevs；
-        再否则仅 JNB 模式（DATA_MODE=jnb）且配置了 TUSHARE_TOKEN 时用 tushare——
-        websearch 模式下 TushareClient._pro=None（无数据后端），路由过去必然失败，
-        直接回退 a-stock-data，与父版本「auto 不碰 tushare」的行为一致；
+        决议规则集中在 :mod:`modules.datasource_resolution` —— 读路径（这里）与
+        写路径（``DataSyncer``）共用同一份判断，不会再各自漂移。
+
         零配置返回 None（由调用方回退 a-stock-data）。
         """
-        if os.environ.get("HITHINK_FINANCE_API_KEY"):
+        resolution = resolve_provider()
+        if resolution.provider == "hithink":
             return self._hithink_source
-        if os.environ.get("INDEVS_API_KEY"):
+        if resolution.provider == "indevs":
             return self._indevs_source
-        if os.environ.get("DATA_MODE", "websearch") == "jnb" and os.environ.get("TUSHARE_TOKEN"):
+        if resolution.provider == "tushare":
             try:
                 return self._tushare_source
             except ZettarancError as e:
