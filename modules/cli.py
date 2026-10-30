@@ -303,10 +303,16 @@ def main() -> None:
     from .core.errors import ZettarancError
 
     try:
-        handlers[args.command](args)
+        # handler 的返回值是进程退出码。多数 handler 返回 None（等价 0），
+        # 但 cmd_verify_v10 / cmd_self_optimize 会返回非 0——以前这里丢弃返回值，
+        # 参数错误或未知 action 时进程仍退 0，宿主脚本会误判成功。
+        exit_code = handlers[args.command](args) or 0
     except ZettarancError as e:
         print(str(e), file=sys.stderr)
         sys.exit(2)
+
+    if exit_code:
+        sys.exit(exit_code)
 
 
 if __name__ == "__main__":
