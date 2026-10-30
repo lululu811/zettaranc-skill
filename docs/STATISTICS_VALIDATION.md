@@ -1,5 +1,14 @@
 # 策略统计检验框架
 
+> ⚠️ **状态：底层能力可用，与验收链路尚未接线。**
+>
+> `modules/statistics/` 提供的四项检验（夏普 t 检验 / Bootstrap CI / Monte Carlo 置换检验 / 子周期分析）**仍在**并可直接调用。
+> 但把回测与统计检验打包在一起的 `backtest_shaofu_with_validation` 入口、以及 `modules/statistics/criteria.py`（`validate_strategy` / `ValidationReport` / `CriteriaLevel`）因**零调用方**已于 v4.6.0 删除。
+>
+> 当前 `zt verify v1.0` 的验收走的是**另一条路**——五项硬指标（Sharpe / Calmar / WinRate / MaxDD / OOS-IS，见 `modules/verify/gates.py`），**不含**统计检验。两者不可互相替代。
+>
+> 下面的"完整验证流程"已改为**手动组合**的写法；重新接线是独立的产品议题，不在 BacktestRunner 范围内。
+
 ## 概述
 
 本模块提供**严格的统计检验**，用于验证交易策略的有效性，解决核心问题：
@@ -123,83 +132,80 @@ print(f"是否稳健？ {result.is_robust()}")
 
 ## 完整验证流程
 
-### 方法 1：一键验证（推荐）
+### 方法 1：手动组合（当前唯一可用的路径）
+
+> 历史上的"一键验证"入口（`backtest_shaofu_with_validation`）已删除——它零调用方。现在需要自己把回测与检验拼起来。
 
 ```python
-from modules.backtest_six_step import backtest_shaofu_with_validation
+from modules.backtest_six_step import backtest_shaofu_single
+from modules.statistics import sharpe_t_test, monte_carlo_permutation_test, analyze_sub_periods
 
-# 运行回测 + 自动统计检验
-result = backtest_shaofu_with_validation("600519.SH", days=500)
+# 1. 跑回测
+result = backtest_shaofu_single("600519.SH", days=500)
 
-# 打印验证报告
-print(result.validation_report.generate_summary())
+# 2. 从资金曲线提取日收益率
+curve = result.equity_curve
+daily_returns = [(curve[i] - curve[i - 1]) / curve[i - 1] for i in range(1, len(curve))]
+
+# 3. 逐项检验，按门槛自行判定
+sharpe_test = sharpe_t_test(daily_returns)
+mc_test = monte_carlo_permutation_test(daily_returns)
+
+print(f"夏普 t 检验 p-value: {sharpe_test.p_value:.4f}  显著: {sharpe_test.is_significant}")
+print(f"Bootstrap 95% CI: [{sharpe_test.ci_lower:.2f}, {sharpe_test.ci_upper:.2f}]")
+print(f"Monte Carlo p-value: {mc_test.p_value:.4f}")
+
+# 4. 绩效指标自行对照门槛
+print(f"胜率: {result.win_rate:.1%}（门槛 > 40%）")
+print(f"盈亏比: {result.profit_factor:.2f}（门槛 > 1.5）")
+print(f"最大回撤: {result.max_drawdown:.2%}（门槛 < 25%）")
+print(f"夏普比率: {result.sharpe_ratio:.2f}（门槛 > 0.5）")
 ```
 
-**输出示例**：
+**判定参考**：
+
 ```
-============================================================
-策略验证报告：少妇战法-600519.SH
-验证级别：moderate
-============================================================
-
-总体结果：✅ 通过
-达标项目：6/6
-
 【统计显著性检验】
-  ✅ 夏普t检验: p=0.0012 (阈值: p<0.05)
-  ✅ Bootstrap置信区间: [0.45, 1.23] (阈值: 下界>0.3)
+  夏普t检验: p=0.0012 (阈值: p<0.05)
+  Bootstrap置信区间: [0.45, 1.23] (阈值: 下界>0.3)
 
 【绩效指标】
-  ✅ 胜率: 52.3% (阈值: >40%)
-  ✅ 盈亏比: 1.85 (阈值: >1.5)
-  ✅ 最大回撤: 12.5% (阈值: <25%)
-  ✅ 夏普比率: 0.85 (阈值: >0.5)
-
-============================================================
+  胜率: 52.3% (阈值: >40%)
+  盈亏比: 1.85 (阈值: >1.5)
+  最大回撤: 12.5% (阈值: <25%)
+  夏普比率: 0.85 (阈值: >0.5)
 ```
 
 ---
 
-### 方法 2：分步验证
+### 方法 2：子周期分析
 
 ```python
 from modules.backtest_six_step import backtest_shaofu_single
-from modules.statistics import sharpe_t_test, monte_carlo_permutation_test
-from modules.statistics.criteria import validate_strategy
+from modules.statistics import analyze_sub_periods
 
-# 1. 基础回测
 result = backtest_shaofu_single("600519.SH", days=500)
 
-# 2. 提取收益率
-equity_curve = result.equity_curve
-daily_returns = [
-    (equity_curve[i] - equity_curve[i-1]) / equity_curve[i-1]
-    for i in range(1, len(equity_curve))
+# 交易列表（dict）+ 市场环境映射
+trades = [
+    {"date": t.exit_date, "pnl_pct": t.pnl_pct, "holding_days": t.holding_days}
+    for t in result.trades
+    if t.exit_date
 ]
+market_regimes = {"2024-01-01": "bull", "2024-01-15": "bear"}  # 由市场状态模块提供
 
-# 3. 统计检验
-sharpe_test = sharpe_t_test(daily_returns)
-mc_test = monte_carlo_permutation_test(daily_returns)
-
-# 4. 生成验证报告
-report = validate_strategy(
-    strategy_name="少妇战法-600519.SH",
-    sharpe_test_result=sharpe_test,
-    monte_carlo_result=mc_test,
-    performance_metrics={
-        "win_rate": result.win_rate,
-        "profit_factor": result.profit_factor,
-        "max_drawdown": result.max_drawdown,
-        "sharpe_ratio": result.sharpe_ratio,
-    },
-)
-
-print(report.generate_summary())
+analysis = analyze_sub_periods(trades, market_regimes)
+print(f"牛市夏普: {analysis.bull_sharpe:.2f}")
+print(f"熊市夏普: {analysis.bear_sharpe:.2f}")
+print(f"震荡夏普: {analysis.sideways_sharpe:.2f}")
+print(f"稳健性得分: {analysis.robustness_score:.0f}")
 ```
 
 ---
 
 ## 验证级别
+
+> 三个级别的**门槛清单**仍然有效，可作为自行判定的参考。但 `CriteriaLevel` 枚举与 `validate_strategy` 已随 `modules/statistics/criteria.py` 删除——**没有内置的级别开关**，请按下面的清单自行判定。
 
 ### 严格模式（STRICT）
 
@@ -215,13 +221,6 @@ print(report.generate_summary())
 - 最大回撤 < 25%
 - 夏普比率 > 0.5
 
-```python
-result = backtest_shaofu_with_validation(
-    "600519.SH",
-    validation_level=CriteriaLevel.STRICT
-)
-```
-
 ---
 
 ### 中等模式（MODERATE）
@@ -235,13 +234,6 @@ result = backtest_shaofu_with_validation(
 - 盈亏比 > 1.5
 - 最大回撤 < 25%
 
-```python
-result = backtest_shaofu_with_validation(
-    "600519.SH",
-    validation_level=CriteriaLevel.MODERATE
-)
-```
-
 ---
 
 ### 宽松模式（LOOSE）
@@ -251,13 +243,6 @@ result = backtest_shaofu_with_validation(
 **要求**：基本指标达标
 - 胜率 > 40%
 - 盈亏比 > 1.5
-
-```python
-result = backtest_shaofu_with_validation(
-    "600519.SH",
-    validation_level=CriteriaLevel.LOOSE
-)
-```
 
 ---
 

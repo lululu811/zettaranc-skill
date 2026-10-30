@@ -1,0 +1,2037 @@
+{
+  "captured_at": "2026-10-30",
+  "purpose": "BacktestRunner 阶段 1–3 的对照基准。阶段 1（删死代码）与阶段 2（解除倒挂）必须数字不变；阶段 3（结果形状与指标归一）必须数值等价。这份快照就是判据。",
+  "branch": "docs/backtest-runner-design",
+  "data_source": {
+    "db": "data/stock_data.db",
+    "stock_basic": 5525,
+    "daily_kline": 179654,
+    "note": "data/ 是 gitignored，数据库不入库；本文件是可追溯的对照数据。"
+  },
+  "commands": {
+    "single": "zt verify v1.0 --limit 50 --days 300 --json",
+    "walk_forward": "zt verify v1.0 --limit 50 --days 300 --walk-forward --json"
+  },
+  "thresholds": {
+    "source": "modules/verify/gates.py::THRESHOLDS",
+    "sharpe": {
+      "min": 0.5,
+      "direction": "higher"
+    },
+    "calmar": {
+      "min": 0.5,
+      "direction": "higher"
+    },
+    "win_rate": {
+      "min": 0.4,
+      "direction": "higher"
+    },
+    "max_drawdown": {
+      "max": 0.25,
+      "direction": "lower"
+    },
+    "oos_is_ratio": {
+      "min": 0.6,
+      "direction": "higher"
+    }
+  },
+  "baseline_metrics": {
+    "total_trades": 193,
+    "win_rate": 0.45595854922279794,
+    "total_return_pct": 0.020761571008163227,
+    "annualized_return": 0.017410983529455804,
+    "sharpe": 1.2502485663220784,
+    "calmar": 4.183420808217639,
+    "sortino": 0.0,
+    "max_drawdown": 0.004161901067962086
+  },
+  "gates_result": {
+    "single": {
+      "sharpe": {
+        "value": 1.2502485663220784,
+        "passed": true
+      },
+      "calmar": {
+        "value": 4.183420808217639,
+        "passed": true
+      },
+      "win_rate": {
+        "value": 0.45595854922279794,
+        "passed": true
+      },
+      "max_drawdown": {
+        "value": 0.004161901067962086,
+        "passed": true
+      }
+    },
+    "walk_forward": {
+      "sharpe": {
+        "value": 1.2502485663220784,
+        "passed": true
+      },
+      "calmar": {
+        "value": 4.183420808217639,
+        "passed": true
+      },
+      "win_rate": {
+        "value": 0.45595854922279794,
+        "passed": true
+      },
+      "max_drawdown": {
+        "value": 0.004161901067962086,
+        "passed": true
+      },
+      "oos_is_ratio": {
+        "value": 0.0,
+        "passed": false
+      }
+    }
+  },
+  "known_preexisting_issue": {
+    "oos_is_ratio": 0.0,
+    "note": "基线里 oos_is_ratio 就是 0.0（阈值 0.6，不通过）。WF 跑出 wf_splits=3、wf_degraded=False，但 aggregate 与非 WF 完全相同——说明组合 walk-forward 路径没有真正切分评估。不在 BacktestRunner 范围内，另记。"
+  },
+  "snapshots": {
+    "single": {
+      "timestamp": "2026-10-30T23:06:35",
+      "config_used": {
+        "j_threshold": 5,
+        "stop_loss_pct": -0.05,
+        "vol_shrink_threshold": 0.8,
+        "bbi_break_days": 2,
+        "min_holding_days": 3,
+        "lu_half": true,
+        "position_pct": 0.3
+      },
+      "config_source": "param_registry:shaofu_v1",
+      "sample": {
+        "ts_codes_count": 50,
+        "days": 300,
+        "skipped_count": 0,
+        "wf_degraded": false,
+        "wf_splits": 0
+      },
+      "aggregate": {
+        "total_trades": 193,
+        "win_rate": 0.45595854922279794,
+        "total_return_pct": 0.020761571008163227,
+        "annualized_return": 0.017410983529455804,
+        "sharpe": 1.2502485663220784,
+        "calmar": 4.183420808217639,
+        "sortino": 0.0,
+        "max_drawdown": 0.004161901067962086
+      },
+      "gates": {
+        "sharpe": {
+          "name": "sharpe",
+          "value": 1.2502485663220784,
+          "threshold": 0.5,
+          "passed": true,
+          "message": ""
+        },
+        "calmar": {
+          "name": "calmar",
+          "value": 4.183420808217639,
+          "threshold": 0.5,
+          "passed": true,
+          "message": ""
+        },
+        "win_rate": {
+          "name": "win_rate",
+          "value": 0.45595854922279794,
+          "threshold": 0.4,
+          "passed": true,
+          "message": ""
+        },
+        "max_drawdown": {
+          "name": "max_drawdown",
+          "value": 0.004161901067962086,
+          "threshold": 0.25,
+          "passed": true,
+          "message": ""
+        }
+      },
+      "passed_count": 4,
+      "total_count": 4,
+      "summary": "4/4 通过 🎉",
+      "per_stock": [
+        {
+          "ts_code": "000001.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.5,
+          "return_pct": -0.004633849970974047,
+          "sharpe": 0,
+          "max_drawdown": 0.005158371040723996,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.05272407732863,
+            99.5366150029026
+          ]
+        },
+        {
+          "ts_code": "000002.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.5,
+          "return_pct": 0.0014348101761809673,
+          "sharpe": 0,
+          "max_drawdown": 0.0009104704097117753,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.23474178403755,
+            100.14348101761809
+          ]
+        },
+        {
+          "ts_code": "000004.SZ",
+          "name": "",
+          "trades": 4,
+          "win_rate": 0.25,
+          "return_pct": -0.015053662995988204,
+          "sharpe": -0.3231477335750084,
+          "max_drawdown": 0.05834662170299893,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            95.98398169336384,
+            94.1653378297001,
+            99.57132921968989,
+            98.49463370040118
+          ]
+        },
+        {
+          "ts_code": "000006.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.5,
+          "return_pct": 0.1891696904885325,
+          "sharpe": 0,
+          "max_drawdown": 0.008456973293768613,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.15430267062314,
+            118.91696904885325
+          ]
+        },
+        {
+          "ts_code": "000007.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 0.0,
+          "return_pct": -0.027218353716063293,
+          "sharpe": -39.099968609626885,
+          "max_drawdown": 0.02721835371606332,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            98.81679389312977,
+            97.97169903162813,
+            97.27816462839367
+          ]
+        },
+        {
+          "ts_code": "000008.SZ",
+          "name": "",
+          "trades": 5,
+          "win_rate": 0.6,
+          "return_pct": 0.026400519456234894,
+          "sharpe": 1.5900442411235145,
+          "max_drawdown": 0.009382331737027983,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.35018050541517,
+            99.90008925360013,
+            99.0617668262972,
+            101.90715800109508,
+            102.6400519456235
+          ]
+        },
+        {
+          "ts_code": "000009.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 1.0,
+          "return_pct": 0.055550317726698495,
+          "sharpe": 0,
+          "max_drawdown": 0.0,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            105.11945392491468,
+            105.55503177266985
+          ]
+        },
+        {
+          "ts_code": "000010.SZ",
+          "name": "",
+          "trades": 1,
+          "win_rate": 1.0,
+          "return_pct": 0.004109589041095818,
+          "sharpe": 0,
+          "max_drawdown": 0.0,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.41095890410958
+          ]
+        },
+        {
+          "ts_code": "000011.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 0.3333333333333333,
+          "return_pct": -0.007106282076652426,
+          "sharpe": -0.987984007170676,
+          "max_drawdown": 0.016829941991026734,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.98901098901098,
+            99.98773401438646,
+            99.28937179233476
+          ]
+        },
+        {
+          "ts_code": "000012.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 0.6666666666666666,
+          "return_pct": 0.008362667156840198,
+          "sharpe": 7.644055165088353,
+          "max_drawdown": 0.0,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.51063829787235,
+            100.83626671568402,
+            100.83626671568402
+          ]
+        },
+        {
+          "ts_code": "000014.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.5,
+          "return_pct": 0.0961792975416953,
+          "sharpe": 0,
+          "max_drawdown": 0.014305177111716603,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            98.56948228882834,
+            109.61792975416954
+          ]
+        },
+        {
+          "ts_code": "000016.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 1.0,
+          "return_pct": 0.011494675142045718,
+          "sharpe": 5.799962442050944,
+          "max_drawdown": 0.0,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.1219512195122,
+            100.2416188902925,
+            101.14946751420457
+          ]
+        },
+        {
+          "ts_code": "000017.SZ",
+          "name": "",
+          "trades": 4,
+          "win_rate": 0.75,
+          "return_pct": 0.009246623363108109,
+          "sharpe": 3.1621360748431533,
+          "max_drawdown": 0.0017647058823528946,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.09584664536742,
+            100.18535112820977,
+            101.10307953549108,
+            100.9246623363108
+          ]
+        },
+        {
+          "ts_code": "000019.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 0.6666666666666666,
+          "return_pct": 0.00543815709294071,
+          "sharpe": 0.8746826147257111,
+          "max_drawdown": 0.005990783410138229,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.84507042253522,
+            100.24092944765367,
+            100.54381570929407
+          ]
+        },
+        {
+          "ts_code": "000020.SZ",
+          "name": "",
+          "trades": 1,
+          "win_rate": 0.0,
+          "return_pct": -0.005333333333333301,
+          "sharpe": 0,
+          "max_drawdown": 0.005333333333333314,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.46666666666667
+          ]
+        },
+        {
+          "ts_code": "000021.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.5,
+          "return_pct": 0.01330819435316477,
+          "sharpe": 0,
+          "max_drawdown": 0.0008862629246677045,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.91137370753323,
+            101.33081943531647
+          ]
+        },
+        {
+          "ts_code": "000025.SZ",
+          "name": "",
+          "trades": 5,
+          "win_rate": 0.6,
+          "return_pct": 0.024877400120639326,
+          "sharpe": 2.466747797514959,
+          "max_drawdown": 0.006574024585783073,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            101.39575971731449,
+            101.29182328935825,
+            102.17213105722121,
+            101.50044895566919,
+            102.48774001206392
+          ]
+        },
+        {
+          "ts_code": "000026.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.0,
+          "return_pct": -0.012175324675324672,
+          "sharpe": 0,
+          "max_drawdown": 0.012175324675324646,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            98.78246753246754,
+            98.78246753246754
+          ]
+        },
+        {
+          "ts_code": "000027.SZ",
+          "name": "",
+          "trades": 6,
+          "win_rate": 0.3333333333333333,
+          "return_pct": -0.020775995376712597,
+          "sharpe": -1.4658723752923106,
+          "max_drawdown": 0.03772534647265936,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            101.42857142857142,
+            101.7613839285714,
+            101.00173440624303,
+            99.9032261166283,
+            98.83601064475928,
+            97.92240046232874
+          ]
+        },
+        {
+          "ts_code": "000028.SZ",
+          "name": "",
+          "trades": 5,
+          "win_rate": 0.2,
+          "return_pct": -0.004776596657725785,
+          "sharpe": -0.5032967144997181,
+          "max_drawdown": 0.01111541968160147,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.41496598639455,
+            100.64100736830528,
+            100.23951398784662,
+            100.2259129683096,
+            99.52234033422742
+          ]
+        },
+        {
+          "ts_code": "000029.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.5,
+          "return_pct": 0.14912392878582414,
+          "sharpe": 0,
+          "max_drawdown": 0.005240732850447297,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            115.51779075942645,
+            114.91239287858242
+          ]
+        },
+        {
+          "ts_code": "000030.SZ",
+          "name": "",
+          "trades": 1,
+          "win_rate": 0.0,
+          "return_pct": -0.002636203866432374,
+          "sharpe": 0,
+          "max_drawdown": 0.002636203866432396,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.73637961335676
+          ]
+        },
+        {
+          "ts_code": "000031.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.5,
+          "return_pct": 0.050171370282217076,
+          "sharpe": 0,
+          "max_drawdown": 0.014739884393063596,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            106.58823529411765,
+            105.0171370282217
+          ]
+        },
+        {
+          "ts_code": "000032.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.5,
+          "return_pct": 0.0006305832895427965,
+          "sharpe": 0,
+          "max_drawdown": 0.0,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.06305832895428,
+            100.06305832895428
+          ]
+        },
+        {
+          "ts_code": "000034.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 0.3333333333333333,
+          "return_pct": 0.03915745063664944,
+          "sharpe": 1.454783279512534,
+          "max_drawdown": 0.014889469518189234,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            105.4863813229572,
+            104.17747759206526,
+            103.91574506366494
+          ]
+        },
+        {
+          "ts_code": "000035.SZ",
+          "name": "",
+          "trades": 4,
+          "win_rate": 0.5,
+          "return_pct": 0.0050379123809003445,
+          "sharpe": 1.0823748372128854,
+          "max_drawdown": 0.007476846536548139,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.49763033175356,
+            101.26090347351371,
+            101.00126013127392,
+            100.50379123809003
+          ]
+        },
+        {
+          "ts_code": "000036.SZ",
+          "name": "",
+          "trades": 8,
+          "win_rate": 0.125,
+          "return_pct": 0.01685616150187963,
+          "sharpe": 0.563721986796875,
+          "max_drawdown": 0.03710124372382024,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.49008498583571,
+            99.40786177510361,
+            105.6036426336627,
+            104.36553096140597,
+            102.87103648463166,
+            102.87103648463166,
+            102.70511545804355,
+            101.68561615018797
+          ]
+        },
+        {
+          "ts_code": "000037.SZ",
+          "name": "",
+          "trades": 6,
+          "win_rate": 0.5,
+          "return_pct": -0.05730574896364704,
+          "sharpe": -4.163063866868214,
+          "max_drawdown": 0.06144482295392328,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.2125147579693,
+            100.0183462686643,
+            100.18922043654925,
+            100.44100486487147,
+            97.38820133989789,
+            94.2694251036353
+          ]
+        },
+        {
+          "ts_code": "000039.SZ",
+          "name": "",
+          "trades": 4,
+          "win_rate": 0.25,
+          "return_pct": -0.039596803528112345,
+          "sharpe": -1.7830755023367297,
+          "max_drawdown": 0.0582277137659187,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.52380952380952,
+            101.97828185328184,
+            99.39622305443916,
+            96.04031964718877
+          ]
+        },
+        {
+          "ts_code": "000042.SZ",
+          "name": "",
+          "trades": 4,
+          "win_rate": 0.25,
+          "return_pct": 0.04474848715511648,
+          "sharpe": 1.068815104647585,
+          "max_drawdown": 0.03152929410559336,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            107.87610619469025,
+            106.94480168077926,
+            106.37695317627956,
+            104.47484871551164
+          ]
+        },
+        {
+          "ts_code": "000045.SZ",
+          "name": "",
+          "trades": 4,
+          "win_rate": 0.5,
+          "return_pct": -0.008296630145022466,
+          "sharpe": -3.52886856044969,
+          "max_drawdown": 0.010540046834936602,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.02762430939227,
+            100.22673142887066,
+            99.62904908548748,
+            99.17033698549776
+          ]
+        },
+        {
+          "ts_code": "000048.SZ",
+          "name": "",
+          "trades": 6,
+          "win_rate": 0.3333333333333333,
+          "return_pct": 0.0036097127368730497,
+          "sharpe": 0.4492647425070005,
+          "max_drawdown": 0.010886781558747604,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.71023824855119,
+            101.1163259611354,
+            100.9690691757551,
+            100.46108814449819,
+            100.0154946083734,
+            100.3609712736873
+          ]
+        },
+        {
+          "ts_code": "000049.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 0.3333333333333333,
+          "return_pct": 0.027024118548264697,
+          "sharpe": 0.6922374027156122,
+          "max_drawdown": 0.031233666410453616,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            106.01360544217687,
+            104.33846464401783,
+            102.70241185482647
+          ]
+        },
+        {
+          "ts_code": "000050.SZ",
+          "name": "",
+          "trades": 5,
+          "win_rate": 0.4,
+          "return_pct": -0.015684348386351687,
+          "sharpe": -3.9012169352760693,
+          "max_drawdown": 0.01759703735223326,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.0,
+            99.171974522293,
+            98.24029626477667,
+            98.33536751922645,
+            98.43156516136483
+          ]
+        },
+        {
+          "ts_code": "000055.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 0.3333333333333333,
+          "return_pct": -0.011011438992042488,
+          "sharpe": -3.5008273996949275,
+          "max_drawdown": 0.01172413793103438,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.07211538461537,
+            100.07211538461537,
+            98.89885610079575
+          ]
+        },
+        {
+          "ts_code": "000056.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.5,
+          "return_pct": 0.010052410680389645,
+          "sharpe": 0,
+          "max_drawdown": 0.004777070063694329,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            101.49006622516556,
+            101.00524106803897
+          ]
+        },
+        {
+          "ts_code": "000058.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 1.0,
+          "return_pct": 0.022316553026948682,
+          "sharpe": 0,
+          "max_drawdown": 0.0,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            101.92028985507247,
+            102.23165530269488
+          ]
+        },
+        {
+          "ts_code": "000059.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 0.6666666666666666,
+          "return_pct": 0.01693493531607193,
+          "sharpe": 5.026304496971329,
+          "max_drawdown": 0.0017647058823528567,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            101.18577075098814,
+            101.00720762613346,
+            101.69349353160719
+          ]
+        },
+        {
+          "ts_code": "000060.SZ",
+          "name": "",
+          "trades": 7,
+          "win_rate": 0.42857142857142855,
+          "return_pct": 0.024441600892342707,
+          "sharpe": 0.8359570887337742,
+          "max_drawdown": 0.036575135636331774,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            102.64501160092807,
+            102.40722392926568,
+            101.669544773843,
+            104.22248047961791,
+            101.64039199926702,
+            100.41052911972095,
+            102.44416008923427
+          ]
+        },
+        {
+          "ts_code": "000061.SZ",
+          "name": "",
+          "trades": 4,
+          "win_rate": 0.5,
+          "return_pct": 0.09520862172579214,
+          "sharpe": 2.493858916066287,
+          "max_drawdown": 0.005541018320697248,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            108.9767441860465,
+            110.13110061878646,
+            109.84750121805139,
+            109.52086217257921
+          ]
+        },
+        {
+          "ts_code": "000062.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 0.6666666666666666,
+          "return_pct": 0.0965913058582566,
+          "sharpe": 2.591827551837189,
+          "max_drawdown": 0.0010302841086482011,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.05914826498423,
+            109.7722271670468,
+            109.65913058582566
+          ]
+        },
+        {
+          "ts_code": "000063.SZ",
+          "name": "",
+          "trades": 4,
+          "win_rate": 0.75,
+          "return_pct": 0.10675404408571176,
+          "sharpe": 3.155794794834136,
+          "max_drawdown": 0.006902356902356887,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            107.04162976085033,
+            110.33501586096895,
+            109.57344420266934,
+            110.67540440857118
+          ]
+        },
+        {
+          "ts_code": "000065.SZ",
+          "name": "",
+          "trades": 8,
+          "win_rate": 0.5,
+          "return_pct": 0.010230650367866412,
+          "sharpe": 0.4918345259561927,
+          "max_drawdown": 0.020342771982116214,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.26838966202783,
+            99.83362157677243,
+            101.15010889426833,
+            100.02522683595608,
+            99.78059992249858,
+            100.31423131427425,
+            103.12082853834917,
+            101.02306503678663
+          ]
+        },
+        {
+          "ts_code": "000066.SZ",
+          "name": "",
+          "trades": 8,
+          "win_rate": 0.5,
+          "return_pct": 0.061531378496621825,
+          "sharpe": 2.0151489164211416,
+          "max_drawdown": 0.015573429682456683,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.56340956340956,
+            103.82742682392787,
+            103.61408279620747,
+            103.78936977838151,
+            103.19464326024291,
+            103.61005939605091,
+            102.21047769317501,
+            106.15313784966219
+          ]
+        },
+        {
+          "ts_code": "000068.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.0,
+          "return_pct": -0.02071673469387758,
+          "sharpe": 0,
+          "max_drawdown": 0.020716734693877612,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.03999999999999,
+            97.92832653061224
+          ]
+        },
+        {
+          "ts_code": "000069.SZ",
+          "name": "",
+          "trades": 6,
+          "win_rate": 0.5,
+          "return_pct": -0.020056459280454297,
+          "sharpe": -2.744867989766886,
+          "max_drawdown": 0.02265119063275656,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.2654867256637,
+            99.6029394565514,
+            99.6029394565514,
+            99.72198679454728,
+            100.18224211821443,
+            97.99435407195458
+          ]
+        },
+        {
+          "ts_code": "000070.SZ",
+          "name": "",
+          "trades": 8,
+          "win_rate": 0.375,
+          "return_pct": -0.02892820336604307,
+          "sharpe": -1.2648418010433686,
+          "max_drawdown": 0.045433263259376314,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.06735751295336,
+            100.29958723127835,
+            100.14973725035513,
+            99.80367009545861,
+            101.47707642981926,
+            101.24389506270393,
+            96.86664170159143,
+            97.1071796633957
+          ]
+        },
+        {
+          "ts_code": "000078.SZ",
+          "name": "",
+          "trades": 8,
+          "win_rate": 0.5,
+          "return_pct": 0.11574528759051805,
+          "sharpe": 1.8305743087040383,
+          "max_drawdown": 0.031049581425187697,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.8860759493671,
+            100.28793715915346,
+            115.1498844731003,
+            113.46931859160101,
+            114.51526482442861,
+            115.013157280187,
+            113.26221070666773,
+            111.57452875905182
+          ]
+        },
+        {
+          "ts_code": "000088.SZ",
+          "name": "",
+          "trades": 8,
+          "win_rate": 0.75,
+          "return_pct": 0.009806969549790878,
+          "sharpe": 1.5009883328953317,
+          "max_drawdown": 0.007566904832368038,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.2771362586605,
+            100.6285748203147,
+            100.41989805225414,
+            99.86712797123255,
+            100.35827778092712,
+            100.56543936350242,
+            100.91142137966125,
+            100.9806969549791
+          ]
+        },
+        {
+          "ts_code": "000089.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 0.0,
+          "return_pct": -0.01216090413383586,
+          "sharpe": -8.878544266805934,
+          "max_drawdown": 0.012160904133835828,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.77777777777777,
+            98.9163868904876,
+            98.78390958661642
+          ]
+        }
+      ],
+      "meta": {
+        "ts_codes_count": 50,
+        "days": 300,
+        "walk_forward": false,
+        "use_portfolio_engine": false,
+        "skipped_count": 0,
+        "config_source": "param_registry:shaofu_v1"
+      }
+    },
+    "walk_forward": {
+      "timestamp": "2026-10-30T23:06:52",
+      "config_used": {
+        "j_threshold": 5,
+        "stop_loss_pct": -0.05,
+        "vol_shrink_threshold": 0.8,
+        "bbi_break_days": 2,
+        "min_holding_days": 3,
+        "lu_half": true,
+        "position_pct": 0.3
+      },
+      "config_source": "param_registry:shaofu_v1",
+      "sample": {
+        "ts_codes_count": 50,
+        "days": 300,
+        "skipped_count": 0,
+        "wf_degraded": false,
+        "wf_splits": 3
+      },
+      "aggregate": {
+        "total_trades": 193,
+        "win_rate": 0.45595854922279794,
+        "total_return_pct": 0.020761571008163227,
+        "annualized_return": 0.017410983529455804,
+        "sharpe": 1.2502485663220784,
+        "calmar": 4.183420808217639,
+        "sortino": 0.0,
+        "max_drawdown": 0.004161901067962086
+      },
+      "gates": {
+        "sharpe": {
+          "name": "sharpe",
+          "value": 1.2502485663220784,
+          "threshold": 0.5,
+          "passed": true,
+          "message": ""
+        },
+        "calmar": {
+          "name": "calmar",
+          "value": 4.183420808217639,
+          "threshold": 0.5,
+          "passed": true,
+          "message": ""
+        },
+        "win_rate": {
+          "name": "win_rate",
+          "value": 0.45595854922279794,
+          "threshold": 0.4,
+          "passed": true,
+          "message": ""
+        },
+        "max_drawdown": {
+          "name": "max_drawdown",
+          "value": 0.004161901067962086,
+          "threshold": 0.25,
+          "passed": true,
+          "message": ""
+        },
+        "oos_is_ratio": {
+          "name": "oos_is_ratio",
+          "value": 0.0,
+          "threshold": 0.6,
+          "passed": false,
+          "message": "OOS/IS 0.00 < 0.60，建议：减少过拟合风险（缩小参数搜索空间）"
+        }
+      },
+      "passed_count": 4,
+      "total_count": 5,
+      "summary": "4/5 通过 ⚠️ 待优化",
+      "per_stock": [
+        {
+          "ts_code": "000001.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.5,
+          "return_pct": -0.004633849970974047,
+          "sharpe": 0,
+          "max_drawdown": 0.005158371040723996,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.05272407732863,
+            99.5366150029026
+          ]
+        },
+        {
+          "ts_code": "000002.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.5,
+          "return_pct": 0.0014348101761809673,
+          "sharpe": 0,
+          "max_drawdown": 0.0009104704097117753,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.23474178403755,
+            100.14348101761809
+          ]
+        },
+        {
+          "ts_code": "000004.SZ",
+          "name": "",
+          "trades": 4,
+          "win_rate": 0.25,
+          "return_pct": -0.015053662995988204,
+          "sharpe": -0.3231477335750084,
+          "max_drawdown": 0.05834662170299893,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            95.98398169336384,
+            94.1653378297001,
+            99.57132921968989,
+            98.49463370040118
+          ]
+        },
+        {
+          "ts_code": "000006.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.5,
+          "return_pct": 0.1891696904885325,
+          "sharpe": 0,
+          "max_drawdown": 0.008456973293768613,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.15430267062314,
+            118.91696904885325
+          ]
+        },
+        {
+          "ts_code": "000007.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 0.0,
+          "return_pct": -0.027218353716063293,
+          "sharpe": -39.099968609626885,
+          "max_drawdown": 0.02721835371606332,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            98.81679389312977,
+            97.97169903162813,
+            97.27816462839367
+          ]
+        },
+        {
+          "ts_code": "000008.SZ",
+          "name": "",
+          "trades": 5,
+          "win_rate": 0.6,
+          "return_pct": 0.026400519456234894,
+          "sharpe": 1.5900442411235145,
+          "max_drawdown": 0.009382331737027983,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.35018050541517,
+            99.90008925360013,
+            99.0617668262972,
+            101.90715800109508,
+            102.6400519456235
+          ]
+        },
+        {
+          "ts_code": "000009.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 1.0,
+          "return_pct": 0.055550317726698495,
+          "sharpe": 0,
+          "max_drawdown": 0.0,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            105.11945392491468,
+            105.55503177266985
+          ]
+        },
+        {
+          "ts_code": "000010.SZ",
+          "name": "",
+          "trades": 1,
+          "win_rate": 1.0,
+          "return_pct": 0.004109589041095818,
+          "sharpe": 0,
+          "max_drawdown": 0.0,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.41095890410958
+          ]
+        },
+        {
+          "ts_code": "000011.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 0.3333333333333333,
+          "return_pct": -0.007106282076652426,
+          "sharpe": -0.987984007170676,
+          "max_drawdown": 0.016829941991026734,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.98901098901098,
+            99.98773401438646,
+            99.28937179233476
+          ]
+        },
+        {
+          "ts_code": "000012.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 0.6666666666666666,
+          "return_pct": 0.008362667156840198,
+          "sharpe": 7.644055165088353,
+          "max_drawdown": 0.0,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.51063829787235,
+            100.83626671568402,
+            100.83626671568402
+          ]
+        },
+        {
+          "ts_code": "000014.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.5,
+          "return_pct": 0.0961792975416953,
+          "sharpe": 0,
+          "max_drawdown": 0.014305177111716603,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            98.56948228882834,
+            109.61792975416954
+          ]
+        },
+        {
+          "ts_code": "000016.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 1.0,
+          "return_pct": 0.011494675142045718,
+          "sharpe": 5.799962442050944,
+          "max_drawdown": 0.0,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.1219512195122,
+            100.2416188902925,
+            101.14946751420457
+          ]
+        },
+        {
+          "ts_code": "000017.SZ",
+          "name": "",
+          "trades": 4,
+          "win_rate": 0.75,
+          "return_pct": 0.009246623363108109,
+          "sharpe": 3.1621360748431533,
+          "max_drawdown": 0.0017647058823528946,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.09584664536742,
+            100.18535112820977,
+            101.10307953549108,
+            100.9246623363108
+          ]
+        },
+        {
+          "ts_code": "000019.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 0.6666666666666666,
+          "return_pct": 0.00543815709294071,
+          "sharpe": 0.8746826147257111,
+          "max_drawdown": 0.005990783410138229,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.84507042253522,
+            100.24092944765367,
+            100.54381570929407
+          ]
+        },
+        {
+          "ts_code": "000020.SZ",
+          "name": "",
+          "trades": 1,
+          "win_rate": 0.0,
+          "return_pct": -0.005333333333333301,
+          "sharpe": 0,
+          "max_drawdown": 0.005333333333333314,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.46666666666667
+          ]
+        },
+        {
+          "ts_code": "000021.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.5,
+          "return_pct": 0.01330819435316477,
+          "sharpe": 0,
+          "max_drawdown": 0.0008862629246677045,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.91137370753323,
+            101.33081943531647
+          ]
+        },
+        {
+          "ts_code": "000025.SZ",
+          "name": "",
+          "trades": 5,
+          "win_rate": 0.6,
+          "return_pct": 0.024877400120639326,
+          "sharpe": 2.466747797514959,
+          "max_drawdown": 0.006574024585783073,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            101.39575971731449,
+            101.29182328935825,
+            102.17213105722121,
+            101.50044895566919,
+            102.48774001206392
+          ]
+        },
+        {
+          "ts_code": "000026.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.0,
+          "return_pct": -0.012175324675324672,
+          "sharpe": 0,
+          "max_drawdown": 0.012175324675324646,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            98.78246753246754,
+            98.78246753246754
+          ]
+        },
+        {
+          "ts_code": "000027.SZ",
+          "name": "",
+          "trades": 6,
+          "win_rate": 0.3333333333333333,
+          "return_pct": -0.020775995376712597,
+          "sharpe": -1.4658723752923106,
+          "max_drawdown": 0.03772534647265936,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            101.42857142857142,
+            101.7613839285714,
+            101.00173440624303,
+            99.9032261166283,
+            98.83601064475928,
+            97.92240046232874
+          ]
+        },
+        {
+          "ts_code": "000028.SZ",
+          "name": "",
+          "trades": 5,
+          "win_rate": 0.2,
+          "return_pct": -0.004776596657725785,
+          "sharpe": -0.5032967144997181,
+          "max_drawdown": 0.01111541968160147,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.41496598639455,
+            100.64100736830528,
+            100.23951398784662,
+            100.2259129683096,
+            99.52234033422742
+          ]
+        },
+        {
+          "ts_code": "000029.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.5,
+          "return_pct": 0.14912392878582414,
+          "sharpe": 0,
+          "max_drawdown": 0.005240732850447297,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            115.51779075942645,
+            114.91239287858242
+          ]
+        },
+        {
+          "ts_code": "000030.SZ",
+          "name": "",
+          "trades": 1,
+          "win_rate": 0.0,
+          "return_pct": -0.002636203866432374,
+          "sharpe": 0,
+          "max_drawdown": 0.002636203866432396,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.73637961335676
+          ]
+        },
+        {
+          "ts_code": "000031.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.5,
+          "return_pct": 0.050171370282217076,
+          "sharpe": 0,
+          "max_drawdown": 0.014739884393063596,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            106.58823529411765,
+            105.0171370282217
+          ]
+        },
+        {
+          "ts_code": "000032.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.5,
+          "return_pct": 0.0006305832895427965,
+          "sharpe": 0,
+          "max_drawdown": 0.0,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.06305832895428,
+            100.06305832895428
+          ]
+        },
+        {
+          "ts_code": "000034.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 0.3333333333333333,
+          "return_pct": 0.03915745063664944,
+          "sharpe": 1.454783279512534,
+          "max_drawdown": 0.014889469518189234,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            105.4863813229572,
+            104.17747759206526,
+            103.91574506366494
+          ]
+        },
+        {
+          "ts_code": "000035.SZ",
+          "name": "",
+          "trades": 4,
+          "win_rate": 0.5,
+          "return_pct": 0.0050379123809003445,
+          "sharpe": 1.0823748372128854,
+          "max_drawdown": 0.007476846536548139,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.49763033175356,
+            101.26090347351371,
+            101.00126013127392,
+            100.50379123809003
+          ]
+        },
+        {
+          "ts_code": "000036.SZ",
+          "name": "",
+          "trades": 8,
+          "win_rate": 0.125,
+          "return_pct": 0.01685616150187963,
+          "sharpe": 0.563721986796875,
+          "max_drawdown": 0.03710124372382024,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.49008498583571,
+            99.40786177510361,
+            105.6036426336627,
+            104.36553096140597,
+            102.87103648463166,
+            102.87103648463166,
+            102.70511545804355,
+            101.68561615018797
+          ]
+        },
+        {
+          "ts_code": "000037.SZ",
+          "name": "",
+          "trades": 6,
+          "win_rate": 0.5,
+          "return_pct": -0.05730574896364704,
+          "sharpe": -4.163063866868214,
+          "max_drawdown": 0.06144482295392328,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.2125147579693,
+            100.0183462686643,
+            100.18922043654925,
+            100.44100486487147,
+            97.38820133989789,
+            94.2694251036353
+          ]
+        },
+        {
+          "ts_code": "000039.SZ",
+          "name": "",
+          "trades": 4,
+          "win_rate": 0.25,
+          "return_pct": -0.039596803528112345,
+          "sharpe": -1.7830755023367297,
+          "max_drawdown": 0.0582277137659187,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.52380952380952,
+            101.97828185328184,
+            99.39622305443916,
+            96.04031964718877
+          ]
+        },
+        {
+          "ts_code": "000042.SZ",
+          "name": "",
+          "trades": 4,
+          "win_rate": 0.25,
+          "return_pct": 0.04474848715511648,
+          "sharpe": 1.068815104647585,
+          "max_drawdown": 0.03152929410559336,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            107.87610619469025,
+            106.94480168077926,
+            106.37695317627956,
+            104.47484871551164
+          ]
+        },
+        {
+          "ts_code": "000045.SZ",
+          "name": "",
+          "trades": 4,
+          "win_rate": 0.5,
+          "return_pct": -0.008296630145022466,
+          "sharpe": -3.52886856044969,
+          "max_drawdown": 0.010540046834936602,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.02762430939227,
+            100.22673142887066,
+            99.62904908548748,
+            99.17033698549776
+          ]
+        },
+        {
+          "ts_code": "000048.SZ",
+          "name": "",
+          "trades": 6,
+          "win_rate": 0.3333333333333333,
+          "return_pct": 0.0036097127368730497,
+          "sharpe": 0.4492647425070005,
+          "max_drawdown": 0.010886781558747604,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.71023824855119,
+            101.1163259611354,
+            100.9690691757551,
+            100.46108814449819,
+            100.0154946083734,
+            100.3609712736873
+          ]
+        },
+        {
+          "ts_code": "000049.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 0.3333333333333333,
+          "return_pct": 0.027024118548264697,
+          "sharpe": 0.6922374027156122,
+          "max_drawdown": 0.031233666410453616,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            106.01360544217687,
+            104.33846464401783,
+            102.70241185482647
+          ]
+        },
+        {
+          "ts_code": "000050.SZ",
+          "name": "",
+          "trades": 5,
+          "win_rate": 0.4,
+          "return_pct": -0.015684348386351687,
+          "sharpe": -3.9012169352760693,
+          "max_drawdown": 0.01759703735223326,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.0,
+            99.171974522293,
+            98.24029626477667,
+            98.33536751922645,
+            98.43156516136483
+          ]
+        },
+        {
+          "ts_code": "000055.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 0.3333333333333333,
+          "return_pct": -0.011011438992042488,
+          "sharpe": -3.5008273996949275,
+          "max_drawdown": 0.01172413793103438,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.07211538461537,
+            100.07211538461537,
+            98.89885610079575
+          ]
+        },
+        {
+          "ts_code": "000056.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.5,
+          "return_pct": 0.010052410680389645,
+          "sharpe": 0,
+          "max_drawdown": 0.004777070063694329,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            101.49006622516556,
+            101.00524106803897
+          ]
+        },
+        {
+          "ts_code": "000058.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 1.0,
+          "return_pct": 0.022316553026948682,
+          "sharpe": 0,
+          "max_drawdown": 0.0,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            101.92028985507247,
+            102.23165530269488
+          ]
+        },
+        {
+          "ts_code": "000059.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 0.6666666666666666,
+          "return_pct": 0.01693493531607193,
+          "sharpe": 5.026304496971329,
+          "max_drawdown": 0.0017647058823528567,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            101.18577075098814,
+            101.00720762613346,
+            101.69349353160719
+          ]
+        },
+        {
+          "ts_code": "000060.SZ",
+          "name": "",
+          "trades": 7,
+          "win_rate": 0.42857142857142855,
+          "return_pct": 0.024441600892342707,
+          "sharpe": 0.8359570887337742,
+          "max_drawdown": 0.036575135636331774,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            102.64501160092807,
+            102.40722392926568,
+            101.669544773843,
+            104.22248047961791,
+            101.64039199926702,
+            100.41052911972095,
+            102.44416008923427
+          ]
+        },
+        {
+          "ts_code": "000061.SZ",
+          "name": "",
+          "trades": 4,
+          "win_rate": 0.5,
+          "return_pct": 0.09520862172579214,
+          "sharpe": 2.493858916066287,
+          "max_drawdown": 0.005541018320697248,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            108.9767441860465,
+            110.13110061878646,
+            109.84750121805139,
+            109.52086217257921
+          ]
+        },
+        {
+          "ts_code": "000062.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 0.6666666666666666,
+          "return_pct": 0.0965913058582566,
+          "sharpe": 2.591827551837189,
+          "max_drawdown": 0.0010302841086482011,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.05914826498423,
+            109.7722271670468,
+            109.65913058582566
+          ]
+        },
+        {
+          "ts_code": "000063.SZ",
+          "name": "",
+          "trades": 4,
+          "win_rate": 0.75,
+          "return_pct": 0.10675404408571176,
+          "sharpe": 3.155794794834136,
+          "max_drawdown": 0.006902356902356887,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            107.04162976085033,
+            110.33501586096895,
+            109.57344420266934,
+            110.67540440857118
+          ]
+        },
+        {
+          "ts_code": "000065.SZ",
+          "name": "",
+          "trades": 8,
+          "win_rate": 0.5,
+          "return_pct": 0.010230650367866412,
+          "sharpe": 0.4918345259561927,
+          "max_drawdown": 0.020342771982116214,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.26838966202783,
+            99.83362157677243,
+            101.15010889426833,
+            100.02522683595608,
+            99.78059992249858,
+            100.31423131427425,
+            103.12082853834917,
+            101.02306503678663
+          ]
+        },
+        {
+          "ts_code": "000066.SZ",
+          "name": "",
+          "trades": 8,
+          "win_rate": 0.5,
+          "return_pct": 0.061531378496621825,
+          "sharpe": 2.0151489164211416,
+          "max_drawdown": 0.015573429682456683,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.56340956340956,
+            103.82742682392787,
+            103.61408279620747,
+            103.78936977838151,
+            103.19464326024291,
+            103.61005939605091,
+            102.21047769317501,
+            106.15313784966219
+          ]
+        },
+        {
+          "ts_code": "000068.SZ",
+          "name": "",
+          "trades": 2,
+          "win_rate": 0.0,
+          "return_pct": -0.02071673469387758,
+          "sharpe": 0,
+          "max_drawdown": 0.020716734693877612,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.03999999999999,
+            97.92832653061224
+          ]
+        },
+        {
+          "ts_code": "000069.SZ",
+          "name": "",
+          "trades": 6,
+          "win_rate": 0.5,
+          "return_pct": -0.020056459280454297,
+          "sharpe": -2.744867989766886,
+          "max_drawdown": 0.02265119063275656,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.2654867256637,
+            99.6029394565514,
+            99.6029394565514,
+            99.72198679454728,
+            100.18224211821443,
+            97.99435407195458
+          ]
+        },
+        {
+          "ts_code": "000070.SZ",
+          "name": "",
+          "trades": 8,
+          "win_rate": 0.375,
+          "return_pct": -0.02892820336604307,
+          "sharpe": -1.2648418010433686,
+          "max_drawdown": 0.045433263259376314,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.06735751295336,
+            100.29958723127835,
+            100.14973725035513,
+            99.80367009545861,
+            101.47707642981926,
+            101.24389506270393,
+            96.86664170159143,
+            97.1071796633957
+          ]
+        },
+        {
+          "ts_code": "000078.SZ",
+          "name": "",
+          "trades": 8,
+          "win_rate": 0.5,
+          "return_pct": 0.11574528759051805,
+          "sharpe": 1.8305743087040383,
+          "max_drawdown": 0.031049581425187697,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.8860759493671,
+            100.28793715915346,
+            115.1498844731003,
+            113.46931859160101,
+            114.51526482442861,
+            115.013157280187,
+            113.26221070666773,
+            111.57452875905182
+          ]
+        },
+        {
+          "ts_code": "000088.SZ",
+          "name": "",
+          "trades": 8,
+          "win_rate": 0.75,
+          "return_pct": 0.009806969549790878,
+          "sharpe": 1.5009883328953317,
+          "max_drawdown": 0.007566904832368038,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            100.2771362586605,
+            100.6285748203147,
+            100.41989805225414,
+            99.86712797123255,
+            100.35827778092712,
+            100.56543936350242,
+            100.91142137966125,
+            100.9806969549791
+          ]
+        },
+        {
+          "ts_code": "000089.SZ",
+          "name": "",
+          "trades": 3,
+          "win_rate": 0.0,
+          "return_pct": -0.01216090413383586,
+          "sharpe": -8.878544266805934,
+          "max_drawdown": 0.012160904133835828,
+          "skipped": false,
+          "skip_reason": "",
+          "equity_curve": [
+            100.0,
+            99.77777777777777,
+            98.9163868904876,
+            98.78390958661642
+          ]
+        }
+      ],
+      "meta": {
+        "ts_codes_count": 50,
+        "days": 300,
+        "walk_forward": true,
+        "use_portfolio_engine": false,
+        "skipped_count": 0,
+        "config_source": "param_registry:shaofu_v1",
+        "wf_degraded": false,
+        "wf_splits": 3
+      }
+    }
+  }
+}

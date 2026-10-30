@@ -2,6 +2,38 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## v4.7.0 (2026-10-30) — 回测死代码清理（BacktestRunner 阶段 0–1）
+
+[ADR-0002](adr/0002-backtest-runner-unification.md) 的阶段 0–1。**验收数字逐位不变**——删除的全部是零生产调用方、零测试覆盖的代码。
+
+### 清理（−1,815 行）
+
+| 删除对象 | 行数 | 理由 |
+|---|---|---|
+| `modules/position_manager.py` | 445 | 整个模块；唯一消费者是待删的 `backtest_shaofu_portfolio_integrated` |
+| `modules/industry_filter.py` | 394 | 整个模块；只被 `position_manager` 使用 |
+| `modules/statistics/criteria.py` | 309 | 整个模块；唯一消费者是待删的 `backtest_shaofu_with_validation` |
+| `backtest_six_step.py::backtest_shaofu_portfolio_integrated` | 381 | 零调用方 |
+| `dynamic_config.py::DynamicConfigAdapter` | 164 | 零调用方（同文件的 `MarketTimingWeights` 仍被 `market_timing.py` 使用，保留） |
+| `backtest_six_step.py::backtest_shaofu_with_validation` | 90 | 零调用方 |
+| `backtest_six_step.py::summary_with_validation` | 18 | 零调用方 |
+
+连带清理：`backtest_six_step.py` 的 `ShaofuBacktestResult.validation_report` 字段（唯一写入者与唯一读取者都是待删的函数）随之失效，一并移除；该文件的 `TYPE_CHECKING` 块与 6 组失效 import 同步删除。`modules/backtest_six_step.py` 从 848 行降到 343 行，`modules/dynamic_config.py` 从 298 行降到 134 行。
+
+### 基线快照（新增）
+
+- **`docs/BACKTEST_RUNNER_BASELINE.json`** — 阶段 0 的对照基准：`zt verify v1.0 --limit 50 --days 300` 的单次与 walk-forward 两份完整输出、五项硬指标的原始值、`modules/verify/gates.py` 的阈值，以及数据来源说明。阶段 1–3 靠它判断"数字有没有动"。
+
+### 文档
+
+- `README.md` 的统计检验章节：删除对 `backtest_shaofu_with_validation` 的使用示例，改为直接调用仍在的 `modules/statistics` 底层能力，并加注"统计检验与 v1.0 验收是两条独立路径"。
+- `docs/STATISTICS_VALIDATION.md`：顶部加状态说明；"完整验证流程"从"一键验证"改为**手动组合**写法；"验证级别"三节的门槛清单保留，但注明 `CriteriaLevel` / `validate_strategy` 已删除、无内置级别开关。
+
+### 验证
+
+- **验收数字逐位相同**：以基线快照对账，`total_trades` / `win_rate` / `total_return_pct` / `annualized_return` / `sharpe` / `calmar` / `sortino` / `max_drawdown` 与四项 gate 全部 `==`。
+- pytest **1568 passed**（不变——被删的代码本来就没有测试）/ ruff / mypy 81 文件 / SKILL 质量门 12/12。
+
 ## v4.6.0 (2026-10-30) — BacktestRunner 设计 ADR 与分阶段实施计划
 
 ### 新增
