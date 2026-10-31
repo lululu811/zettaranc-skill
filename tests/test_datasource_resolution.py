@@ -15,18 +15,31 @@ from modules.data_sync.syncer import DataSyncer
 
 # 决议矩阵：环境变量 → 期望选中的 provider
 #   provider 为 None 表示"无配置"，调用方回退免费源 a-stock-data
+#   JNB 模式（DATA_MODE=jnb）下 tushare 还需 TUSHARE_API_URL 才算配置完整——
+#   缺任一项都回退 a-stock-data（见 TushareClient.__init__ 的 CONFIG_MISSING 检查）
 _MATRIX = [
     ({}, None, "零配置"),
     ({"HITHINK_FINANCE_API_KEY": "k"}, "hithink", "配置了 hithink key"),
     ({"INDEVS_API_KEY": "k"}, "indevs", "配置了 indevs key"),
     ({"HITHINK_FINANCE_API_KEY": "k", "INDEVS_API_KEY": "k"}, "hithink", "hithink 优先于 indevs"),
-    ({"DATA_MODE": "jnb", "TUSHARE_TOKEN": "t"}, "tushare", "JNB 模式且配了 token"),
+    (
+        {"DATA_MODE": "jnb", "TUSHARE_TOKEN": "t", "TUSHARE_API_URL": "https://example.invalid"},
+        "tushare",
+        "JNB 模式且配了 token",
+    ),
     ({"TUSHARE_TOKEN": "t"}, None, "仅 token 但非 JNB 模式（tushare 无数据后端）"),
     ({"DATA_MODE": "jnb"}, None, "JNB 模式但没配 token"),
+    ({"DATA_MODE": "jnb", "TUSHARE_TOKEN": "t"}, None, "JNB 模式有 token 但缺 API URL"),
     ({"DATA_MODE": "websearch", "TUSHARE_TOKEN": "t"}, None, "websearch 模式配了 token"),
 ]
 
-_ALL_ENV_KEYS = ("HITHINK_FINANCE_API_KEY", "INDEVS_API_KEY", "TUSHARE_TOKEN", "DATA_MODE")
+_ALL_ENV_KEYS = (
+    "HITHINK_FINANCE_API_KEY",
+    "INDEVS_API_KEY",
+    "TUSHARE_TOKEN",
+    "TUSHARE_API_URL",
+    "DATA_MODE",
+)
 
 
 def _clean_env(monkeypatch, env: dict[str, str]) -> None:
@@ -34,6 +47,16 @@ def _clean_env(monkeypatch, env: dict[str, str]) -> None:
         monkeypatch.delenv(key, raising=False)
     for key, value in env.items():
         monkeypatch.setenv(key, value)
+    # ``TUSHARE_API_URL`` 是 **import 时**读的模块级常量，monkeypatch 环境变量
+    # 改不了已导入的模块——必须直接改模块属性。否则本机 .env 里有它、CI 没有，
+    # 同一个测试在两边结果不同（JNB + token 时期望 tushare，CI 缺 URL 会回退
+    # a-stock-data）。
+    from modules import tushare_client
+
+    monkeypatch.setattr(tushare_client, "TUSHARE_API_URL", env.get("TUSHARE_API_URL", ""), raising=False)
+    from modules.data_sync import syncer as syncer_mod
+
+    monkeypatch.setattr(syncer_mod, "TUSHARE_API_URL", env.get("TUSHARE_API_URL", ""), raising=False)
 
 
 class TestResolveProvider:

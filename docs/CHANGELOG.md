@@ -2,6 +2,43 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## v4.13.1 (2026-10-31) — CI 修复：决议口径对齐 + 测试优雅降级
+
+PR #35 的 CI 暴露了三个问题——都是**本地测不出来**的那类（本地环境比 CI 完整）。
+
+### 修复：数据源决议与实际可用性口径不一致
+
+`resolve_provider()` 只判 `TUSHARE_TOKEN`，但 `TushareClient.__init__` 在 JNB 模式下要求 `TUSHARE_TOKEN` **与** `TUSHARE_API_URL` 两项齐全，缺任一项都抛 `CONFIG_MISSING`。
+
+后果：**决议说 "tushare"，实际构造失败回退 a-stock-data** —— 读路径与决议不一致。`tests/test_datasource_resolution.py` 的 `TestReadPathMatchesResolution`（断言"读路径首选源 == 决议结果"）在 CI 上直接失败。
+
+现在 `resolve_provider()` 与构造条件对齐：JNB 模式要两项齐全才路由 tushare。
+
+这个缺陷靠**本机 `.env` 恰好配了 `TUSHARE_API_URL`** 一直没暴露——CI 没有该变量才现形。
+
+### 修复：测试未对可选依赖做优雅降级
+
+API 侧依赖（fastapi / pydantic / pydantic-settings）**不在 `requirements.txt`** 里（见 AGENTS.md），CI 环境不装。本机装了，所以新增的 API 测试在本地全绿、在 CI 全红：
+
+```
+ModuleNotFoundError: No module named 'pydantic'
+```
+
+涉及 `tests/test_simulation_config.py`（2 项）与 `tests/test_output_units.py`（3 项）。现用 `pytest.importorskip` 优雅跳过——**"CI 缺可选依赖"不该变成"测试失败"**。
+
+验证：屏蔽 pydantic 后全量 **1639 passed / 27 skipped / 0 failed**。
+
+### 修复：mypy 与文件末尾换行
+
+- `modules/cli.py`：`SystemExit.code` 是 `str | int | None`，`int(exc.code)` 过不了 mypy。改为显式 `isinstance` 判断。
+  - 注：本地 mypy 跑的是 86 个文件，**没覆盖 `modules/cli.py`**；CI 的 pre-commit 钩子检查 `modules/(screener|cli|data_sync|indicators/core|strategies/.*)\.py$` 才暴露出来。现本地也按 CI 的范围跑。
+- `docs/BACKTEST_RUNNER_BASELINE.json` 缺文件末尾换行，pre-commit 的 `end-of-file-fixer` 会改它 → CI 判定"files were modified by this hook"。
+
+### 验证
+
+- pytest **1655 passed** / 16 skipped（有 pydantic）/ **1639 passed / 27 skipped**（无 pydantic，模拟 CI）
+- ruff check + format（modules + tests + api）、mypy（按 CI 范围 27 文件）、SKILL 质量门 12/12
+
 ## v4.13.0 (2026-10-31) — 子命令错误出口补齐 + OOS/IS「算不出来」的诚实表达
 
 收掉两个此前遗留的出口问题。**验收核心指标逐位未变**（114 笔 / sharpe −0.8169）——本轮只改错误出口与指标的可解释性，不动任何计算口径。

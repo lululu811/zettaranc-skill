@@ -14,6 +14,12 @@ import dataclasses
 import pytest
 
 
+def _require_api_deps() -> None:
+    """API 侧依赖缺失时跳过该测试（fastapi/pydantic 是可选依赖）。"""
+    pytest.importorskip("pydantic", reason="pydantic 是 API 可选依赖，未安装则跳过")
+    pytest.importorskip("api.models.simulator", reason="api 包依赖缺失则跳过")
+
+
 def _cli_default_args():
     """从**真实 parser** 取 CLI 的默认参数——避免测试里再抄一份默认值。"""
     from modules.cli import build_parser
@@ -22,6 +28,10 @@ def _cli_default_args():
 
 
 class TestCliApiConfigParity:
+    @pytest.fixture(autouse=True)
+    def _skip_without_api(self):
+        _require_api_deps()
+
     def test_default_configs_are_identical(self):
         from api.models.simulator import SimulationRequest
         from api.services.simulator_service import _request_to_config

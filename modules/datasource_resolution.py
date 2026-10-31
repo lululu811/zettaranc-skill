@@ -24,11 +24,16 @@
 ``HITHINK_FINANCE_API_KEY``                   hithink（同花顺官方）
 ``INDEVS_API_KEY``                            indevs
 ``DATA_MODE=jnb`` 且 ``TUSHARE_TOKEN``        tushare
+  且 ``TUSHARE_API_URL``
 其它                                           无（调用方回退 a-stock-data 免费源）
 ============================================  ==========================
 
 websearch 模式下 ``TushareClient._pro is None``（无数据后端），即使配了
 ``TUSHARE_TOKEN`` 也不路由 tushare —— 那等于把请求送到一个必然返回 None 的源。
+
+JNB 模式同理：``TushareClient.__init__`` 要求 ``TUSHARE_TOKEN`` **与**
+``TUSHARE_API_URL`` 两项齐全才可用，缺任一项都抛 ``CONFIG_MISSING``。只判
+token 会让决议说 "tushare" 而实际构造失败回退——决议与实际用的源不一致。
 """
 
 from __future__ import annotations
@@ -74,8 +79,15 @@ def resolve_provider() -> ProviderResolution:
         return ProviderResolution("hithink", "配置了 HITHINK_FINANCE_API_KEY")
     if os.environ.get("INDEVS_API_KEY"):
         return ProviderResolution("indevs", "配置了 INDEVS_API_KEY")
-    if os.environ.get("DATA_MODE", "websearch") == "jnb" and os.environ.get("TUSHARE_TOKEN"):
-        return ProviderResolution("tushare", "JNB 模式且配置了 TUSHARE_TOKEN")
+    if os.environ.get("DATA_MODE", "websearch") == "jnb":
+        token = os.environ.get("TUSHARE_TOKEN")
+        api_url = os.environ.get("TUSHARE_API_URL")
+        # JNB 模式下 tushare 要**两项**配置齐全才能用：``TushareClient.__init__``
+        # 缺任一项都抛 CONFIG_MISSING（见该文件的 JNB 检查）。只判 token 会让
+        # 决议说 "tushare" 而实际构造时回退 a-stock-data —— 决议与实际用的源
+        # 不一致。判定口径必须与构造条件一致。
+        if token and api_url:
+            return ProviderResolution("tushare", "JNB 模式且配置了 TUSHARE_TOKEN 与 TUSHARE_API_URL")
     return ProviderResolution(None, "未配置数据源，走免费源兜底")
 
 

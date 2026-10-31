@@ -72,6 +72,22 @@ def _shaofu_result() -> ShaofuBacktestResult:
     )
 
 
+def _require_api_deps() -> None:
+    """API 侧依赖缺失时跳过（fastapi/pydantic 是可选依赖，不在 requirements.txt）。
+
+    CI 环境只装 requirements.txt，没装 API 依赖——不能让"缺可选依赖"变成
+    "测试失败"。
+    """
+    pytest.importorskip("pydantic", reason="pydantic 是 API 可选依赖，未安装则跳过")
+
+
+@pytest.fixture
+def _skip_without_api_deps():
+    """类级跳过：API 依赖没装时整类跳过。"""
+    _require_api_deps()
+
+
+@pytest.mark.usefixtures("_skip_without_api_deps")
 class TestApiShaofuSerializerUnits:
     """API 的少妇战法序列化（LoopTrade → 百分数，不能再乘 100）。"""
 
@@ -100,6 +116,7 @@ class TestApiShaofuSerializerUnits:
         assert response["equity_curve"][0][1] == pytest.approx(110000.0)
 
 
+@pytest.mark.usefixtures("_skip_without_api_deps")
 class TestApiPortfolioSerializerUnits:
     """API 的组合序列化（single.Trade → 分数，乘 100 才对）。"""
 
@@ -141,6 +158,7 @@ class TestCliSerializerUnits:
         assert cli_value == api_value == pytest.approx(PCT)
 
 
+@pytest.mark.usefixtures("_skip_without_api_deps")
 class TestSimulatorSerializerUnits:
     """模拟器的 TradeRecord.pnl_pct 是分数，×100 是对的——别"顺手修错"。"""
 

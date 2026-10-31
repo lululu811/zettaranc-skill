@@ -342,7 +342,8 @@ def main() -> None:
     try:
         args = parser.parse_args()
     except SystemExit as exc:
-        if as_json and exc.code not in (0, None):
+        exit_code = exc.code
+        if as_json and exit_code not in (0, None):
             print(
                 json.dumps(
                     {
@@ -355,7 +356,9 @@ def main() -> None:
                     indent=2,
                 )
             )
-            sys.exit(int(exc.code) or 2)
+            # SystemExit.code 可能是 str（argparse 的 --help 等场景），
+            # 这里只关心非零整数退出码
+            sys.exit(exit_code if isinstance(exit_code, int) else 2)
         raise
 
     handlers = {
