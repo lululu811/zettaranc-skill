@@ -123,6 +123,21 @@ SIMULATOR_GEM_STAR_PRICE_LIMIT_PCT = 0.20
 
 
 # ---------------------------------------------------------------------------
+# 市场状态判定阈值（唯一来源）
+# ---------------------------------------------------------------------------
+# 此前同一组数字散在三处：core/market_context.py 的默认参数、simulator/market_context.py
+# 里手抄的两份判定、以及 dynamic_config.MarketTimingWeights。改一处忘另一处就会
+# 让"市场状态"在不同模块给出不同结论。
+
+MARKET_REGIME_STRONG_TREND = 65.0
+MARKET_REGIME_WEAK_TREND = 40.0
+MARKET_REGIME_STRONG_BREADTH = 0.1
+MARKET_REGIME_WEAK_BREADTH = -0.15
+MARKET_REGIME_STRONG_MONEYFLOW = 55.0
+MARKET_REGIME_WEAK_MONEYFLOW = 40.0
+
+
+# ---------------------------------------------------------------------------
 # 搜索空间粒度（参数优化器步长）
 # ---------------------------------------------------------------------------
 

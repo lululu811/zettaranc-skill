@@ -29,6 +29,8 @@ from dataclasses import dataclass, fields, replace
 from modules.loop_engine import LoopConfig
 from modules.market_regime import TrendRegime
 from .constants import (
+    MARKET_REGIME_STRONG_TREND,
+    MARKET_REGIME_WEAK_TREND,
     BACKTEST_BEAR_POSITION_PCT,
     BACKTEST_BULL_POSITION_PCT,
     BACKTEST_DEFAULT_STOP_LOSS_PCT,
@@ -59,9 +61,9 @@ class MarketTimingWeights:
     weight_sentiment: float = 0.10
     weight_amv: float = 0.15
 
-    # 状态分类阈值
-    strong_threshold: float = 65.0
-    weak_threshold: float = 40.0
+    # 状态分类阈值（唯一来源：modules.constants）
+    strong_threshold: float = MARKET_REGIME_STRONG_TREND
+    weak_threshold: float = MARKET_REGIME_WEAK_TREND
 
     # 强弱势涨跌阈值
     strong_up_pct: float = 5.0
