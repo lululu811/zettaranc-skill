@@ -19,6 +19,7 @@ from .bridge_client import (
     is_bridge_available,
     set_bridge_config,
 )
+from .core.kline import KLINE_COLUMNS, read_kline_rows, read_kline_rows_batch, resolve_kline_limit
 from .database import get_connection, save_klines
 from .hithink_client import HithinkFinanceClient
 from .indevs_client import IndevsClient
@@ -30,7 +31,8 @@ from modules.datasource_resolution import resolve_provider
 logger = logging.getLogger(__name__)
 
 # get_kline_dicts 的固定返回列（与 SELECT 顺序一致，用于元组转 dict）
-_KLINE_COLUMNS = ("ts_code", "trade_date", "open", "high", "low", "close", "vol", "amount", "pct_chg")
+# K 线列定义与读取 SQL 的唯一来源：modules.core.kline
+_KLINE_COLUMNS = KLINE_COLUMNS
 
 
 @runtime_checkable
@@ -539,26 +541,13 @@ class SqliteDataSource:
         with get_connection() as conn:
             # sqlite3.Row 构造开销大，批量逐股调用场景下用裸元组 + zip 转 dict 更快
             conn.row_factory = None
-            cursor = conn.cursor()
-            params: list = [ts_code]
-            sql = """
-                SELECT ts_code, trade_date, open, high, low, close, vol, amount, pct_chg
-                FROM daily_kline
-                WHERE ts_code = ?
-            """
-            if start_date:
-                sql += " AND trade_date >= ?"
-                params.append(start_date)
-            if end_date:
-                sql += " AND trade_date <= ?"
-                params.append(end_date)
-            sql += " ORDER BY trade_date DESC"
-            if not start_date and days > 0:
-                sql += " LIMIT ?"
-                params.append(days)
-            cursor.execute(sql, params)
-            rows = cursor.fetchall()
-        return [dict(zip(_KLINE_COLUMNS, row)) for row in reversed(rows)]
+            return read_kline_rows(
+                ts_code,
+                conn=conn,
+                limit=resolve_kline_limit(days, start_date),
+                start_date=start_date,
+                end_date=end_date,
+            )
 
     def get_kline_dicts_batch(
         self,
@@ -578,34 +567,16 @@ class SqliteDataSource:
         with get_connection() as conn:
             # sqlite3.Row 构造开销大，批量场景下用裸元组 + zip 转 dict 更快
             conn.row_factory = None
-            cursor = conn.cursor()
             # 单条 IN 查询替代 N+1 次逐股 SELECT，语义与原逐股查询一致：
             #   每只股票按 trade_date DESC 取最近 days 条（无 start_date 时），
             #   含日期区间过滤；Python 端按 ts_code 分组 + 截断 + 反转为升序。
-            placeholders = ",".join("?" for _ in ts_codes)
-            params: list = list(ts_codes)
-            sql = f"""
-                SELECT ts_code, trade_date, open, high, low, close, vol, amount, pct_chg
-                FROM daily_kline
-                WHERE ts_code IN ({placeholders})
-            """
-            if start_date:
-                sql += " AND trade_date >= ?"
-                params.append(start_date)
-            if end_date:
-                sql += " AND trade_date <= ?"
-                params.append(end_date)
-            sql += " ORDER BY ts_code, trade_date DESC"
-            cursor.execute(sql, params)
-            per_code: dict[str, list[tuple]] = {}
-            for row in cursor.fetchall():
-                per_code.setdefault(row[0], []).append(row)
-            for ts_code in ts_codes:
-                rows = per_code.get(ts_code, [])
-                if not start_date and days > 0:
-                    rows = rows[:days]
-                result[ts_code] = [dict(zip(_KLINE_COLUMNS, row)) for row in reversed(rows)]
-        return result
+            return read_kline_rows_batch(
+                ts_codes,
+                conn=conn,
+                days=days,
+                start_date=start_date,
+                end_date=end_date,
+            )
 
 
 class CompositeDataSource:
@@ -939,40 +910,22 @@ class CompositeDataSource:
         end_date: str | None = None,
     ) -> list[dict]:
         """获取 K 线数据，优先从 DB 读取，DB 没有时调 API 并缓存"""
-        # 1. 先查 DB
+        # 1. 先查 DB（与 SqliteDataSource 走同一条 SQL——此前这里是逐字副本）
         with get_connection() as conn:
             # sqlite3.Row 构造开销大，批量逐股调用场景下用裸元组 + zip 转 dict 更快
             conn.row_factory = None
-            cursor = conn.cursor()
-            sql = """
-                SELECT ts_code, trade_date, open, high, low, close, vol, amount, pct_chg
-                FROM daily_kline
-                WHERE ts_code = ?
-            """
-            params: list = [ts_code]
-
-            if start_date:
-                sql += " AND trade_date >= ?"
-                params.append(start_date)
-            if end_date:
-                sql += " AND trade_date <= ?"
-                params.append(end_date)
-
-            sql += " ORDER BY trade_date DESC"
-
             # 与 TushareDataSource / SqliteDataSource 对齐：只要未指定 start_date，
             # 就按 days 截断最近 N 天（即使指定了 end_date），避免拉取全历史
-            if not start_date and days > 0:
-                sql += " LIMIT ?"
-                params.append(days)
+            records = read_kline_rows(
+                ts_code,
+                conn=conn,
+                limit=resolve_kline_limit(days, start_date),
+                start_date=start_date,
+                end_date=end_date,
+            )
 
-            cursor.execute(sql, params)
-            rows = cursor.fetchall()
-
-        if rows:
-            # DB 有数据，直接返回
-            records = [dict(zip(_KLINE_COLUMNS, row)) for row in rows]
-            records.reverse()  # 因为查询时是 DESC，需要反转为 ASC
+        if records:
+            # DB 有数据，直接返回（helper 已按 trade_date 升序返回）
             return records
 
         # 2. DB 没有数据，调 API
