@@ -17,6 +17,7 @@ import logging
 from typing import Any
 
 from ..indicators import calculate_macd
+from ..indicators.price_patterns import white_line_series, yellow_line_series
 from .data import _dict_to_daily
 
 logger = logging.getLogger(__name__)
@@ -64,50 +65,6 @@ def _active(strategy: str, name: str, fallback: float) -> float:
     except (ImportError, TypeError, ValueError) as e:
         logger.debug("[simple_perfect] 读取参数 %s 失败，用默认值 %s: %s", name, fallback, e)
         return float(fallback)
-
-
-def _ma_series(values: list[float], period: int) -> list[float]:
-    """简单均线序列（O(n) 滚动求和），不足周期的位置填 None"""
-    out: list[float | None] = [None] * len(values)
-    if period <= 0 or len(values) < period:
-        return out  # type: ignore[return-value]
-    running = sum(values[:period])
-    out[period - 1] = running / period
-    for i in range(period, len(values)):
-        running += values[i] - values[i - period]
-        out[i] = running / period
-    return out  # type: ignore[return-value]
-
-
-def _ema_series(values: list[float], period: int) -> list[float]:
-    """EMA 序列，alpha = 2 / (period + 1)"""
-    out: list[float] = []
-    alpha = 2.0 / (period + 1)
-    prev = values[0] if values else 0.0
-    for v in values:
-        prev = v if not out else alpha * v + (1 - alpha) * prev
-        out.append(prev)
-    return out
-
-
-def _white_series(closes: list[float]) -> list[float]:
-    """白线 = EMA(EMA(C,10),10)"""
-    return _ema_series(_ema_series(closes, 10), 10)
-
-
-def _yellow_series(closes: list[float]) -> list[float | None]:
-    """大哥线（黄线）= (MA14+MA28+MA57+MA114)/4，不足 114 根的位置填 None"""
-    ma14 = _ma_series(closes, 14)
-    ma28 = _ma_series(closes, 28)
-    ma57 = _ma_series(closes, 57)
-    ma114 = _ma_series(closes, 114)
-    out: list[float | None] = []
-    for a, b, c, d in zip(ma14, ma28, ma57, ma114):
-        if a is None or b is None or c is None or d is None:
-            out.append(None)
-        else:
-            out.append((a + b + c + d) / 4)
-    return out
 
 
 def _vol_ma5(klines: list, i: int) -> float:
@@ -371,8 +328,8 @@ def detect_simple_perfect_3(klines: list) -> dict[str, Any]:
     details: dict[str, Any] = {}
 
     closes = [k.close for k in klines]
-    yellow = _yellow_series(closes)
-    white = _white_series(closes)
+    yellow = yellow_line_series(closes)
+    white = white_line_series(closes)
 
     wave_min_gain = _active("simple_perfect_3", "wave_min_gain", WAVE_MIN_GAIN)
 

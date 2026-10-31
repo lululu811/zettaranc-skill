@@ -1,6 +1,8 @@
 from .base import (
     calculate_zg_white,
     calculate_dg_yellow,
+    white_line_series,
+    yellow_line_series,
     detect_double_line_cross,
     calculate_rsl,
     detect_needle_20,
@@ -55,6 +57,8 @@ from .screener_helper import (
 __all__ = [
     "calculate_zg_white",
     "calculate_dg_yellow",
+    "white_line_series",
+    "yellow_line_series",
     "detect_double_line_cross",
     "calculate_rsl",
     "detect_needle_20",

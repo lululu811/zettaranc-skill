@@ -1,4 +1,4 @@
-from ..core import DailyData, calculate_ma, calculate_ema_series
+from ..core import DailyData, calculate_ma, calculate_ma_series, calculate_ema_series
 
 
 def calculate_zg_white(klines: list[DailyData]) -> float:
@@ -10,9 +10,8 @@ def calculate_zg_white(klines: list[DailyData]) -> float:
     if len(klines) < 10:
         return 0
     closes = [k.close for k in klines]
-    ema1_series = calculate_ema_series(closes, 10)
-    ema2_series = calculate_ema_series(ema1_series, 10)
-    return round(ema2_series[-1], 2) if ema2_series else 0
+    series = white_line_series(closes)
+    return round(series[-1], 2) if series else 0
 
 
 def calculate_dg_yellow(klines: list[DailyData]) -> float:
@@ -24,11 +23,48 @@ def calculate_dg_yellow(klines: list[DailyData]) -> float:
     if len(klines) < 114:
         return 0
     closes = [k.close for k in klines]
-    ma14 = calculate_ma(closes, 14)
-    ma28 = calculate_ma(closes, 28)
-    ma57 = calculate_ma(closes, 57)
-    ma114 = calculate_ma(closes, 114)
-    return round((ma14 + ma28 + ma57 + ma114) / 4, 2)
+    series = yellow_line_series(closes)
+    # 取最后一个非 None 值
+    for v in reversed(series):
+        if v is not None:
+            return round(v, 2)
+    return 0
+
+
+def white_line_series(closes: list[float]) -> list[float]:
+    """白线完整序列 = EMA(EMA(C,10),10)。
+
+    供形态判定使用（需要逐日比较的场景）。
+    标量版本见 calculate_zg_white。
+    """
+    if len(closes) < 10:
+        return []
+    ema1_series = calculate_ema_series(closes, 10)
+    if not ema1_series:
+        return []
+    return calculate_ema_series(ema1_series, 10)
+
+
+def yellow_line_series(closes: list[float]) -> list[float | None]:
+    """黄线完整序列 = (MA14+MA28+MA57+MA114)/4。
+
+    供形态判定使用（需要逐日比较的场景）。
+    不足 114 根的位置填 None。
+    标量版本见 calculate_dg_yellow。
+    """
+    if len(closes) < 14:
+        return [None] * len(closes)
+    ma14 = calculate_ma_series(closes, 14)
+    ma28 = calculate_ma_series(closes, 28)
+    ma57 = calculate_ma_series(closes, 57)
+    ma114 = calculate_ma_series(closes, 114)
+    out: list[float | None] = []
+    for a, b, c, d in zip(ma14, ma28, ma57, ma114):
+        if a is None or b is None or c is None or d is None:
+            out.append(None)
+        else:
+            out.append((a + b + c + d) / 4)
+    return out
 
 
 def detect_double_line_cross(klines: list[DailyData]) -> tuple[bool, bool]:
