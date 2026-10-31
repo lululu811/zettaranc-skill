@@ -2,6 +2,42 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## v4.8.0 (2026-10-31) — 解除回测依赖倒挂（BacktestRunner 阶段 2）
+
+[ADR-0002](adr/0002-backtest-runner-unification.md) 阶段 2。**纯搬迁，验收数字逐位不变。**
+
+### 修复
+
+- **依赖方向倒挂解除。** 此前 `modules/backtest/`（"新"包）反过来 import 已弃用的 `modules/backtest_six_step.py`：`b1_b2_backtest.py:22` 与 `_rust_bridge.py:276`。现在新包不再依赖旧包，**倒挂断言成立**：
+  ```
+  grep -rE "^\s*(from|import)\s+.*backtest_six_step" modules/backtest/*.py   # 无命中
+  ```
+  起因是 `6198aa1` 自己写的弃用说明承诺「将在 v4.5 后逐步替换为 `modules/backtest/single.py` 与 `portfolio.py`」——但 `modules/backtest/` 从来没有 shaofu 等价物，替代从未发生。
+
+### 重构
+
+- **新增 `modules/backtest/shaofu.py`** —— 少妇战法回测的**唯一实现**，原样迁入 `ShaofuBacktestResult` / `_calc_metrics` / `backtest_shaofu_single` / `summary_text`（176 行，函数体一字未改）。`modules/backtest/__init__.py` 导出前三个。
+- **`modules/backtest_six_step.py` 降级为兼容 re-export** —— 旧导入路径 `from modules.backtest_six_step import X` 继续可用（包已发布到 PyPI）。`backtest_shaofu_portfolio` 暂留（ADR-0002 决策 1：阶段 4 由真组合取代），并加 `.. deprecated::` 说明它与真组合的数字不可比。
+- **9 处生产导入点改指新位置**：`verify/pipeline.py`、`verify/walk_forward.py`、`statistics/sensitivity.py`、`statistics/ensemble.py`、`api/services/backtest_service.py`、`scripts/eval_strategies.py`、`backtest/_rust_bridge.py`、`backtest/b1_b2_backtest.py`。
+
+### 修复（测试隔离）
+
+- **`tests/test_cli_uses_rust.py` 的 autouse fixture 会污染后续测试。** 它在 setup 时快照 `sys.modules` 的若干键，teardown 时"若 setup 时不存在就 pop"。`modules.backtest.shaofu` 在 setup 时尚未被 import（快照记成"不存在"），测试体首次 import 才把它放进 `sys.modules`——teardown 的 pop 把它删掉，于是**包属性与 `sys.modules` 指向不同对象**：后续测试从包属性拿到真模块并 patch 它，而 `from modules.backtest.shaofu import ...` 重新 import 出一个**未被 patch 的新模块**，mock 全部失效（5 个 Rust 桥测试失败）。
+  - 修复：fixture 在快照前先真正 import 被跟踪的 module，确保快照拿到的是真模块。
+  - 这是一个**此前就潜伏**的坑——同样的 pop 逻辑对 `modules.backtest_six_step` 同样成立，只是那个模块恰好在 setup 时已被导入，才没暴露。
+
+### 文档
+
+- `AGENTS.md`：「单一事实来源」补"少妇战法回测实现 → `modules/backtest/shaofu.py`"，并注明 `backtest_six_step.py` 只是兼容 re-export、新代码不要从那里导入；Key Directories 里 `modules/backtest/` 的文件列表补 `shaofu.py` 并修正写错的 `b1_b2.py` → `b1_b2_backtest.py`。
+- `docs/STATISTICS_VALIDATION.md`：示例改用 `from modules.backtest import backtest_shaofu_single`。
+- `docs/WEB_ROADMAP.md`：算法层清单里移除已删的 `position_manager`，`backtest_six_step` 改为 `backtest/`。
+
+### 验证
+
+- **验收数字与基线逐位相同**：`total_trades` 193 / `sharpe` 1.2502485663220784 / `calmar` 4.183420808217639 / `win_rate` 0.45595854922279794 / `max_drawdown` 0.004161901067962086，四项 gate 全通过。
+- 旧导入路径仍可用且与新路径指向**同一批对象**（两种导入顺序都验过）。
+- pytest **1568 passed** / ruff / mypy 82 文件 / SKILL 质量门 12/12。
+
 ## v4.7.0 (2026-10-30) — 回测死代码清理（BacktestRunner 阶段 0–1）
 
 [ADR-0002](adr/0002-backtest-runner-unification.md) 的阶段 0–1。**验收数字逐位不变**——删除的全部是零生产调用方、零测试覆盖的代码。

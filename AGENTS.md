@@ -9,7 +9,7 @@
 - **核心交付物**：`SKILL.md`（Skill-Schema-V2 合规的角色扮演协议，被 Claude Code/Cursor 加载）——LLM 用 Z 哥角色生成点评/话术。
 - **数据层**：Python 包 `modules/`，只负责**数据准备**（指标、信号、回测、评分），不做投资话术——这是刻意分层，避免「AI 味」。
 - **可选层**：`api/`（FastAPI REST）+ `frontend/`（React 看板）+ `rust/`（Rust 加速计算核）。
-- **当前版本**：`v4.7.0`（`pyproject.toml:7`、`SKILL.md` frontmatter + 版本表、`skill.json:3`、`README.md` badge、`docs/CHANGELOG.md` 顶端、`AGENTS.md` 本行，共 **7 处**必须一致；改 `pyproject.toml` 的 `version` 时同步这 7 处，`docs/INDEX.md` 维护规则有同样的清单）。
+- **当前版本**：`v4.8.0`（`pyproject.toml:7`、`SKILL.md` frontmatter + 版本表、`skill.json:3`、`README.md` badge、`docs/CHANGELOG.md` 顶端、`AGENTS.md` 本行，共 **7 处**必须一致；改 `pyproject.toml` 的 `version` 时同步这 7 处，`docs/INDEX.md` 维护规则有同样的清单）。
 - **许可证**：MIT。
 
 ## Architecture & Data Flow
@@ -76,6 +76,7 @@ modules/backtest/_rust_bridge.py  # is_rust_available() / try_call(name,...) →
 - ATR → `modules/core/atr.py`。
 - 错误 → `modules/core/errors.py`（`ZettarancError` 基类 + 统一错误码）。
 - 数据源决议 → `modules/datasource_resolution.py`（`resolve_provider()`：读路径与写路径共用同一份"环境变量 → provider"判断）。
+- 少妇战法回测实现 → `modules/backtest/shaofu.py`（`ShaofuBacktestResult` / `_calc_metrics` / `backtest_shaofu_single` / `summary_text`）。`modules/backtest_six_step.py` 只是**兼容 re-export**，新代码不要从那里导入。
 - 活跃市值闸门 → `modules/active_market_gate.py`（`GateAction` 枚举、`GateThresholds` 阈值、`TradingGate` port、失败策略的唯一来源）。注意 `signal`（当日涨跌幅判多空）与 `gate`（两日累计判闸门）是**两组不同语义的阈值**，不可合并；详见 `CONTEXT.md` 与 `docs/adr/0001-*.md`。
 - **不要**在新代码里另立第二套 `MarketRegime`/`PerformanceMetrics`/ATR/路径常量；一律从 `modules/core` 导入。
 
@@ -89,7 +90,7 @@ modules/backtest/_rust_bridge.py  # is_rust_available() / try_call(name,...) →
 | `modules/strategies/` | 30+ 战法识别（`core.py`、`base_strategies.py`、`compound_strategies.py`、`sell_signals.py`、`vectorized.py`），入口 `detect_all_strategies` |
 | `modules/screener/` | 选股评分（`engine.py`、`criteria.py`、`scoring.py`、`market.py`、`workflow.py`） |
 | `modules/simulator/` | 少女/少妇模拟器（`simulator.py`、`walk_forward.py`、`position_sizer.py`、`execution_engine.py` 等） |
-| `modules/backtest/` | 单策略/组合回测（`single.py`、`portfolio.py`、`b1_b2.py`、`_rust_bridge.py`） |
+| `modules/backtest/` | 单策略/组合回测（`single.py`、`portfolio.py`、`b1_b2_backtest.py`、`shaofu.py`、`_rust_bridge.py`） |
 | `modules/verify/` | 少妇战法 v1.0 验收工程化（`pipeline.py`、`gates.py`、`walk_forward.py`、`portfolio_walk_forward.py`） |
 | `modules/data_sync/` | 数据同步/限流（`rate_limiter.py`、`syncer.py`、`fetcher.py`、`indicator_cache.py`） |
 | `modules/self_optimizer/` | Darwin 自优化管线（`param_registry.py`、`mutator.py`、`scorer.py`） |

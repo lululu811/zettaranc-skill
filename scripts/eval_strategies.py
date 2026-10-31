@@ -18,7 +18,7 @@ sys.path.insert(0, str(project_root))
 
 from dotenv import load_dotenv  # noqa: E402  在 sys.path 设置后导入
 from modules.database import get_connection  # noqa: E402
-from modules.backtest_six_step import backtest_shaofu_single  # noqa: E402
+from modules.backtest import backtest_shaofu_single  # noqa: E402
 from modules.backtest import backtest_multi_strategy  # noqa: E402
 from modules.screener import screen_stocks  # noqa: E402
 

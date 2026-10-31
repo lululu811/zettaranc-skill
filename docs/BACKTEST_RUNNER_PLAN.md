@@ -12,12 +12,13 @@
 |---|---|---|---|---|---|
 | 0 | 基线快照 | 0 行 | — | 是（准备工作） | ✅ 已完成 |
 | 1 | 删死代码 | **−1,815 行** | 不变 | ✅ | ✅ 已完成 |
-| 2 | 解除倒挂依赖 | 搬迁 ~176 行 | 不变 | ✅ | ⬜ 待做 |
+| 2 | 解除倒挂依赖 | 搬迁 176 行 | 不变 | ✅ | ✅ 已完成 |
 | 3 | 结果形状与指标归一 | 改 3–4 个文件 | **必须逐位相同** | ✅ | ⬜ 待做 |
 | 4 | 换引擎 + 换 B1 检测器 | 改 4–6 个文件 | **会动，需重新基线** | ⚠️ 需产品确认 | ⬜ 待做 |
 | 5 | Rust 对齐 | 待定 | 视实现 | 视情况 | ⬜ 待做 |
 
-> **阶段 0–1 已完成**（v4.7.0）。基线快照见 [`BACKTEST_RUNNER_BASELINE.json`](BACKTEST_RUNNER_BASELINE.json)；删除后的验收数字与基线**逐位相同**（`total_trades` 193 / `sharpe` 1.2502485663220784 / `calmar` 4.183420808217639 / `win_rate` 0.45595854922279794 / `max_drawdown` 0.004161901067962086，四项 gate 全通过）。
+> **阶段 0–2 已完成**（v4.7.0 / v4.8.0）。基线快照见 [`BACKTEST_RUNNER_BASELINE.json`](BACKTEST_RUNNER_BASELINE.json)；阶段 1 与阶段 2 之后的验收数字与基线**逐位相同**（`total_trades` 193 / `sharpe` 1.2502485663220784 / `calmar` 4.183420808217639 / `win_rate` 0.45595854922279794 / `max_drawdown` 0.004161901067962086，四项 gate 全通过）。
+> **依赖倒挂已解除**：`grep -rE "^\s*(from|import)\s+.*backtest_six_step" modules/backtest/*.py` 无命中——"新"包不再依赖"已弃用"的包。少妇战法回测的唯一实现是 `modules/backtest/shaofu.py`，`modules/backtest_six_step.py` 降级为兼容 re-export。
 > 另记：基线里 `oos_is_ratio` 就是 **0.0**（阈值 0.6，不通过）——WF 跑出 `wf_splits=3`、`wf_degraded=False`，但 aggregate 与非 WF 完全相同，说明组合 walk-forward 路径没有真正切分评估。**不在 BacktestRunner 范围内**，另记。
 
 ---

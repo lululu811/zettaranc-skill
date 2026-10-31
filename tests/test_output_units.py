@@ -22,7 +22,7 @@ from modules.backtest.single import (
     Trade,
     _make_trade,
 )
-from modules.backtest_six_step import ShaofuBacktestResult, summary_text
+from modules.backtest.shaofu import ShaofuBacktestResult, summary_text
 from modules.loop_engine import LoopTrade
 
 # 一笔 +10% 的交易

@@ -273,7 +273,7 @@ def bridge_shaofu_single(
                 )
 
     # Python fallback
-    from modules.backtest_six_step import backtest_shaofu_single
+    from modules.backtest.shaofu import backtest_shaofu_single
     from modules.cli_commands import _shaofu_result_to_dict
 
     result = backtest_shaofu_single(ts_code, days=days, klines=klines)

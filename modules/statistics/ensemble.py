@@ -281,7 +281,7 @@ def backtest_with_ensemble(
         MultiStrategyBacktestResult: 集成回测结果
     """
     from modules.loop_engine import LoopConfig
-    from modules.backtest_six_step import backtest_shaofu_single
+    from modules.backtest import backtest_shaofu_single
 
     # 默认配置
     if config is None:

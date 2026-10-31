@@ -35,13 +35,16 @@ class _FakeComputeModule(ModuleType):
 
 
 # 关注 sys.modules 中这些"会被测试替换成 stub/mock"的 key。
-# 跨测试隔离时需要快照 + 还原（特别是 modules.backtest_six_step：
-# 一旦被替换为 SimpleNamespace，如果 modules.__dict__ 里已有原始模块，
-# `from modules import backtest_six_step` 与 `from modules.backtest_six_step import X`
+# 跨测试隔离时需要快照 + 还原（特别是 modules.backtest.shaofu：
+# 一旦被替换为 SimpleNamespace，如果包属性里已有原始模块，
+# `from modules.backtest import shaofu` 与 `from modules.backtest.shaofu import X`
 # 会指向不同对象 → 测试间污染）。
 _TRACKED_MODULES: tuple[str, ...] = (
     "_core_compute",
     "modules.backtest_six_step",
+    # v4.8.0 起 shaofu 实现迁到 modules.backtest.shaofu，Rust 桥的 Python
+    # 兜底也从这里导入——mock 目标随之改变
+    "modules.backtest.shaofu",
 )
 
 # 用于在快照中区分"键不存在"和"键存在但值为 None"的哨兵。
@@ -56,11 +59,11 @@ def _isolate_rust_test_state():
     - `fake_rust_module` 会把 `_core_compute` 塞进 sys.modules；
       即使单个 fixture 清理了，跨文件测试顺序加载顺序也可能在 _rust_compat 缓存里残留。
     - `test_bridge_shaofu_single_calls_rust` 直接
-      `sys.modules["modules.backtest_six_step"] = SimpleNamespace(...)` 来 mock Python
+      `sys.modules["modules.backtest.shaofu"] = SimpleNamespace(...)` 来 mock Python
       兜底路径；这会污染所有后续测试对该模块的 import 结果（特别是当
-      modules.__dict__ 里已有真实模块绑定时，`from modules import bs` 与
-      `from modules.bs import X` 会指向不同对象）。autouse 还原机制让"污染被限制
-      在产生它的那个测试内"。
+      包属性里已有真实模块绑定时，`from modules.backtest import shaofu` 与
+      `from modules.backtest.shaofu import X` 会指向不同对象）。autouse 还原机制
+      让"污染被限制在产生它的那个测试内"。
 
     只管 sys.modules 和 _rust_compat 缓存；ZETTARANC_BACKTEST_IMPL 由每个测试
     自己的 monkeypatch 负责（pytest 的 monkeypatch teardown 在 fixture teardown
@@ -69,15 +72,30 @@ def _isolate_rust_test_state():
     注意：这是 test_cli_uses_rust.py 内的本地 fixture，不影响 conftest.py。
     """
     # ── before：快照 + 清缓存 ──
+    # 先把被跟踪的 module 真正 import 进来：否则它们可能在快照之后才进入
+    # sys.modules（测试体内的首次 import），teardown 时的 pop 会把它们删掉，
+    # 于是 sys.modules 与包属性指向不同对象——后续测试从包属性拿到真模块，
+    # 而 `from modules.backtest.shaofu import ...` 重新 import 出一个未被
+    # patch 的新模块，mock 全部失效。
+    import modules.backtest.shaofu  # noqa: F401
+    import modules.backtest_six_step  # noqa: F401
+
     saved_modules = {key: sys.modules.get(key, _SENTINEL) for key in _TRACKED_MODULES}
     # 同时保存 modules.__dict__['backtest_six_step']（防止 SimpleNamespace 绑定污染
     # `from modules import backtest_six_step` 在后续测试中的解析）
     saved_pkg_attr = _SENTINEL
+    # v4.8.0 起 shaofu 实现迁至 modules.backtest.shaofu，Rust 桥的 Python 兜底
+    # 从那里导入——包属性 modules.backtest.shaofu 同样要快照还原
+    saved_shaofu_attr = _SENTINEL
     try:
         import modules as _pkg
 
         if "backtest_six_step" in _pkg.__dict__:
             saved_pkg_attr = _pkg.__dict__["backtest_six_step"]
+        import modules.backtest as _bt_pkg
+
+        if "shaofu" in _bt_pkg.__dict__:
+            saved_shaofu_attr = _bt_pkg.__dict__["shaofu"]
     except Exception:
         pass
 
@@ -88,7 +106,7 @@ def _isolate_rust_test_state():
     try:
         yield
     finally:
-        # ── after：还原 sys.modules + 还原 modules.__dict__ 绑定 + 清缓存 ──
+        # ── after：还原 sys.modules + 还原包属性绑定 + 清缓存 ──
         for key, value in saved_modules.items():
             if value is _SENTINEL:
                 sys.modules.pop(key, None)
@@ -106,6 +124,20 @@ def _isolate_rust_test_state():
                 import modules as _pkg
 
                 _pkg.__dict__.pop("backtest_six_step", None)
+            except Exception:
+                pass
+        if saved_shaofu_attr is not _SENTINEL:
+            try:
+                import modules.backtest as _bt_pkg
+
+                _bt_pkg.shaofu = saved_shaofu_attr
+            except Exception:
+                pass
+        else:
+            try:
+                import modules.backtest as _bt_pkg
+
+                _bt_pkg.__dict__.pop("shaofu", None)
             except Exception:
                 pass
         _rust_compat.reset_cache()
@@ -315,20 +347,18 @@ def test_bridge_shaofu_single_calls_rust(fake_rust_module, monkeypatch):
     # Mock Python fallback 路径，确认它没被调用。
     # 用 monkeypatch 同时打 sys.modules 和 modules.__dict__，让 pytest 在
     # teardown 时自动还原两者（避免 SimpleNamespace 绑定污染 from modules import）。
-    import modules as _modules_pkg
+    import modules.backtest as _backtest_pkg
 
     fallback_mock = MagicMock()
     _ns = SimpleNamespace(
         backtest_shaofu_single=fallback_mock,
         summary_text=lambda r: "summary",
     )
-    monkeypatch.setitem(sys.modules, "modules.backtest_six_step", _ns)
-    # modules.__dict__ 的设置必须用 monkeypatch.setattr 让其回滚；
-    # 如果原始没有 backtest_six_step 属性，setattr 会新增但不会删除。
-    # 我们手工处理：保存原始值，最后再恢复
-    _had_bs = hasattr(_modules_pkg, "backtest_six_step")
-    _orig_bs = getattr(_modules_pkg, "backtest_six_step", None)
-    _modules_pkg.backtest_six_step = _ns
+    monkeypatch.setitem(sys.modules, "modules.backtest.shaofu", _ns)
+    # 包属性也要一起替换，否则 `from modules.backtest import shaofu` 拿到的
+    # 仍是真模块，与 sys.modules 里的替身不是同一个对象。
+    # 用 monkeypatch.setattr 让它自动回滚。
+    monkeypatch.setattr(_backtest_pkg, "shaofu", _ns, raising=False)
 
     try:
         # 用最简单的 K 线 list 让 fake 接受
@@ -366,11 +396,8 @@ def test_bridge_shaofu_single_calls_rust(fake_rust_module, monkeypatch):
         assert len(result["trades"]) == 1
         assert result["trades"][0]["entry_price"] == 10.0
     finally:
-        # 还原 modules.__dict__ 的绑定
-        if _had_bs:
-            _modules_pkg.backtest_six_step = _orig_bs
-        else:
-            delattr(_modules_pkg, "backtest_six_step")
+        # sys.modules 与包属性都由 monkeypatch 自动回滚
+        pass
 
 
 def test_bridge_shaofu_single_falls_back_to_python(no_rust_module):
@@ -412,15 +439,15 @@ def test_bridge_shaofu_single_falls_back_to_python(no_rust_module):
             called["count"] += 1
             return fake_python_result
 
-        from modules import backtest_six_step
+        from modules.backtest import shaofu
 
-        original = getattr(backtest_six_step, "backtest_shaofu_single", None)
-        backtest_six_step.backtest_shaofu_single = fake_py_single
+        original = getattr(shaofu, "backtest_shaofu_single", None)
+        shaofu.backtest_shaofu_single = fake_py_single
         try:
             result = bridge_shaofu_single("600487.SH", days=250)
         finally:
             if original is not None:
-                backtest_six_step.backtest_shaofu_single = original
+                shaofu.backtest_shaofu_single = original
     finally:
         monkeypatch.undo()
 
@@ -461,17 +488,17 @@ def test_bridge_shaofu_single_silent_fallback_when_rust_raises(fake_rust_module,
         trades=[],
     )
 
-    from modules import backtest_six_step
+    from modules.backtest import shaofu
 
-    original = getattr(backtest_six_step, "backtest_shaofu_single", None)
-    backtest_six_step.backtest_shaofu_single = lambda *a, **kw: fake_python_result
+    original = getattr(shaofu, "backtest_shaofu_single", None)
+    shaofu.backtest_shaofu_single = lambda *a, **kw: fake_python_result
     try:
         with caplog.at_level(logging.WARNING):
             klines = [SimpleNamespace(trade_date="20240102", open=10.0, high=10.5, low=9.5, close=10.2, vol=1000.0)]
             result = bridge_shaofu_single("600487.SH", days=250, klines=klines)
     finally:
         if original is not None:
-            backtest_six_step.backtest_shaofu_single = original
+            shaofu.backtest_shaofu_single = original
 
     assert result["ts_code"] == "600487.SH"
     assert result["total_trades"] == 1
@@ -508,15 +535,15 @@ def test_bridge_force_python_via_env(monkeypatch, fake_rust_module):
             avg_holding_days=7.0,
             trades=[],
         )
-        from modules import backtest_six_step
+        from modules.backtest import shaofu
 
-        original = getattr(backtest_six_step, "backtest_shaofu_single", None)
-        backtest_six_step.backtest_shaofu_single = lambda *a, **kw: fake_python_result
+        original = getattr(shaofu, "backtest_shaofu_single", None)
+        shaofu.backtest_shaofu_single = lambda *a, **kw: fake_python_result
         try:
             result = bridge_shaofu_single("600487.SH", days=250)
         finally:
             if original is not None:
-                backtest_six_step.backtest_shaofu_single = original
+                shaofu.backtest_shaofu_single = original
     finally:
         monkeypatch.delenv("ZETTARANC_BACKTEST_IMPL", raising=False)
         importlib.reload(_rust_compat)
@@ -553,9 +580,10 @@ def test_cmd_backtest_shaofu_uses_rust_when_available(fake_rust_module, capsys):
         avg_holding_days=0.0,
         trades=[],
     )
-    from modules import backtest_six_step, indicators
+    from modules.backtest import shaofu
+    from modules import indicators
 
-    original_bs = getattr(backtest_six_step, "backtest_shaofu_single", None)
+    original_bs = getattr(shaofu, "backtest_shaofu_single", None)
     original_gk = getattr(indicators, "get_kline_data", None)
 
     fallback_called = {"v": 0}
@@ -575,7 +603,7 @@ def test_cmd_backtest_shaofu_uses_rust_when_available(fake_rust_module, capsys):
         )
     ]
 
-    backtest_six_step.backtest_shaofu_single = tracker
+    shaofu.backtest_shaofu_single = tracker
     indicators.get_kline_data = lambda ts_code, days: fake_klines
     try:
         args = SimpleNamespace(
@@ -587,7 +615,7 @@ def test_cmd_backtest_shaofu_uses_rust_when_available(fake_rust_module, capsys):
         cmd_backtest(args)
     finally:
         if original_bs is not None:
-            backtest_six_step.backtest_shaofu_single = original_bs
+            shaofu.backtest_shaofu_single = original_bs
         if original_gk is not None:
             indicators.get_kline_data = original_gk
 
@@ -637,10 +665,10 @@ def test_cmd_backtest_shaofu_falls_back_when_no_rust(no_rust_module, capsys):
             ],
         )
 
-        from modules import backtest_six_step
+        from modules.backtest import shaofu
 
-        original = getattr(backtest_six_step, "backtest_shaofu_single", None)
-        backtest_six_step.backtest_shaofu_single = lambda *a, **kw: fake_python_result
+        original = getattr(shaofu, "backtest_shaofu_single", None)
+        shaofu.backtest_shaofu_single = lambda *a, **kw: fake_python_result
         try:
             args = SimpleNamespace(
                 backtest_sub="shaofu",
@@ -651,7 +679,7 @@ def test_cmd_backtest_shaofu_falls_back_when_no_rust(no_rust_module, capsys):
             cmd_backtest(args)
         finally:
             if original is not None:
-                backtest_six_step.backtest_shaofu_single = original
+                shaofu.backtest_shaofu_single = original
 
         captured = capsys.readouterr()
         # Python 结果被输出
@@ -688,10 +716,10 @@ def test_cmd_backtest_shaofu_respects_python_env(fake_rust_module, capsys, monke
             avg_holding_days=5.0,
             trades=[],
         )
-        from modules import backtest_six_step
+        from modules.backtest import shaofu
 
-        original = getattr(backtest_six_step, "backtest_shaofu_single", None)
-        backtest_six_step.backtest_shaofu_single = lambda *a, **kw: fake_python_result
+        original = getattr(shaofu, "backtest_shaofu_single", None)
+        shaofu.backtest_shaofu_single = lambda *a, **kw: fake_python_result
         try:
             args = SimpleNamespace(
                 backtest_sub="shaofu",
@@ -702,7 +730,7 @@ def test_cmd_backtest_shaofu_respects_python_env(fake_rust_module, capsys, monke
             cmd_backtest(args)
         finally:
             if original is not None:
-                backtest_six_step.backtest_shaofu_single = original
+                shaofu.backtest_shaofu_single = original
     finally:
         monkeypatch.delenv("ZETTARANC_BACKTEST_IMPL", raising=False)
         importlib.reload(_rust_compat)
@@ -779,8 +807,8 @@ def test_verify_pipeline_falls_back_to_python(no_rust_module):
             called["v"] += 1
             return fake_python_result
 
-        # 注意：verify_pipeline 已 `from modules.backtest_six_step import backtest_shaofu_single`，
-        # 所以必须 patch verify_pipeline 的本地绑定，而不是 backtest_six_step 模块属性。
+        # 注意：verify_pipeline 已 `from modules.backtest import backtest_shaofu_single`，
+        # 所以必须 patch verify_pipeline 的本地绑定，而不是 backtest.shaofu 模块属性。
         original = verify_pipeline.backtest_shaofu_single
         verify_pipeline.backtest_shaofu_single = tracker
         try:
@@ -799,7 +827,7 @@ def test_verify_pipeline_falls_back_to_python(no_rust_module):
 # ─────────────────────────────────────────────────────────────────────
 # Fixture 隔离回归测试（v4.0.2）
 # 目的：保证 no_rust_module + fake_rust_module 在测试间不留残留，
-# 特别是 sys.modules["_core_compute"] 与 sys.modules["modules.backtest_six_step"]
+# 特别是 sys.modules["_core_compute"] 与 sys.modules["modules.backtest.shaofu"]
 # 不污染下一个测试。
 # ─────────────────────────────────────────────────────────────────────
 
@@ -836,15 +864,15 @@ def test_isolation_no_rust_then_real_import_via_fake(no_rust_module):
     # （我们在这里只断言当前状态；下个测试能用 fake_rust_module 验证）
 
 
-def test_isolation_modules_backtest_six_step_leak_prevention(fake_rust_module):
+def test_isolation_modules_backtest_shaofu_leak_prevention(fake_rust_module):
     """场景：fake_rust_module 注入 _core_compute 后，bridge_shaofu_single_calls_rust
-    把 sys.modules['modules.backtest_six_step'] 替换成 SimpleNamespace。
+    把 sys.modules['modules.backtest.shaofu'] 替换成 SimpleNamespace。
 
-    autouse fixture 在测试结束时应还原 modules.backtest_six_step，
+    autouse fixture 在测试结束时应还原 modules.backtest.shaofu，
     下一个测试应能拿到原始模块（带完整属性、__file__）。
     """
-    from modules import backtest_six_step as bss_module  # noqa: F401 触发 import
+    from modules.backtest import shaofu as shaofu_module  # noqa: F401 触发 import
 
     # 真模块必须有 __file__；SimpleNamespace 没有
-    assert hasattr(bss_module, "__file__")
-    assert hasattr(bss_module, "backtest_shaofu_single")
+    assert hasattr(shaofu_module, "__file__")
+    assert hasattr(shaofu_module, "backtest_shaofu_single")

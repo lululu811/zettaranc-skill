@@ -15,7 +15,7 @@
 | 层 | 资产 | 状态 | 规模 |
 |---|---|---|---|
 | **数据层** | `data/stock_data.db` SQLite | ✅ 完整可用 | daily_kline **179,654** 行 / stock_basic **5,525** 只 / moneyflow **207,361** 行 / indicator_cache **26,400** 行 |
-| **算法层** | `modules/` 38 个模块 | ✅ 成熟 | a_stock_data_client、datasource（48KB）、backtest_six_step、indicators/、core/、market_regime、position_manager… |
+| **算法层** | `modules/` 38 个模块 | ✅ 成熟 | a_stock_data_client、datasource（48KB）、backtest/（shaofu、portfolio、single）、indicators/、core/、market_regime… |
 | **API 层** | `api/` FastAPI | ✅ 9 个路由域 | stock / screen / watchlist / diagnosis / backtest / simulator / trade / system / commentary |
 | **前端** | `frontend/` React 19 + TS | ✅ 7 个页面 | Dashboard / StockAnalysis / Screener / Watchlist / Trades / Backtest / Simulator / Settings |
 | **前端栈** | Vite 8 + Tailwind 4 + ECharts 6 | ✅ 现代 | zustand + react-query + react-router 7，已有 lazy 分包 |

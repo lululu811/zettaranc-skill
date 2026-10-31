@@ -137,7 +137,7 @@ print(f"是否稳健？ {result.is_robust()}")
 > 历史上的"一键验证"入口（`backtest_shaofu_with_validation`）已删除——它零调用方。现在需要自己把回测与检验拼起来。
 
 ```python
-from modules.backtest_six_step import backtest_shaofu_single
+from modules.backtest import backtest_shaofu_single
 from modules.statistics import sharpe_t_test, monte_carlo_permutation_test, analyze_sub_periods
 
 # 1. 跑回测
@@ -181,7 +181,7 @@ print(f"夏普比率: {result.sharpe_ratio:.2f}（门槛 > 0.5）")
 ### 方法 2：子周期分析
 
 ```python
-from modules.backtest_six_step import backtest_shaofu_single
+from modules.backtest import backtest_shaofu_single
 from modules.statistics import analyze_sub_periods
 
 result = backtest_shaofu_single("600519.SH", days=500)

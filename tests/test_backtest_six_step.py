@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from modules.backtest_six_step import _calc_metrics, ShaofuBacktestResult
+from modules.backtest.shaofu import _calc_metrics, ShaofuBacktestResult
 from modules.loop_engine import LoopTrade
 
 

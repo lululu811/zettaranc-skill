@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 def run_shaofu(ts_code: str, days: int = 250, **kwargs) -> dict:
     """少妇战法单股回测"""
     try:
-        from modules.backtest_six_step import backtest_shaofu_single
+        from modules.backtest import backtest_shaofu_single
         result = backtest_shaofu_single(ts_code, days=days)
         return _shaofu_to_response(ts_code, result)
     except ImportError:

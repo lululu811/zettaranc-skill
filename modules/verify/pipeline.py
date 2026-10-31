@@ -14,7 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
 
-from modules.backtest_six_step import backtest_shaofu_single
+from modules.backtest import backtest_shaofu_single
 from modules.core.metrics import TRADING_DAYS_PER_YEAR, compute_drawdown, compute_sharpe, daily_returns
 from modules.datasource import get_datasource
 from modules.loop_engine import LoopConfig, LoopTrade

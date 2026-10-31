@@ -104,7 +104,7 @@ def _backtest_with_window(
     切入口：`modules.backtest_six_step.backtest_shaofu_single`。
     返回 ShaofuBacktestResult，调用方负责字段抽取。
     """
-    from modules.backtest_six_step import backtest_shaofu_single
+    from modules.backtest import backtest_shaofu_single
 
     days = len(klines)
     return backtest_shaofu_single(ts_code, days=days, config=config, klines=klines)
