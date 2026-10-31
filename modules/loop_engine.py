@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional, cast
 
+from .strategies.shaofu_b1 import detect_shaofu_b1
 from .indicators import (
     DailyData,
     TradeSignal,
@@ -324,69 +325,52 @@ class ShaofuLoopEngine:
         Returns:
             信号字典或 None
         """
-        if len(klines) < 30:
+        # 少妇战法 B1 判定已提升到战法层（modules/strategies/shaofu_b1.py）：
+        # 指标级的 B1 波检测 + 牛绳 + N 型结构 + 缩量回调 + J 值阈值。
+        facts = detect_shaofu_b1(
+            klines,
+            j_threshold=self.config.j_threshold,
+            vol_shrink_threshold=self.config.vol_shrink_threshold,
+        )
+        if facts is None:
             return None
 
-        # --- B1 检测 ---
-        b1 = detect_b1_today(klines)
-        if not b1.get("is_b1"):
-            return None
-
-        j_val = b1.get("b1_j_value", 50)
-
-        # J 值阈值过滤（可配置，默认 SOP 标准 12）
-        if j_val > self.config.j_threshold:
-            return None
-
-        # --- 牛绳检查：白线在黄线上才入场 ---
-        white = calculate_zg_white(klines)
-        yellow = calculate_dg_yellow(klines)
-        if white < yellow:
-            return None
-
-        # --- 缩量回调 ---
+        j_val = facts["j_value"]
         today = klines[-1]
-        yesterday = klines[-2]
-        vol_shrink = today.vol < yesterday.vol * self.config.vol_shrink_threshold
+        n_structure_ok = facts["n_structure_ok"]
+        vol_shrink = facts["vol_shrink"]
 
-        # --- N 型上移结构 ---
-        n_structure_ok = self._check_n_structure(klines, len(klines) - 1)
+        reason_parts = [
+            f"J={j_val:.1f}",
+            f"振幅={facts['b1_amplitude']:.1f}%",
+            f"评分={facts['b1_score']}",
+        ]
+        if n_structure_ok:
+            reason_parts.append("N型上移")
+        if vol_shrink:
+            reason_parts.append("缩量回调")
 
-        # 综合判定：B1 通过 + 牛绳牵牛 + 缩量 + N型结构 OK
-        if b1["is_b1"] and vol_shrink and n_structure_ok:
-            reason_parts = [
-                f"J={j_val:.1f}",
-                f"振幅={b1.get('b1_amplitude', 0):.1f}%",
-                f"评分={b1.get('b1_score', 0)}",
-            ]
-            if n_structure_ok:
-                reason_parts.append("N型上移")
-            if vol_shrink:
-                reason_parts.append("缩量回调")
-
-            # 多策略共振投票（v3.10.x 合并 loop_engine_enhanced）
-            extra = self._vote_signals(klines)
-            if extra:
-                reason_parts.append(f"共振: {', '.join(extra['triggered_strategies'])}")
-                return {
-                    "is_b1": True,
-                    "j_value": j_val,
-                    "entry_price": today.close,
-                    "signal": True,
-                    "reason": "B1: " + ", ".join(reason_parts),
-                    "triggered_strategies": extra["triggered_strategies"],
-                    "signal_strength": extra["signal_strength"],
-                }
-
+        # 多策略共振投票（v3.10.x 合并 loop_engine_enhanced）
+        extra = self._vote_signals(klines)
+        if extra:
+            reason_parts.append(f"共振: {', '.join(extra['triggered_strategies'])}")
             return {
                 "is_b1": True,
                 "j_value": j_val,
                 "entry_price": today.close,
                 "signal": True,
                 "reason": "B1: " + ", ".join(reason_parts),
+                "triggered_strategies": extra["triggered_strategies"],
+                "signal_strength": extra["signal_strength"],
             }
 
-        return None
+        return {
+            "is_b1": True,
+            "j_value": j_val,
+            "entry_price": today.close,
+            "signal": True,
+            "reason": "B1: " + ", ".join(reason_parts),
+        }
 
     def check_stop_loss(self, current: DailyData, entry_low: float) -> bool:
         """
