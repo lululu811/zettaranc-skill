@@ -145,8 +145,15 @@ def run_verify_v10(
     config: LoopConfig | None = None,
     write_markdown: bool = True,
     output_dir: Path | str | None = None,
+    use_portfolio_engine: bool = True,
 ) -> VerifyResult:
-    """CLI 入口函数（也可被 Python API 直接调用）"""
+    """CLI 入口函数（也可被 Python API 直接调用）
+
+    ``use_portfolio_engine`` 默认 True —— 验收走**真组合**（共享资金池 +
+    交易费率 + 闸门），与自优化器 ``V10VerifyScorer`` 的默认一致。此前 CLI
+    走的是逐股独立回测 + 等权合并曲线（无费率、无仓位约束），于是
+    **优化器优化的目标与验收报告的数字不是同一个引擎算出来的**。
+    """
     result = verify_v10_pipeline(
         ts_codes=ts_codes or [],
         days=days,
@@ -154,6 +161,7 @@ def run_verify_v10(
         walk_forward=walk_forward,
         wf_train_days=wf_train_days,
         wf_test_days=wf_test_days,
+        use_portfolio_engine=use_portfolio_engine,
     )
     if write_markdown or output_dir:
         write_report(result, output_dir=output_dir, write_markdown=write_markdown)
@@ -206,6 +214,7 @@ def run_verify_v10_command(
         wf_test_days=wf_test_days,
         write_markdown=write_markdown,
         output_dir=output_dir,
+        use_portfolio_engine=True,
     )
 
     if as_json:

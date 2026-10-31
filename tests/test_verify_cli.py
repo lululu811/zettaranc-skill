@@ -75,8 +75,11 @@ def test_run_verify_v10_resolves_ts_codes_arg(temp_db, tmp_path):
         conn.commit()
 
     # 把 backtest_shaofu_single 打桩成返回空结果 —— 这样不用真实行情数据
+    # v4.9.0 起验收走**真组合**分支（PortfolioBacktestEngine），
+    # 与自优化器 V10VerifyScorer 的默认一致——原先 CLI 走的是逐股独立回测
+    # + 等权合并曲线，优化目标与验收口径脱节。
     with (
-        patch("modules.verify.pipeline.backtest_shaofu_single") as mock_backtest,
+        patch("modules.verify.portfolio_engine.PortfolioBacktestEngine") as mock_engine_cls,
         patch("modules.verify.pipeline.get_datasource") as mock_ds,
         patch("modules.verify.pipeline.LoopConfig") as mock_loop_cfg,
     ):
@@ -102,21 +105,29 @@ def test_run_verify_v10_resolves_ts_codes_arg(temp_db, tmp_path):
 
         mock_loop_cfg.from_registry.return_value = RealLoopConfig()
 
-        # ShaofuBacktestResult-like 简易对象
+        # PortfolioBacktestResult-like 简易对象
         from types import SimpleNamespace
 
-        mock_backtest.return_value = SimpleNamespace(
-            ts_code="600519.SH",
+        mock_engine_cls.return_value.run.return_value = SimpleNamespace(
             total_trades=0,
             win_count=0,
+            loss_count=0,
             win_rate=0.0,
+            avg_pnl=0.0,
+            avg_win=0.0,
+            avg_loss=0.0,
+            max_win=0.0,
+            max_loss=0.0,
+            profit_factor=0.0,
+            avg_holding_days=0.0,
             total_return=0.0,
+            annualized_return=0.0,
             sharpe_ratio=0.0,
             max_drawdown=0.0,
-            avg_holding_days=0.0,
+            calmar=0.0,
             trades=[],
-            equity_curve=[],
-            name="",
+            net_values=[],
+            dates=[],
         )
 
         out_dir = tmp_path / "reports"
@@ -131,10 +142,11 @@ def test_run_verify_v10_resolves_ts_codes_arg(temp_db, tmp_path):
         assert isinstance(result, VerifyResult)
         assert result.meta.get("ts_codes_count") == 1
         # 没有回落到 get_all_stock_codes
-        assert mock_backtest.call_count == 1
-        mock_backtest.assert_called_once()
-        called_args, called_kwargs = mock_backtest.call_args
-        assert called_args[0] == "600519.SH"
+        mock_engine = mock_engine_cls.return_value
+        assert mock_engine.run.call_count == 1
+        mock_engine.run.assert_called_once()
+        called_args, called_kwargs = mock_engine.run.call_args
+        assert called_args[0] == ["600519.SH"]
 
         # 验证 get_all_stock_codes 真的可用（Bug 1 已修）
         codes = get_all_stock_codes()

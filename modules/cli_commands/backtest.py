@@ -39,22 +39,6 @@ def _portfolio_result_to_dict(result: Any) -> dict:
     return multi_strategy_result_to_dict(result)
 
 
-def _shaofu_portfolio_to_dict(result: dict) -> dict:
-    """将 backtest_shaofu_portfolio 返回的 dict 清理为可序列化格式"""
-    per_stock = []
-    for r in result.get("results", []):
-        per_stock.append(_shaofu_result_to_dict(r))
-
-    return {
-        "per_stock": per_stock,
-        "total_return": round(result.get("total_return", 0) * 100, 2),
-        "total_trades": result.get("total_trades", 0),
-        "overall_win_rate": round(result.get("overall_win_rate", 0), 3),
-        "max_drawdown": round(result.get("max_drawdown", 0) * 100, 2),
-        "sharpe_ratio": round(result.get("sharpe_ratio", 0), 2),
-    }
-
-
 def _print_shaofu_summary(ts_code: str, dict_result: dict) -> None:
     """Rust 路径的 shaofu 回测结果 → 人类可读摘要。"""
     print(f"\n{'=' * 60}")
@@ -181,36 +165,38 @@ def cmd_backtest(args) -> None:
         if not ts_codes:
             error("股票代码列表为空")
 
-        if len(ts_codes) == 1:
-            from modules.backtest._rust_bridge import bridge_shaofu_single
+        # 真组合引擎（共享资金池 + 交易费率 + 闸门 + 仓位上限）。
+        # 此前这里走的是"各标的独立回测后按 1/max_concurrent 加权平均资金曲线"
+        # 的等权组合——那不是组合（无资金竞争、无费率），其收益数字与真实组合
+        # 不可比。ADR-0002 决策 1：唯一实现引擎收敛到 PortfolioBacktestEngine。
+        # 单只股票同样走组合引擎（最多 1 个仓位），口径与多只一致。
+        from modules.backtest.portfolio import PortfolioBacktestEngine, PortfolioConfig
+        from modules.loop_engine import LoopConfig
 
-            dict_single = bridge_shaofu_single(ts_codes[0], days=days)
-            if dict_single.get("total_trades", 0) == 0:
-                warn(f"{ts_codes[0]} 在 {days} 天内无交易记录（数据不足或无信号触发）")
-            if use_json:
-                json_output(dict_single)
-            else:
-                _print_shaofu_summary(ts_codes[0], dict_single)
+        lc_cfg = LoopConfig.from_registry("shaofu_v1") or LoopConfig()
+        pc = PortfolioConfig(
+            initial_capital=1_000_000.0,
+            max_positions=5,
+            position_pct=lc_cfg.position_pct,
+            # 闸门默认关闭（验收与 CLI 一致）
+            gate=None,
+        )
+        engine = PortfolioBacktestEngine(portfolio_config=pc, loop_config=lc_cfg)
+        result_port = engine.run(ts_codes, days=days)
+
+        if use_json:
+            json_output(portfolio_result_to_dict(result_port))
         else:
-            from modules.backtest_six_step import backtest_shaofu_portfolio
-
-            result_port = backtest_shaofu_portfolio(ts_codes, days=days)
-            if use_json:
-                json_output(_shaofu_portfolio_to_dict(result_port))
-            else:
-                print(f"{'=' * 60}")
-                print("少妇战法组合回测结果")
-                print(f"{'=' * 60}")
-                print(f"股票数量:     {len(ts_codes)}")
-                print(f"总交易次数:   {result_port['total_trades']}")
-                print(f"整体胜率:     {result_port['overall_win_rate']:.1%}")
-                print(f"累计收益:     {result_port['total_return']:+.2%}")
-                print(f"最大回撤:     {result_port['max_drawdown']:.2%}")
-                print(f"夏普比率:     {result_port['sharpe_ratio']:.2f}")
-                print(f"{'=' * 60}")
-                for r in result_port.get("results", []):
-                    status = "有交易" if r.total_trades > 0 else "无交易"
-                    print(f"  {r.ts_code}: {status} {r.total_trades}笔 胜率{r.win_rate:.0%} 收益{r.total_return:+.2%}")
+            print(f"{'=' * 60}")
+            print("少妇战法组合回测结果（真组合：共享资金池 + 费率 + 仓位约束）")
+            print(f"{'=' * 60}")
+            print(f"股票数量:     {len(ts_codes)}")
+            print(f"总交易次数:   {result_port.total_trades}")
+            print(f"整体胜率:     {result_port.win_rate:.1%}")
+            print(f"累计收益:     {result_port.total_return:+.2%}")
+            print(f"最大回撤:     {result_port.max_drawdown:.2%}")
+            print(f"夏普比率:     {result_port.sharpe_ratio:.2f}")
+            print(f"{'=' * 60}")
 
     # ── b2-confirm: B1观察+B2确认+次日开盘回测 ──
     elif sub == "b2-confirm":
@@ -396,6 +382,5 @@ __all__ = [
     "add_verify_v10_parser",
     "_shaofu_result_to_dict",
     "_portfolio_result_to_dict",
-    "_shaofu_portfolio_to_dict",
     "_b1_b2_pool_to_dict",
 ]

@@ -1,7 +1,7 @@
 """
 v1.0 验收统一管线
 
-调用现有 backtest_shaofu_portfolio / metrics / param_registry，
+调用现有 backtest_shaofu_single / metrics / param_registry，
 不修改任何现有模块的内部逻辑。
 """
 
