@@ -9,17 +9,21 @@ class SimulationRequest(BaseModel):
     capital: float = Field(default=1_000_000, ge=10_000)
     max_positions: int = Field(default=5, ge=1, le=20)
     risk_per_trade: float = Field(default=0.02, ge=0.001, le=0.1)
-    min_score: float = Field(default=60, ge=0, le=100)
+    min_score: float = Field(default=70, ge=0, le=100)
     min_signals: int = Field(default=2, ge=1, le=10)
     atr_sizing: bool = Field(default=False)
-    max_position_pct: float = Field(default=0.15, ge=0.01, le=0.5)
+    max_position_pct: float = Field(default=0.20, ge=0.01, le=0.5)
     benchmark: str = Field(default="000300.SH")
-    cost_model: str = Field(default="realistic")
-    slippage: str = Field(default="dynamic")
+    # 成本模型词汇：zero / simple / realistic（"advanced" 为历史别名）
+    cost_model: str = Field(default="simple")
+    slippage: str = Field(default="fixed")
     no_st: bool = Field(default=False)
     strategy_mode: str = Field(default="simple")  # "simple" | "resonance"
     strategy_lookback: int = Field(default=5, ge=1, le=20)
-    min_resonance_score: float = Field(default=50, ge=0, le=100)
+    # 0-1 分数口径（与 SimulationConfig / param_space 一致）。
+    # v4.10.0 起由 0-100 改为 0-1——此前同一个 0.35 在 CLI 是 35 分、在 API
+    # 却被除以 100 变成 0.0035 分，差 100 倍。
+    min_resonance_score: float = Field(default=0.35, ge=0, le=1)
     walk_forward: bool = Field(default=False)
     wf_train_days: int = Field(default=120, ge=30, le=500)
     wf_test_days: int = Field(default=60, ge=10, le=200)

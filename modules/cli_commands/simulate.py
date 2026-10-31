@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import logging
 from dataclasses import asdict
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from modules.core.errors import ErrorCode
 from ._helpers import json_output
+
+if TYPE_CHECKING:
+    from modules.simulator import SimulationConfig
 
 logger = logging.getLogger(__name__)
 
@@ -75,34 +78,26 @@ def _simulate_print_narrative(narrative: dict[str, Any]) -> None:
     print(text)
 
 
-def cmd_simulate(args) -> None:
-    """少女/少妇模拟器 CLI 入口（v0.2）。"""
-    from modules.simulator import CostModel, SimulationConfig
-    from modules.simulator.simulator import run_simulation, summary_text
+def _build_config_from_args(args) -> SimulationConfig:
+    """从 CLI 参数装配 SimulationConfig。
 
-    use_json = getattr(args, "json", False)
-    days = getattr(args, "days", 250)
-    codes_str = getattr(args, "codes", None)
+    规范默认值集中在 modules/simulator/config.py —— CLI 与 API 共用，避免两边
+    各写一份后漂移（历史上已漂移：评分 70/60、仓位上限 0.20/0.15、动态滑点
+    False/True、成本模型词汇不同、共振分单位差 100 倍）。
+    """
+    from modules.simulator.config import build_simulation_config
 
-    if getattr(args, "cost_model", "simple") == "advanced":
-        cost_model = CostModel()
-    else:
-        cost_model = CostModel(
-            commission_rate=0.0003,
-            min_commission=0.0,
-            stamp_duty_rate=0.0,
-            transfer_fee_rate=0.0,
-            apply_stamp_duty_on_sell=False,
-        )
-
-    config = SimulationConfig(
+    # 规范默认值集中在 modules/simulator/config.py —— CLI 与 API 共用，
+    # 避免两边各写一份后漂移（历史上已漂移：评分 70/60、仓位上限 0.20/0.15、
+    # 动态滑点 False/True、成本模型词汇不同、共振分单位差 100 倍）。
+    return build_simulation_config(
         initial_capital=getattr(args, "capital", 1_000_000.0),
         max_positions=getattr(args, "max_positions", 5),
         risk_per_trade=getattr(args, "risk", 0.02),
         position_score_threshold=getattr(args, "score", 70.0),
         signal_min_count=getattr(args, "signals", 2),
         benchmark_code=getattr(args, "benchmark", "000300.SH"),
-        cost_model=cost_model,
+        cost_model=getattr(args, "cost_model", "simple"),
         use_dynamic_slippage=getattr(args, "slippage", "fixed") == "dynamic",
         use_atr_sizing=getattr(args, "atr_sizing", False),
         max_position_pct=getattr(args, "max_position_pct", 0.20),
@@ -112,6 +107,19 @@ def cmd_simulate(args) -> None:
         strategy_lookback_days=getattr(args, "strategy_lookback", 5),
         min_resonance_score=getattr(args, "min_resonance_score", 0.35),
     )
+
+
+def cmd_simulate(args) -> None:
+    """少女/少妇模拟器 CLI 入口（v0.2）。"""
+    from modules.simulator import SimulationConfig
+    from modules.simulator.config import build_simulation_config
+    from modules.simulator.simulator import run_simulation, summary_text
+
+    use_json = getattr(args, "json", False)
+    days = getattr(args, "days", 250)
+    codes_str = getattr(args, "codes", None)
+
+    config = _build_config_from_args(args)
 
     ts_codes = None
     if codes_str:
