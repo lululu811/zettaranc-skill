@@ -11,6 +11,7 @@ import logging
 from typing import Any, Optional
 
 import requests
+from modules.core.rate_limit import wait_min_interval
 
 from modules.core.errors import ErrorCode, ZettarancError
 
@@ -78,10 +79,8 @@ class TushareClient:
         self.last_request_time = 0.0
 
     def _rate_limit(self, api_name: str = ""):
-        elapsed = time.time() - self.last_request_time
-        if elapsed < self.min_request_interval:
-            time.sleep(self.min_request_interval - elapsed)
-        self.last_request_time = time.time()
+        # 最小间隔限流：算法在 modules.core.rate_limit（此前 4 个客户端各抄一份）
+        self.last_request_time = wait_min_interval(self.min_request_interval, self.last_request_time)
 
     def _call_api_with_retry(self, api_name: str, func, *args, **kwargs):
         """带退避算法和限流控制的 API 调用封装

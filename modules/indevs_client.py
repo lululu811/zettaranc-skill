@@ -26,6 +26,7 @@ from typing import Any
 
 import pandas as pd
 import requests
+from modules.core.rate_limit import wait_min_interval
 
 from modules.core.errors import ErrorCode, ZettarancError
 
@@ -111,10 +112,8 @@ class IndevsClient:
         _install_dns_fallback()
 
     def _rate_limit(self) -> None:
-        elapsed = time.time() - self._last_request_time
-        if elapsed < self._min_interval:
-            time.sleep(self._min_interval - elapsed)
-        self._last_request_time = time.time()
+        # 最小间隔限流：算法在 modules.core.rate_limit（此前 4 个客户端各抄一份）
+        self._last_request_time = wait_min_interval(self._min_interval, self._last_request_time)
 
     def request(
         self,

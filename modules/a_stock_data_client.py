@@ -18,6 +18,7 @@ A-Stock-Data 免费数据源客户端
 
 from __future__ import annotations
 
+
 import logging
 import random
 import time
@@ -27,6 +28,7 @@ from typing import Any
 
 import pandas as pd
 import requests
+from modules.core.rate_limit import wait_min_interval
 
 logger = logging.getLogger(__name__)
 
@@ -503,11 +505,8 @@ class AStockDataClient:
         self._last_request_time = 0.0
 
     def _rate_limit(self) -> None:
-        """简单限流"""
-        elapsed = time.time() - self._last_request_time
-        if elapsed < self._min_interval:
-            time.sleep(self._min_interval - elapsed)
-        self._last_request_time = time.time()
+        """最小间隔限流（算法见 modules.core.rate_limit）"""
+        self._last_request_time = wait_min_interval(self._min_interval, self._last_request_time)
 
     def health_check(self) -> bool:
         """检查数据源可达性（腾讯财经不封IP，作为健康检查基准）"""

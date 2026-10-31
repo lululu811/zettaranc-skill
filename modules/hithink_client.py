@@ -28,6 +28,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
+from modules.core.rate_limit import wait_min_interval
 
 logger = logging.getLogger(__name__)
 
@@ -129,11 +130,8 @@ class HithinkFinanceClient:
         return self._base_url
 
     def _rate_limit(self) -> None:
-        """简单限流：相邻请求至少间隔 _MIN_INTERVAL 秒"""
-        elapsed = time.time() - self._last_request_time
-        if elapsed < _MIN_INTERVAL:
-            time.sleep(_MIN_INTERVAL - elapsed)
-        self._last_request_time = time.time()
+        """最小间隔限流：相邻请求至少间隔 _MIN_INTERVAL 秒（算法见 modules.core.rate_limit）"""
+        self._last_request_time = wait_min_interval(_MIN_INTERVAL, self._last_request_time)
 
     def _get(self, path: str, params: dict) -> dict | None:
         """GET 请求并校验响应信封；成功返回 data 字段，失败返回 None。
