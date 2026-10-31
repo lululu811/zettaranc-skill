@@ -2,6 +2,46 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## v4.12.0 (2026-10-31) — 命令结果外壳归一（架构评审候选 5）
+
+架构评审的**最后一个候选**落地。**验收数字与 v4.11.0 逐位相同**（114 笔 / sharpe −0.8169 / 0-4 通过）——本轮只改错误出口，不动任何计算口径。
+
+### 修复（真 bug）
+
+**CLI `--json` 出错时 stdout 完全为空。** 实测 `zt simulate --days 0 --json`：退出码 2，stdout **0 字节**。宿主拿到的不是 JSON 而是空串——JSON 解析直接失败，连错误原因都看不到，只能去翻 stderr。同时 `[SIMULATOR_INVALID_PRICE]` 这个错误码被整个丢弃。
+
+根因在 `modules/cli.py`：顶层只 `print(str(e), file=sys.stderr)` 就退出。**argparse 自身的参数错误**（未知参数 / 缺必填参数）也一样——它在解析阶段就退出，那时连 `args` 都还没有。
+
+**API 侧把 50+ 个 `ErrorCode` 压成一句话。** 10 个路由文件里散落着 25 处 `except Exception → HTTPException(500, detail="回测失败: ...")`，`api/main.py` 的全局兜底返回 `{"error": "internal_error"}`——宿主既拿不到错误码，也无法区分"参数非法"（客户端问题）和"数据库挂了"（服务端问题）。
+
+`modules/core/errors.py::ZettarancError.to_dict()` 的 docstring 写着"供 CLI --json / Web API 使用"，但全仓 `grep to_dict()` **只有它自己的 `__main__` demo 一处**——结构化错误系统一直是个摆设。
+
+### 重构
+
+- **新增 `modules/core/command_result.py`** —— 命令结果外壳的唯一实现：
+  - `exception_to_dict(exc)`：异常 → 统一外壳（`ok` / `error_code` / `message` / `cause`）。`ZettarancError` 保留其 `ErrorCode`；其他异常归到新增的 `INTERNAL_ERROR`（此前退化成无语义的字符串）。
+  - `http_status_for(exc)`：错误码 → HTTP 状态码。客户端错误 4xx / 资源不存在 404 / 其余 5xx。
+  - `CommandResult`：成功/失败结果的统一表示。
+- **CLI 接入**（`modules/cli.py`）：`--json` 模式下**错误也输出合法 JSON**（stdout），stderr 保留人类可读信息，退出码仍为 2。argparse 的参数错误同样走统一外壳（`INVALID_PARAM`）。不加 `--json` 时行为完全不变。
+- **API 接入**：
+  - 新增 `api/utils/errors.py::raise_api_error` —— 25 处 `except Exception` 全部改为调用它，不再各写一遍。
+  - 新增 `ApiError` 异常 + `api/main.py` 处理器。**不用 `HTTPException`**，因为 FastAPI 会把 `HTTPException.detail` 包进 `{"detail": ...}`，那样响应体变成 `{"detail": {"ok": false, ...}}`，与 CLI 的扁平外壳不同形，宿主要写两套解析。现在两侧**完全同形**。
+  - `ZettarancError` 的 message **原样保留**（不加"回测失败:"这类前缀）——它已经是具体原因，前缀会让两侧 message 长得不一样。
+
+### 成功路径的 JSON 形状保持不变
+
+16 条命令成功时的输出**一字未改**（裸 list / `{"success": …}` / `asdict()` 裸结构…）——那是各命令的既有契约，改动会破坏所有宿主。**只有错误路径统一**。
+
+### 顺带修掉 `api/` 的既有 lint 问题
+
+`api/` 此前有 10 个 ruff 错误（9× E402 + 1× F841）与 10 个文件格式不合规。本轮改了 `api/`，一并修干净：路由 import 移到文件顶部（FastAPI 允许——路由模块只定义 router）、`watchlist.py` 未使用的 `result` 变量移除、全目录格式化。**现在 `api/` lint 与 format 全清**。
+
+### 测试
+
+- 新增 `tests/test_command_result.py`（24 项）：CLI 错误路径 stdout 合法性、`error_code` 保真、stderr 可读性、argparse 错误路径、CLI/API 外壳同形。
+- 新增 `tests/test_api_error_shell.py`（6 项）：API 扁平外壳（不被 `detail` 多包一层）、`error_code` 保真、4xx/404/5xx 状态码判定。
+- pytest **1631 passed** / ruff（`modules` + `tests` + `api` 全清）/ mypy 86 文件 / SKILL 质量门 12/12。
+
 ## v4.11.0 (2026-10-31) — 架构评审候选收敛（模拟器配置 / 限流 / 市场状态 / K 线读取）
 
 架构评审的 4 个候选落地。**验收数字与 v4.10.0 逐位相同**（114 笔 / sharpe −0.8169 / 0-4 通过）——本轮全是"同一语义的多份实现收敛到单一来源"，不改任何计算口径。

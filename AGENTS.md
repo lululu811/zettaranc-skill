@@ -9,7 +9,7 @@
 - **核心交付物**：`SKILL.md`（Skill-Schema-V2 合规的角色扮演协议，被 Claude Code/Cursor 加载）——LLM 用 Z 哥角色生成点评/话术。
 - **数据层**：Python 包 `modules/`，只负责**数据准备**（指标、信号、回测、评分），不做投资话术——这是刻意分层，避免「AI 味」。
 - **可选层**：`api/`（FastAPI REST）+ `frontend/`（React 看板）+ `rust/`（Rust 加速计算核）。
-- **当前版本**：`v4.11.0`（`pyproject.toml:7`、`SKILL.md` frontmatter + 版本表、`skill.json:3`、`README.md` badge、`docs/CHANGELOG.md` 顶端、`AGENTS.md` 本行，共 **7 处**必须一致；改 `pyproject.toml` 的 `version` 时同步这 7 处，`docs/INDEX.md` 维护规则有同样的清单）。
+- **当前版本**：`v4.12.0`（`pyproject.toml:7`、`SKILL.md` frontmatter + 版本表、`skill.json:3`、`README.md` badge、`docs/CHANGELOG.md` 顶端、`AGENTS.md` 本行，共 **7 处**必须一致；改 `pyproject.toml` 的 `version` 时同步这 7 处，`docs/INDEX.md` 维护规则有同样的清单）。
 - **许可证**：MIT。
 
 ## Architecture & Data Flow
@@ -76,6 +76,7 @@ modules/backtest/_rust_bridge.py  # is_rust_available() / bridge_shaofu_single()
 - 路径常量（`DATA_DIR/REGISTRY_DIR/REPORTS_DIR`）→ `modules/core/paths.py`。
 - ATR → `modules/core/atr.py`。
 - 错误 → `modules/core/errors.py`（`ZettarancError` 基类 + 统一错误码）。
+- 命令结果外壳（CLI `--json` / API 错误响应）→ `modules/core/command_result.py`（`exception_to_dict` / `http_status_for` / `CommandResult`）。
 - K 线读取 SQL → `modules/core/kline.py`（`KLINE_COLUMNS` / `read_kline_rows` / `read_kline_rows_batch` / `resolve_kline_limit`）。
 - 请求限流 → `modules/core/rate_limit.py`（`wait_min_interval` / `WindowRateLimiter` / `make_window_limiter`）。
 - 模拟器规范默认值 → `modules/simulator/config.py`（`SIMULATION_DEFAULTS` / `build_cost_model` / `build_simulation_config`）。
@@ -87,6 +88,7 @@ modules/backtest/_rust_bridge.py  # is_rust_available() / bridge_shaofu_single()
 - **不要**在新代码里另立第二套 `MarketRegime`/`PerformanceMetrics`/ATR/路径常量；一律从 `modules/core` 导入。
 - **不要**另写 K 线查询 SQL——一律走 `modules/core/kline.py`（并用 `resolve_kline_limit` 决定截断，别自己写 `if not start_date and days > 0`）。
 - **不要**另写限流 sleep——走 `modules/core/rate_limit.py`。
+- **不要**在 CLI/API 里另造错误响应形状——走 `modules/core/command_result.py`；CLI `--json` 出错时 stdout 必须是合法 JSON（带 `error_code`），API 用 `api/utils/errors.py::raise_api_error`（不要用 `HTTPException`，它会被 FastAPI 多包一层 `detail`）。
 - **不要**硬编码模拟器默认值——走 `modules/simulator/config.py::build_simulation_config`。
 - `min_resonance_score` 的单位**统一是 0-1**（不是 0-100），CLI 与 API 都一样。
 
@@ -95,7 +97,7 @@ modules/backtest/_rust_bridge.py  # is_rust_available() / bridge_shaofu_single()
 | 目录 | 用途 |
 |---|---|
 | `modules/` | Python 数据层与业务逻辑（核心） |
-| `modules/core/` | 公共：metrics / market_context / walk_forward / atr / paths / errors / net / kline / rate_limit / `_rust_compat.py` |
+| `modules/core/` | 公共：metrics / market_context / walk_forward / atr / paths / errors / net / kline / rate_limit / command_result / `_rust_compat.py` |
 | `modules/indicators/` | 60+ 技术指标 + 价格形态（`data_layer.py`、`core.py`（KDJ/BBI/…）、`price_patterns/`、`volume_patterns.py`、`wave_theory.py`、`kirin_detector.py`） |
 | `modules/strategies/` | 30+ 战法识别（`core.py`、`base_strategies.py`、`compound_strategies.py`、`sell_signals.py`、`vectorized.py`），入口 `detect_all_strategies` |
 | `modules/screener/` | 选股评分（`engine.py`、`criteria.py`、`scoring.py`、`market.py`、`workflow.py`） |
@@ -211,6 +213,7 @@ RUN_REALDATA=true python -m pytest tests/test_indicators_realdata.py -v  # 真�
 | `modules/strategies/__init__.py` | `detect_all_strategies()` 战法折叠入口 |
 | `modules/core/_rust_compat.py` | Rust/Python 切换 shim（`ZETTARANC_BACKTEST_IMPL`） |
 | `modules/core/kline.py` | K 线读取 SQL 唯一来源（`read_kline_rows` / `read_kline_rows_batch` / `resolve_kline_limit`） |
+| `modules/core/command_result.py` | 命令结果外壳唯一实现（异常 → 统一 JSON 外壳 + HTTP 状态码映射） |
 | `modules/core/rate_limit.py` | 请求限流公共实现（间隔 + 60s 滑动窗口） |
 | `modules/simulator/config.py` | 模拟器规范默认值与唯一装配点（CLI 与 API 共用） |
 | `api/main.py` | FastAPI 入口 + `start_web()`（uvicorn 8000，9 个 router 挂 `/api/v1`） |
