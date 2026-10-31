@@ -35,8 +35,29 @@ class WFResult:
     splits: list[WalkForwardSplit] = field(default_factory=list)
     is_metrics: AggregateMetrics | None = None
     oos_metrics: AggregateMetrics | None = None
-    oos_is_ratio: float = 0.0
+    # None = **无法计算**（IS 段 Sharpe 非正 / OOS 段无有效样本）。
+    # 与 0.0 严格区分：0.0 是"算出来了，比值就是 0"，None 是"根本没有比值"。
+    # 此前两者都写成 0.0，报告里显示 "OOS/IS 0.00 ❌"，让人以为策略过拟合到
+    # OOS 完全没有收益——实际是 IS 段 Sharpe 为负，比值在数学上就没意义。
+    oos_is_ratio: float | None = None
     degraded: bool = False  # True = 切片数 < 3，降级单次回测
+
+
+def compute_oos_is_ratio(is_sharpe: float, oos_sharpe: float) -> float | None:
+    """算 OOS/IS Sharpe 比值；**算不出来时返回 None**（不伪装成 0.0）。
+
+    比值 = OOS Sharpe / IS Sharpe。只有 IS Sharpe 为正时比值才有意义：
+
+    - IS Sharpe ≤ 0：IS 段本身就是亏的，OOS/IS 的正负号完全取决于两个负数
+      谁的绝对值大——这不是"过拟合程度"，是噪声。返回 None。
+    - OOS 段无有效样本（Sharpe = 0 且无交易）：同样算不出来。返回 None。
+
+    旧的实现是 ``if is_sharpe > 0.001: ratio = oos/is``，其余情况留 0.0——
+    于是"算不出"和"算出是 0"在报告里长得一模一样。
+    """
+    if is_sharpe <= 0.001:
+        return None
+    return oos_sharpe / is_sharpe
 
 
 def _make_splits(
@@ -201,15 +222,11 @@ def walk_forward_verify(
     is_metrics = _aggregate(is_active) if is_active else AggregateMetrics()
     oos_metrics = _aggregate(oos_active) if oos_active else AggregateMetrics()
 
-    oos_is_ratio = 0.0
-    if is_metrics.sharpe > 0.001:
-        oos_is_ratio = oos_metrics.sharpe / is_metrics.sharpe
-
     return WFResult(
         splits=splits,
         is_metrics=is_metrics,
         oos_metrics=oos_metrics,
-        oos_is_ratio=oos_is_ratio,
+        oos_is_ratio=compute_oos_is_ratio(is_metrics.sharpe, oos_metrics.sharpe),
         degraded=False,
     )
 

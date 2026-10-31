@@ -59,13 +59,21 @@ class AggregateMetrics:
 
 @dataclass
 class GateResult:
-    """单项硬指标判定结果"""
+    """单项硬指标判定结果
+
+    ``applicable=False`` 表示本项**不适用**（数据不足以计算），而不是"未达标"。
+    报告里显示 "N/A"，且不计入失败项——此前 OOS/IS 无法计算时被写成 0.0，
+    报告显示 "0.00 ❌"，让人误以为策略过拟合到 OOS 完全没收益。
+
+    ``value`` 在不适用时为 ``None``（而非 0.0）——0.0 会被下游读成"比值确实是 0"。
+    """
 
     name: str
-    value: float
+    value: float | None
     threshold: float
     passed: bool
     message: str = ""
+    applicable: bool = True
 
 
 @dataclass

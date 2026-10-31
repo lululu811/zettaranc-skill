@@ -103,8 +103,11 @@ class V10VerifyScorer:
             )
 
             gates = result.gates or {}
-            passed_count = sum(1 for g in gates.values() if g.passed)
-            total_count = len(gates)
+            # 不适用项（applicable=False，如算不出 OOS/IS）既不算通过也不算失败，
+            # 且不进分母——否则优化器会凭空拿到 +10 分适应度（passed_count × 10）
+            applicable_gates = [g for g in gates.values() if getattr(g, "applicable", True)]
+            passed_count = sum(1 for g in applicable_gates if g.passed)
+            total_count = len(applicable_gates)
             sharpe_gate = gates.get("sharpe")
             sharpe_value = sharpe_gate.value if sharpe_gate else 0.0
             calmar_gate = gates.get("calmar")

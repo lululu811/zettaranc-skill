@@ -11,6 +11,7 @@ from modules.core.walk_forward import WalkForwardSplit
 from modules.verify.walk_forward import (
     WFResult,
     _make_splits,
+    compute_oos_is_ratio,
     walk_forward_verify,
 )
 
@@ -198,3 +199,55 @@ def test_wf_split_indices_correspond_to_kline_offset():
     assert splits[1].train_start == 60
     assert splits[1].train_end == 180
     assert splits[2].test_end <= 300
+
+
+class TestOosIsRatioSemantics:
+    """``oos_is_ratio`` 的"算不出来"必须与"算出来是 0"严格区分。
+
+    旧实现：``if is_sharpe > 0.001: ratio = oos/is``，其余留 0.0——
+    于是"IS 段本身是亏的"（比值在数学上无意义）和"比值确实是 0"
+    在报告里长得一模一样，都会显示成 "OOS/IS 0.00 ❌"。
+    """
+
+    def test_positive_is_sharpe_computes_ratio(self):
+        assert compute_oos_is_ratio(1.5, 1.0) == pytest.approx(1.0 / 1.5)
+
+    def test_zero_oos_sharpe_with_positive_is_is_zero_ratio(self):
+        """IS 为正、OOS 为 0 —— 这是**算出来了**的比值 0.0，不是 None。"""
+        assert compute_oos_is_ratio(1.0, 0.0) == 0.0
+
+    @pytest.mark.parametrize("is_sharpe", [0.0, -0.5, -6.87])
+    def test_non_positive_is_sharpe_returns_none(self, is_sharpe):
+        """IS 段 Sharpe 非正 → 比值无意义 → None（不是 0.0）。"""
+        assert compute_oos_is_ratio(is_sharpe, 1.0) is None
+
+    def test_none_is_distinguishable_from_zero(self):
+        assert compute_oos_is_ratio(-1.0, 0.0) is None
+        assert compute_oos_is_ratio(1.0, 0.0) == 0.0
+
+    def test_wf_result_returns_none_when_is_sharpe_negative(self, monkeypatch):
+        """端到端：IS 段 Sharpe 为负时，WFResult.oos_is_ratio 是 None。"""
+        monkeypatch.setattr(
+            "modules.verify.walk_forward._load_windowed_klines",
+            lambda code, days: _fake_klines(days),
+        )
+
+        def fake_backtest(code, klines, config):
+            if len(klines) >= 120:
+                return _make_shaofu_result_mock(sharpe=-2.0, win_rate=0.3, return_pct=-0.05)
+            return _make_shaofu_result_mock(sharpe=-1.0, win_rate=0.3, return_pct=-0.02)
+
+        monkeypatch.setattr(
+            "modules.verify.walk_forward._backtest_with_window",
+            fake_backtest,
+        )
+
+        result = walk_forward_verify(
+            ts_codes=["000001.SZ"],
+            days=300,
+            wf_train_days=120,
+            wf_test_days=60,
+        )
+        assert not result.degraded
+        assert result.is_metrics.sharpe < 0
+        assert result.oos_is_ratio is None, "IS 段 Sharpe 为负时比值必须为 None，不能是 0.0"

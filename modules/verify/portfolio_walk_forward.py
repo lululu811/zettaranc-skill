@@ -34,7 +34,7 @@ from ..constants import (
 )
 from .pipeline import AggregateMetrics
 from .portfolio_engine import PortfolioBacktestEngine, PortfolioBacktestResult, PortfolioConfig
-from .walk_forward import WFResult, _make_splits
+from .walk_forward import WFResult, _make_splits, compute_oos_is_ratio
 
 logger = logging.getLogger(__name__)
 
@@ -123,15 +123,13 @@ def portfolio_walk_forward_verify(
     is_metrics = _aggregate_portfolio_results(is_results)
     oos_metrics = _aggregate_portfolio_results(oos_results)
 
-    oos_is_ratio = 0.0
-    if is_metrics.sharpe > 0.001:
-        oos_is_ratio = oos_metrics.sharpe / is_metrics.sharpe
-
     return WFResult(
         splits=splits,
         is_metrics=is_metrics,
         oos_metrics=oos_metrics,
-        oos_is_ratio=oos_is_ratio,
+        # 与单股版共用同一计算口径：IS Sharpe 非正时返回 None（无法计算），
+        # 而不是伪装成 0.0
+        oos_is_ratio=compute_oos_is_ratio(is_metrics.sharpe, oos_metrics.sharpe),
         degraded=False,
     )
 

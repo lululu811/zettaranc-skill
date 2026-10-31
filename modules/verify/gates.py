@@ -74,13 +74,28 @@ def check_gates(
 
     # 5. OOS/IS（仅在 wf 不为 None 时）
     if wf is not None and hasattr(wf, "oos_is_ratio"):
-        gates["oos_is_ratio"] = _check_higher(
-            "oos_is_ratio",
-            wf.oos_is_ratio,
-            THRESHOLDS["oos_is_ratio"]["min"],
-            "OOS/IS",
-            "减少过拟合风险（缩小参数搜索空间）",
-        )
+        ratio = wf.oos_is_ratio
+        if ratio is None:
+            # **算不出来**（IS 段 Sharpe 非正 / OOS 段无有效样本）。
+            # 这不是"未达标"——比值在数学上就没有意义。标为不适用（applicable
+            # =False），报告里显示 "N/A"，不计入失败项。
+            # value 用 None 而非 0.0：0.0 会被下游读成"比值确实是 0"。
+            gates["oos_is_ratio"] = GateResult(
+                name="oos_is_ratio",
+                value=None,
+                threshold=THRESHOLDS["oos_is_ratio"]["min"],
+                passed=True,
+                message="OOS/IS 无法计算（IS 段 Sharpe 非正或 OOS 段无有效样本），本项不适用",
+                applicable=False,
+            )
+        else:
+            gates["oos_is_ratio"] = _check_higher(
+                "oos_is_ratio",
+                ratio,
+                THRESHOLDS["oos_is_ratio"]["min"],
+                "OOS/IS",
+                "减少过拟合风险（缩小参数搜索空间）",
+            )
 
     return gates
 
