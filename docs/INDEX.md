@@ -9,6 +9,7 @@
 | 怎么用 CLI / 安装依赖 / 第一次运行 | [README.md](../README.md) → [USER_GUIDE.md](USER_GUIDE.md) |
 | 怎么配置环境变量、数据源 key、回测实现切换 | [CONFIG_GUIDE.md](CONFIG_GUIDE.md) |
 | 想参与开发 / 提 PR / 写新指标 | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| 本地开发自测 / 保证通过 CI / 代码规范 | [CI_DEVELOPMENT_GUIDE.md](CI_DEVELOPMENT_GUIDE.md) |
 | 哪个版本改了什么 / 迁移要点 | [CHANGELOG.md](CHANGELOG.md) |
 | Web 应用改造规划（进行中） | [WEB_ROADMAP.md](WEB_ROADMAP.md) |
 | 回测统计显著性检验框架 | [STATISTICS_VALIDATION.md](STATISTICS_VALIDATION.md) |
@@ -23,11 +24,12 @@
 
 ## 文档清单
 
-### 活文档（docs/ 顶层，仅这 9 份）
+### 活文档（docs/ 顶层，共 10 份）
 
 - `USER_GUIDE.md` — 用户手册（CLI、子命令、`--json` 输出、典型工作流）
 - `CONFIG_GUIDE.md` — 环境变量、`.env`、数据源切换、回测实现切换
 - `CONTRIBUTING.md` — 提交流程、测试、lint、发布 checklist
+- `CI_DEVELOPMENT_GUIDE.md` — CI 质量门禁与本地代码开发自测规范（代码格式、类型检查、防踩坑）
 - `CHANGELOG.md` — 全量变更历史（append-only）
 - `WEB_ROADMAP.md` — Web 应用改造规划（进行中，2026-09-06 起）
 - `STATISTICS_VALIDATION.md` — 回测统计显著性检验（夏普 t-test / permutation / sub-period）

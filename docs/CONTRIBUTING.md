@@ -55,20 +55,30 @@ zettaranc 持续输出内容，如果你有新的高质量语料：
 - [ ] 是否避免「如果 Z 哥，他可能会...」这类跳出角色的表述？
 - [ ] 交易建议是否包含具体的进场/止损/止盈规则？
 
-## 开发流程
+## 开发流程与 CI 自测
+
+> **重点**：为确保提 PR 或 Push 代码时 100% 通过 CI 自动化检查，请先详细阅读 [CI 质量门禁与本地代码开发规范](CI_DEVELOPMENT_GUIDE.md)。
 
 ```bash
-# 1. Fork 本仓库
-# 2. 克隆到本地
+# 1. Fork 本仓库并克隆到本地
 git clone https://github.com/YOUR_USERNAME/zettaranc-perspective.git
 
-# 3. 修改 SKILL.md 或添加语料
+# 2. 安装环境与开发依赖
+pip install -r requirements.txt
+pip install -e ".[dev]"
+pre-commit install  # 安装本地 git hook
 
-# 4. 本地测试（如果你有 Claude Code / Kimi Code CLI）
-npx skills add ./SKILL.md
-# 然后提问验证修改效果
+# 3. 本地修改代码
 
-# 5. 提交 PR
+# 4. 提交前一键自检（必跑）
+bash scripts/ci_check.sh
+# 或手动执行：
+#   ruff format modules/ tests/
+#   ruff check modules/ tests/ --select=F,E,W,UP --ignore=E501,F401,F403 --fix
+#   python -m mypy modules/ --ignore-missing-imports
+#   python -m pytest tests/ -v
+
+# 5. 提交 commit 并推送 PR
 ```
 
 ## 发布 Checklist（维护者）
