@@ -9,7 +9,7 @@
 - **核心交付物**：`SKILL.md`（Skill-Schema-V2 合规的角色扮演协议，被 Claude Code/Cursor 加载）——LLM 用 Z 哥角色生成点评/话术。
 - **数据层**：Python 包 `modules/`，只负责**数据准备**（指标、信号、回测、评分），不做投资话术——这是刻意分层，避免「AI 味」。
 - **可选层**：`api/`（FastAPI REST）+ `frontend/`（React 看板）+ `rust/`（Rust 加速计算核）。
-- **当前版本**：`v4.12.0`（`pyproject.toml:7`、`SKILL.md` frontmatter + 版本表、`skill.json:3`、`README.md` badge、`docs/CHANGELOG.md` 顶端、`AGENTS.md` 本行，共 **7 处**必须一致；改 `pyproject.toml` 的 `version` 时同步这 7 处，`docs/INDEX.md` 维护规则有同样的清单）。
+- **当前版本**：`v4.13.0`（`pyproject.toml:7`、`SKILL.md` frontmatter + 版本表、`skill.json:3`、`README.md` badge、`docs/CHANGELOG.md` 顶端、`AGENTS.md` 本行，共 **7 处**必须一致；改 `pyproject.toml` 的 `version` 时同步这 7 处，`docs/INDEX.md` 维护规则有同样的清单）。
 - **许可证**：MIT。
 
 ## Architecture & Data Flow
@@ -85,10 +85,11 @@ modules/backtest/_rust_bridge.py  # is_rust_available() / bridge_shaofu_single()
 - 少妇战法 B1 战法规则 → `modules/strategies/shaofu_b1.py::detect_shaofu_b1`（指标级 `indicators.detect_b1_today` 只管指标，战法条件在 strategies 层）。**与 `strategies.detect_b1` 是两套不同策略**，实测重合度仅 3%，不可互相替代。
 - 组合回测实现 → `modules/backtest/portfolio.py::PortfolioBacktestEngine`（**唯一**的真组合：共享资金池 + 费率 + 闸门 + 仓位上限）。`zt backtest portfolio` 与 `zt verify v1.0` 都用它。
 - 活跃市值闸门 → `modules/active_market_gate.py`（`GateAction` 枚举、`GateThresholds` 阈值、`TradingGate` port、失败策略的唯一来源）。注意 `signal`（当日涨跌幅判多空）与 `gate`（两日累计判闸门）是**两组不同语义的阈值**，不可合并；详见 `CONTEXT.md` 与 `docs/adr/0001-*.md`。
+- OOS/IS 比值 → `modules/verify/walk_forward.py::compute_oos_is_ratio`（单股版与组合版共用）。**返回 `None` 表示"算不出来"**（IS 段 Sharpe 非正 / OOS 段无有效样本），与"算出是 0"严格区分——不要把 `None` 写成 `0.0`，那会让报告误显示成 "OOS/IS 0.00 ❌"。
 - **不要**在新代码里另立第二套 `MarketRegime`/`PerformanceMetrics`/ATR/路径常量；一律从 `modules/core` 导入。
 - **不要**另写 K 线查询 SQL——一律走 `modules/core/kline.py`（并用 `resolve_kline_limit` 决定截断，别自己写 `if not start_date and days > 0`）。
 - **不要**另写限流 sleep——走 `modules/core/rate_limit.py`。
-- **不要**在 CLI/API 里另造错误响应形状——走 `modules/core/command_result.py`；CLI `--json` 出错时 stdout 必须是合法 JSON（带 `error_code`），API 用 `api/utils/errors.py::raise_api_error`（不要用 `HTTPException`，它会被 FastAPI 多包一层 `detail`）。
+- **不要**在 CLI/API 里另造错误响应形状——走 `modules/core/command_result.py`；CLI `--json` 出错时 stdout 必须是合法 JSON（带 `error_code`），API 用 `api/utils/errors.py::raise_api_error`（不要用 `HTTPException`，它会被 FastAPI 多包一层 `detail`）。子命令**自己**捕获异常时也要注意：别把裸文本 print 到 stdout。
 - **不要**硬编码模拟器默认值——走 `modules/simulator/config.py::build_simulation_config`。
 - `min_resonance_score` 的单位**统一是 0-1**（不是 0-100），CLI 与 API 都一样。
 

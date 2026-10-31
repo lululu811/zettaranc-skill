@@ -2,6 +2,75 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## v4.13.0 (2026-10-31) — 子命令错误出口补齐 + OOS/IS「算不出来」的诚实表达
+
+收掉两个此前遗留的出口问题。**验收核心指标逐位未变**（114 笔 / sharpe −0.8169）——本轮只改错误出口与指标的可解释性，不动任何计算口径。
+
+### 修复：子命令自己吞掉异常的错误路径（候选 5 的漏网）
+
+v4.12.0 统一了 CLI 顶层的错误出口，但**子命令内部自己捕获异常并 print** 的路径绕过了它：
+
+- `modules/verify/cli.py` 参数非法时 `print(f"参数错误：{e}")` 打到 **stdout**——`--json` 模式下这是**非法 JSON**（裸文本），宿主的 JSON 解析直接失败。
+- `modules/cli_commands/analyze.py::cmd_score` 缺股票代码时同样 print 到 stdout。
+- `modules/cli_commands/data.py::cmd_track` 的 4 处"错误：…"提示同样打到 stdout。
+- 12 处 `error(...)` 调用在 `--json` 模式下 stdout **完全为空**（宿主拿不到任何东西）。
+
+现在：
+
+- `error()` 支持 `as_json=True` → stdout 输出统一错误外壳；`--json` 模式的 12 处调用全部接上。
+- `cmd_track` / `cmd_score` 的 stdout 错误提示改走 `error()`。
+- `verify/cli.py` 的参数错误在 `--json` 模式下输出统一外壳。
+- **错误退出码统一为 2**——此前 `error()` 退 1、异常退 2，宿主脚本要记两套码。
+
+### 改进：argparse 错误信息具体到缺哪个参数
+
+此前 `--json` 模式下的 argparse 错误一律是笼统的"命令行参数错误"。现在重放一次解析、提取 argparse 自己写出的原因：
+
+```
+zt backtest shaofu --json  →  "the following arguments are required: ts_code"
+zt trade add --json        →  "the following arguments are required: text"
+```
+
+### 修复：OOS/IS 把「算不出来」伪装成「比值是 0」
+
+**这是 v4.10.0 以来一直存在、且被误读的缺陷。**
+
+`oos_is_ratio = OOS Sharpe / IS Sharpe`，但旧实现是 `if is_sharpe > 0.001: ratio = oos/is`，**其余情况留 0.0**。于是当 IS 段 Sharpe 为负（当前策略正是 −0.817）时，比值在数学上就没有意义，却被写成 0.0，报告显示成：
+
+```
+| OOS/IS | 0.00 | ≥ 0.60 | ❌ |
+```
+
+**总评 0/5 通过**——看起来像"策略过拟合到 OOS 完全没收益"。实际是：IS 段本身就是亏的，负÷负的正号取决于两个负数谁的绝对值大，是噪声不是过拟合程度。
+
+现在：
+
+- `oos_is_ratio` 改为 `float | None`，`None` = **无法计算**（IS 段 Sharpe 非正 / OOS 段无有效样本），与"算出是 0"严格区分。
+- 新增 `compute_oos_is_ratio()`，单股版与组合版共用同一口径（此前两份实现各自写一遍）。
+- `GateResult` 新增 `applicable` 字段；不适用项报告里显示 **"N/A ➖ 不适用"**，**不进分母**、不算失败项。
+- `GateResult.value` 在不适用时为 `None`（JSON 里是 `null`）而非 0.0——0.0 会被下游读成"比值确实是 0"。
+- 自优化器 `V10VerifyScorer` 的适应度计算同步排除不适用项——否则会**凭空拿到 +10 分**（`passed_count × 10`）。
+
+修好后同一份验收报告显示：
+
+```
+| Sharpe | -0.82 | ≥ 0.50 | ❌ |
+| Calmar | -0.54 | ≥ 0.50 | ❌ |
+| WinRate | 36.0% | ≥ 40% | ❌ |
+| MaxDD | 53.4% | ≤ 25% | ❌ |
+| OOS/IS | N/A | ≥ 0.60 | ➖ 不适用 |
+
+**总评**：0/4 通过
+```
+
+### 测试
+
+- `tests/test_command_result.py` 新增 7 项：5 个子命令错误路径的 JSON 合法性、退出码统一、非 JSON 模式行为不变。
+- `tests/test_verify_walk_forward.py` 新增 7 项：`compute_oos_is_ratio` 的 None/0 区分、端到端负 Sharpe 返回 None。
+- `tests/test_verify_gates.py` 新增 3 项：不适用项的 `applicable` / `value is None` / 真 0.0 仍按阈值判定。
+- `tests/test_verify_report.py` 新增 4 项：Markdown 显示 N/A、分母排除不适用项、不列入失败项、JSON value 为 null。
+- pytest **1652 passed** / ruff（`modules` + `tests` + `api` 全清）/ mypy 86 文件 / SKILL 质量门 12/12。
+
 ## v4.12.0 (2026-10-31) — 命令结果外壳归一（架构评审候选 5）
 
 架构评审的**最后一个候选**落地。**验收数字与 v4.11.0 逐位相同**（114 笔 / sharpe −0.8169 / 0-4 通过）——本轮只改错误出口，不动任何计算口径。
