@@ -280,7 +280,7 @@ def calculate_metrics(
     trades: list[Any],
 ) -> PerformanceMetrics:
     """
-    计算回测绩效指标。
+    计算回测绩效指标 —— 所有回测路径的统一入口。
 
     计算口径：
     - 波动率与夏普/索提诺使用 sample std（``statistics.stdev``）
@@ -299,6 +299,9 @@ def calculate_metrics(
     Returns:
         PerformanceMetrics: 各项绩效指标。
     """
+    # 注意：当前函数签名接受 dict 列表格式（历史原因）
+    # 未来可以扩展为接受 (equity_curve: list[float], trades: list[Any], trading_days: int)
+    # 以实现更清晰的统一接口
     metrics = PerformanceMetrics()
 
     if not equity_curve:
@@ -427,8 +430,110 @@ __all__ = [
     "calc_trade_stats",
     "calc_curve_metrics",
     "calculate_metrics",
+    "calculate_metrics_unified",
     "calculate_performance_metrics",
     "compute_sharpe",
     "daily_returns",
     "compute_drawdown",
 ]
+
+
+def calculate_metrics_unified(
+    net_values: list[float],
+    trades: list[Any],
+    trading_days: int,
+    *,
+    pnl_unit: str = "pct",
+) -> PerformanceMetrics:
+    """统一绩效指标计算 —— 所有回测路径的唯一入口。
+
+    这是 calculate_metrics 的简化版本，接受净值序列而非 dict 列表。
+    各回测引擎应统一输出 (net_values, trades, trading_days)，然后调用此函数。
+
+    Args:
+        net_values: 净值序列（如 [100.0, 101.5, 103.2, ...]）
+        trades: 交易列表（LoopTrade 或 Trade）
+        trading_days: 年化分母（交易日数）
+        pnl_unit: trades 中 pnl_pct 的单位
+            "pct" → LoopTrade 风格，5.0 表示 5%
+            "frac" → Trade 风格，0.05 表示 5%
+
+    Returns:
+        PerformanceMetrics: 各项绩效指标
+
+    口径说明：
+        - Sharpe 使用日收益率年化（sqrt(252)），与 portfolio/single 一致
+        - 交易统计走 calc_trade_stats（唯一实现）
+        - 曲线指标走 calc_curve_metrics（唯一实现）
+    """
+    metrics = PerformanceMetrics()
+
+    if not net_values or len(net_values) < 2:
+        return metrics
+
+    initial = net_values[0]
+    final = net_values[-1]
+
+    if initial > 0:
+        metrics.total_return = (final / initial) - 1.0
+
+    n_periods = len(net_values) - 1
+    if n_periods > 0 and initial > 0:
+        metrics.annualized_return = (final / initial) ** (TRADING_DAYS_PER_YEAR / n_periods) - 1.0
+
+    daily_rets = daily_returns(net_values)
+
+    # 年化波动率
+    if len(daily_rets) > 1:
+        metrics.volatility_annual = statistics.stdev(daily_rets) * math.sqrt(TRADING_DAYS_PER_YEAR)
+
+    # 夏普比率（日收益率年化，sqrt(252)）
+    metrics.sharpe_ratio = compute_sharpe(daily_rets, periods_per_year=TRADING_DAYS_PER_YEAR)
+
+    # 索提诺比率
+    if daily_rets:
+        avg_ret = sum(daily_rets) / len(daily_rets)
+        negative_rets = [r for r in daily_rets if r < 0]
+        std_neg = statistics.stdev(negative_rets) if len(negative_rets) > 1 else 0.0
+        if std_neg > 0:
+            metrics.sortino_ratio = (avg_ret / std_neg) * math.sqrt(TRADING_DAYS_PER_YEAR)
+        elif avg_ret > 0:
+            metrics.sortino_ratio = float("inf")
+
+    # 最大回撤与持续时间
+    max_dd, max_duration = compute_drawdown(net_values)
+    metrics.max_drawdown = max_dd
+    metrics.max_drawdown_duration = max_duration
+
+    # Calmar 比率
+    if metrics.max_drawdown != 0:
+        metrics.calmar_ratio = metrics.annualized_return / abs(metrics.max_drawdown)
+
+    # 交易统计
+    if trades:
+        # 根据 pnl_unit 调整 pnl_pct
+        if pnl_unit == "pct":
+            # LoopTrade 风格：5.0 表示 5%，需要除以 100 转为 calc_trade_stats 期望的分数
+            pnls = [t.pnl_pct / 100.0 for t in trades if _is_closed_trade(t)]
+        else:
+            # Trade 风格：0.05 表示 5%，已经是分数
+            pnls = [t.pnl_pct for t in trades if _is_closed_trade(t)]
+
+        holding_days_list = []
+        for t in trades:
+            if _is_closed_trade(t):
+                hd = getattr(t, "holding_days", None) or getattr(t, "hold_days", 0)
+                holding_days_list.append(hd)
+
+        stats = calc_trade_stats(pnls, holding_days_list)
+
+        metrics.total_trades = stats.total_trades
+        metrics.win_rate = stats.win_rate
+        metrics.profit_factor = stats.profit_factor
+        metrics.avg_win = abs(stats.avg_win) * 100  # 转为百分数
+        metrics.avg_loss = abs(stats.avg_loss) * 100  # 转为百分数（正值）
+        metrics.max_consecutive_wins = stats.max_consecutive_wins
+        metrics.max_consecutive_losses = stats.max_consecutive_losses
+        metrics.avg_holding_days = stats.avg_holding_days
+
+    return metrics
