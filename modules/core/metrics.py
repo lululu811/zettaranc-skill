@@ -525,7 +525,7 @@ def calculate_metrics_unified(
                 hd = getattr(t, "holding_days", None) or getattr(t, "hold_days", 0)
                 holding_days_list.append(hd)
 
-        stats = calc_trade_stats(pnls, holding_days_list)
+        stats = calc_trade_stats(pnls, holding_days_list if holding_days_list else None)
 
         metrics.total_trades = stats.total_trades
         metrics.win_rate = stats.win_rate

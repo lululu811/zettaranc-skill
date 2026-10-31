@@ -273,21 +273,21 @@ class TestCalculateMetricsUnified:
     def test_basic(self):
         """基本功能：净值序列 + 交易列表"""
         net_values = [100.0, 110.0, 105.0, 120.0]
-        
+
         class MockTrade:
             def __init__(self, pnl_pct, holding_days, exit_date="20240101"):
                 self.pnl_pct = pnl_pct  # 百分数：5.0 表示 5%
                 self.holding_days = holding_days
                 self.exit_date = exit_date
-        
+
         trades = [
             MockTrade(5.0, 3),   # +5%
             MockTrade(-3.0, 2),  # -3%
             MockTrade(8.0, 4),   # +8%
         ]
-        
+
         metrics = calculate_metrics_unified(net_values, trades, trading_days=4, pnl_unit="pct")
-        
+
         assert metrics.total_trades == 3
         assert metrics.win_rate == pytest.approx(2 / 3, rel=1e-6)
         assert metrics.total_return == pytest.approx(0.2, rel=1e-6)  # (120-100)/100
@@ -302,16 +302,16 @@ class TestCalculateMetricsUnified:
     def test_frac_unit(self):
         """分数单位的 pnl_pct（Trade 风格）"""
         net_values = [100.0, 110.0]
-        
+
         class MockTrade:
             def __init__(self, pnl_pct, holding_days, exit_date="20240101"):
                 self.pnl_pct = pnl_pct  # 分数：0.05 表示 5%
                 self.holding_days = holding_days
                 self.exit_date = exit_date
-        
+
         trades = [MockTrade(0.05, 3)]
-        
+
         metrics = calculate_metrics_unified(net_values, trades, trading_days=2, pnl_unit="frac")
-        
+
         assert metrics.total_trades == 1
         assert metrics.win_rate == 1.0

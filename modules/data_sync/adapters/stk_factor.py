@@ -44,7 +44,7 @@ UPSERT_SQL = """
 """
 
 
-def build_upsert_records(df: Any) -> list[tuple]:
+def build_upsert_records(df: Any) -> list[tuple[Any, ...]]:
     """从 DataFrame 构建 UPSERT 记录列表。纯函数，可独立测试。"""
     records = []
     for row in df.itertuples(index=False):

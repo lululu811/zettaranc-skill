@@ -70,7 +70,7 @@ def detect_changan_resonance(klines: list[DailyData]) -> dict[str, Any] | None:
     day2 = klines[-2]
     day3 = klines[-1]
     kdj = calculate_kdj(klines[:-2])
-    j_val = kdj[2] if isinstance(kdj, tuple) else kdj.j  # type: ignore[union-attr]
+    j_val = kdj[2] if isinstance(kdj, tuple) else kdj.j
     if j_val >= -13:
         return None
     if day2_prev.close <= 0:
@@ -103,7 +103,7 @@ def detect_nana_resonance(klines: list[DailyData]) -> dict[str, Any] | None:
     if len(klines) < 10:
         return None
     kdj = calculate_kdj(klines)
-    j_val = kdj[2] if isinstance(kdj, tuple) else kdj.j  # type: ignore[union-attr]
+    j_val = kdj[2] if isinstance(kdj, tuple) else kdj.j
     if j_val >= 0:
         return None
     has_volume_up = False
@@ -131,7 +131,7 @@ def detect_pinghang_resonance(klines: list[DailyData]) -> dict[str, Any] | None:
     if len(klines) < 5:
         return None
     kdj = calculate_kdj(klines)
-    j_val = kdj[2] if isinstance(kdj, tuple) else kdj.j  # type: ignore[union-attr]
+    j_val = kdj[2] if isinstance(kdj, tuple) else kdj.j
     if j_val >= 55:
         return None
     day1, day2, day3, day4 = klines[-5], klines[-4], klines[-3], klines[-2]
