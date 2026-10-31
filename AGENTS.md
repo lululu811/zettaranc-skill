@@ -9,7 +9,7 @@
 - **核心交付物**：`SKILL.md`（Skill-Schema-V2 合规的角色扮演协议，被 Claude Code/Cursor 加载）——LLM 用 Z 哥角色生成点评/话术。
 - **数据层**：Python 包 `modules/`，只负责**数据准备**（指标、信号、回测、评分），不做投资话术——这是刻意分层，避免「AI 味」。
 - **可选层**：`api/`（FastAPI REST）+ `frontend/`（React 看板）+ `rust/`（Rust 加速计算核）。
-- **当前版本**：`v4.10.0`（`pyproject.toml:7`、`SKILL.md` frontmatter + 版本表、`skill.json:3`、`README.md` badge、`docs/CHANGELOG.md` 顶端、`AGENTS.md` 本行，共 **7 处**必须一致；改 `pyproject.toml` 的 `version` 时同步这 7 处，`docs/INDEX.md` 维护规则有同样的清单）。
+- **当前版本**：`v4.11.0`（`pyproject.toml:7`、`SKILL.md` frontmatter + 版本表、`skill.json:3`、`README.md` badge、`docs/CHANGELOG.md` 顶端、`AGENTS.md` 本行，共 **7 处**必须一致；改 `pyproject.toml` 的 `version` 时同步这 7 处，`docs/INDEX.md` 维护规则有同样的清单）。
 - **许可证**：MIT。
 
 ## Architecture & Data Flow
@@ -76,19 +76,26 @@ modules/backtest/_rust_bridge.py  # is_rust_available() / bridge_shaofu_single()
 - 路径常量（`DATA_DIR/REGISTRY_DIR/REPORTS_DIR`）→ `modules/core/paths.py`。
 - ATR → `modules/core/atr.py`。
 - 错误 → `modules/core/errors.py`（`ZettarancError` 基类 + 统一错误码）。
+- K 线读取 SQL → `modules/core/kline.py`（`KLINE_COLUMNS` / `read_kline_rows` / `read_kline_rows_batch` / `resolve_kline_limit`）。
+- 请求限流 → `modules/core/rate_limit.py`（`wait_min_interval` / `WindowRateLimiter` / `make_window_limiter`）。
+- 模拟器规范默认值 → `modules/simulator/config.py`（`SIMULATION_DEFAULTS` / `build_cost_model` / `build_simulation_config`）。
 - 数据源决议 → `modules/datasource_resolution.py`（`resolve_provider()`：读路径与写路径共用同一份"环境变量 → provider"判断）。
 - 少妇战法回测实现 → `modules/backtest/shaofu.py`（`ShaofuBacktestResult` / `_calc_metrics` / `backtest_shaofu_single` / `summary_text`）。`modules/backtest_six_step.py` 只是**兼容 re-export**，新代码不要从那里导入。
 - 少妇战法 B1 战法规则 → `modules/strategies/shaofu_b1.py::detect_shaofu_b1`（指标级 `indicators.detect_b1_today` 只管指标，战法条件在 strategies 层）。**与 `strategies.detect_b1` 是两套不同策略**，实测重合度仅 3%，不可互相替代。
 - 组合回测实现 → `modules/backtest/portfolio.py::PortfolioBacktestEngine`（**唯一**的真组合：共享资金池 + 费率 + 闸门 + 仓位上限）。`zt backtest portfolio` 与 `zt verify v1.0` 都用它。
 - 活跃市值闸门 → `modules/active_market_gate.py`（`GateAction` 枚举、`GateThresholds` 阈值、`TradingGate` port、失败策略的唯一来源）。注意 `signal`（当日涨跌幅判多空）与 `gate`（两日累计判闸门）是**两组不同语义的阈值**，不可合并；详见 `CONTEXT.md` 与 `docs/adr/0001-*.md`。
 - **不要**在新代码里另立第二套 `MarketRegime`/`PerformanceMetrics`/ATR/路径常量；一律从 `modules/core` 导入。
+- **不要**另写 K 线查询 SQL——一律走 `modules/core/kline.py`（并用 `resolve_kline_limit` 决定截断，别自己写 `if not start_date and days > 0`）。
+- **不要**另写限流 sleep——走 `modules/core/rate_limit.py`。
+- **不要**硬编码模拟器默认值——走 `modules/simulator/config.py::build_simulation_config`。
+- `min_resonance_score` 的单位**统一是 0-1**（不是 0-100），CLI 与 API 都一样。
 
 ## Key Directories
 
 | 目录 | 用途 |
 |---|---|
 | `modules/` | Python 数据层与业务逻辑（核心） |
-| `modules/core/` | 公共：metrics / market_context / walk_forward / atr / paths / errors / net / `_rust_compat.py` |
+| `modules/core/` | 公共：metrics / market_context / walk_forward / atr / paths / errors / net / kline / rate_limit / `_rust_compat.py` |
 | `modules/indicators/` | 60+ 技术指标 + 价格形态（`data_layer.py`、`core.py`（KDJ/BBI/…）、`price_patterns/`、`volume_patterns.py`、`wave_theory.py`、`kirin_detector.py`） |
 | `modules/strategies/` | 30+ 战法识别（`core.py`、`base_strategies.py`、`compound_strategies.py`、`sell_signals.py`、`vectorized.py`），入口 `detect_all_strategies` |
 | `modules/screener/` | 选股评分（`engine.py`、`criteria.py`、`scoring.py`、`market.py`、`workflow.py`） |
@@ -203,6 +210,9 @@ RUN_REALDATA=true python -m pytest tests/test_indicators_realdata.py -v  # 真�
 | `modules/indicators/data_layer.py` | DB-first K 线读 + 指标缓存 + `analyze_stock()` 管线 |
 | `modules/strategies/__init__.py` | `detect_all_strategies()` 战法折叠入口 |
 | `modules/core/_rust_compat.py` | Rust/Python 切换 shim（`ZETTARANC_BACKTEST_IMPL`） |
+| `modules/core/kline.py` | K 线读取 SQL 唯一来源（`read_kline_rows` / `read_kline_rows_batch` / `resolve_kline_limit`） |
+| `modules/core/rate_limit.py` | 请求限流公共实现（间隔 + 60s 滑动窗口） |
+| `modules/simulator/config.py` | 模拟器规范默认值与唯一装配点（CLI 与 API 共用） |
 | `api/main.py` | FastAPI 入口 + `start_web()`（uvicorn 8000，9 个 router 挂 `/api/v1`） |
 | `api/config.py` | pydantic-settings `Settings`（db_path / data_mode / cors / api_prefix） |
 | `frontend/vite.config.ts` | vite 端口 5173 + `/api` 代理到 `http://localhost:8000` |

@@ -2,6 +2,59 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## v4.11.0 (2026-10-31) — 架构评审候选收敛（模拟器配置 / 限流 / 市场状态 / K 线读取）
+
+架构评审的 4 个候选落地。**验收数字与 v4.10.0 逐位相同**（114 笔 / sharpe −0.8169 / 0-4 通过）——本轮全是"同一语义的多份实现收敛到单一来源"，不改任何计算口径。
+
+### 候选 8：SimulationConfig——模拟器默认值归一
+
+CLI 与 API 各写一份装配代码，默认值已经漂移：
+
+| 字段 | CLI | API |
+|---|---|---|
+| position_score_threshold | 70.0 | 60 |
+| max_position_pct | 0.20 | 0.15 |
+| use_dynamic_slippage | False | True |
+| cost_model | "simple" / "advanced" | "zero" / "realistic" |
+| min_resonance_score | 0.35（0-1） | 50÷100（字段是 0-100） |
+
+两处最严重：
+
+- **cost_model 词汇不同，且 "simple" 与 "zero" 不是一回事**——CLI 的 simple 佣金 0.0003（非零），API 的 zero 全零。
+- **min_resonance_score 单位不同**——同一个 0.35 在 CLI 是 35 分，在 API 被除以 100 变成 0.0035 分，差 100 倍。
+
+新增 `modules/simulator/config.py`：`SIMULATION_DEFAULTS`（规范默认值）+ `build_cost_model(name)`（统一词汇 zero/simple/realistic，"advanced" 保留为历史别名）+ `build_simulation_config(**overrides)`（唯一装配点）。规范值以 `SimulationConfig` 自身默认值与 `BACKTEST_DEFAULT_MAX_POSITION_PCT` 为准——CLI 侧本来是对的，API 侧是离群值。
+
+**API 的 `min_resonance_score` 由 0-100 改为 0-1**（破坏性变更）。
+
+### 候选 7：CallBudget——请求限流收敛到公共实现
+
+仓库里此前有 6 处限流实现，各自为政：
+
+- 4 个客户端各抄了一份**完全相同**的"最小间隔 sleep"逻辑，只有间隔参数不同（tushare 0.55s / indevs 0.5s / a-stock-data 0.5s / hithink 0.25s）；
+- syncer 用一份 60s 滑动窗口 + 多进程锁（只读 `TUSHARE_RPM`）。
+
+两种算法语义不同（间隔 vs 窗口），都保留，但实现只此一处：新增 `modules/core/rate_limit.py`（`wait_min_interval` / `WindowRateLimiter` / `make_window_limiter`），`modules/data_sync/rate_limiter.py` 降为薄封装。4 个客户端的 `_rate_limit` 改为委托共享原语，**保留原有属性名**，测试用它们关闭限流的写法不受影响。
+
+### 候选 6：MarketRegimeDecision——市场状态判定收敛到单一来源
+
+市场状态此前有 3 份判定逻辑 + 1 个死的单源。新增 `modules/core/market_context.py::classify_market_regime`（STRONG / NEUTRAL / WEAK），调用方（模拟器市场环境、行情择时等）统一走它。
+
+### 候选 2：KlineRead——K 线读取 SQL 收敛到单一来源
+
+同一段"取最近 N 天、升序返回"的 SQL 抄了 3 处（`SqliteDataSource.get_kline_dicts` / `CompositeDataSource.get_kline_dicts`（几乎是上一处的逐字副本）/ `indicators.data_layer.get_kline_data`），批量查询 `get_kline_dicts_batch` 是第 4 处副本。
+
+新增 `modules/core/kline.py`：`KLINE_COLUMNS` + `read_kline_rows`（单只）+ `read_kline_rows_batch`（批量）+ `resolve_kline_limit`。
+
+**只统一 SQL，不统一 dict → DailyData 的转换**——`datasource.dict_to_daily` 显式计算 `is_rise` / `is_beidou` / `is_suoliang` 等派生标志，而 `indicators.data_layer.get_kline_data` 用 DailyData 默认值 False。下游战法检测依赖这些标志，两条路径的 DailyData **并不等价**，强行统一会改回测结果。
+
+顺带发现并修掉一个**潜在行为回退**：6 个数据源实现各自写了一遍截断规则（`if not start_date and days > 0`，sqlite/composite 走 SQL LIMIT，tushare/hithink/a-stock/indevs 走 Python 切片）——规则是"给了日期区间就以区间为准，`days` 只在无区间时截断"。统一时若丢掉这条，DB 路径会与 API 路径给出**不同长度**的 K 线。现收敛到 `resolve_kline_limit` 一处，并有行为测试护栏。
+
+### 测试
+
+- 顺带把 `tests/test_rate_limiter.py` 里两条**源码文本断言**换成行为断言（`assert "xxx" in inspect.getsource(...)` → 探针验证行为）。源码形状断言在这个仓库已经栽过一次——B1/B2 的闸门 bug 在源码断言下是绿的。
+- pytest **1597 passed** / ruff / mypy 85 文件 / SKILL 质量门 12/12。
+
 ## v4.10.0 (2026-10-31) — 验收与组合回测切到真组合引擎（BacktestRunner 阶段 4–5）
 
 [ADR-0002](adr/0002-backtest-runner-unification.md) 阶段 4–5。**验收数字大幅变化，且五项硬指标从 4/4 通过变为 0/4 通过。**
