@@ -1,5 +1,13 @@
 """CLI ↔ Rust PyO3 回测桥（v4.0.2）。
 
+**分工（v4.10.0 起明确）**：Rust **只服务单股加速路径**
+（``bridge_shaofu_single`` → Rust ``run_single_strategy_backtest_py``）。
+组合回测一律走 Python 的 ``PortfolioBacktestEngine``——Rust 侧既没有费率
+模型也没有闸门模型，当组合引擎会**静默丢掉**这两项。
+
+因此未接线的 Rust 组合/网格搜索入口与对应的 Python 桥函数已删除：留着会
+让人误以为 Rust 支持组合路径。
+
 设计目标：
 - 让 CLI 调用方 (`cli_commands.cmd_backtest` 等) 不必感知 Rust 是否可用
 - Rust 不可用 / 调用失败 → silent fallback 到 Python
@@ -10,7 +18,6 @@
   `ShaofuBacktestResult` dataclass 不同，需要做字段映射（avg_pnl / profit_factor /
   avg_holding_days 等 Python 侧有，Rust 侧要从 trades 派生）
 - silent fallback（try/except + log warning + Python 路径）应该封装在一处
-- 后续若 Rust screener 暴露 `screen_stocks_py`，bridge 也是统一的接入点
 """
 
 from __future__ import annotations
@@ -37,45 +44,6 @@ def is_rust_available() -> bool:
         # rust 模式下 import 失败被转成 RuntimeError；非法 ZETTARANC_BACKTEST_IMPL
         # 抛 ValueError；CLI 视角二者等价于"不可用"，应 silent fallback 到 Python。
         return False
-
-
-def try_call(name: str, *args: Any, **kwargs: Any) -> Any:
-    """尝试调 `_core_compute.<name>(*args, **kwargs)`。
-
-    返回：Rust 调用返回值，或 None（不可用 / 抛错 / Rust 返回 None）。
-    用法：业务层 `result = try_call(...); if result is not None: use_it() else: python_fallback(...)`。
-    注意：**不要**用 `try_call(...) or python_fallback(...)` —— Rust 成功但返回
-    falsy 值（0 / 空 dict / 空列表）时会被 `or` 误判为失败，静默降级到 Python。
-    """
-    fn_obj = compute_func(name)
-    if fn_obj is None:
-        return None
-    # compute_func 返回 object | None；强制标为 Callable 让调用通过 mypy
-    fn = cast(Callable[..., Any], fn_obj)
-    try:
-        return fn(*args, **kwargs)
-    except Exception as e:
-        logger.warning(
-            "Rust call %s(%s) failed, falling back to Python: %s",
-            name,
-            _arg_repr(args, kwargs),
-            e,
-        )
-        return None
-
-
-def _arg_repr(args: tuple, kwargs: dict, max_len: int = 80) -> str:
-    """参数压缩展示（避免 logging 里 dump 整个 klines 列表）。"""
-    parts: list[str] = [repr(a)[:max_len] for a in args[:3]]
-    if len(args) > 3:
-        parts.append(f"... +{len(args) - 3} more args")
-    parts.extend(f"{k}={repr(v)[:max_len]}" for k, v in list(kwargs.items())[:3])
-    return ", ".join(parts)
-
-
-# ─────────────────────────────────────────────────────────────────────
-# Schema 映射：Rust output dict → CLI 输出 dict
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _kline_to_dict(kline: Any) -> dict:
@@ -283,40 +251,3 @@ def bridge_shaofu_single(
 # ─────────────────────────────────────────────────────────────────────
 # 网格搜索 bridge（verify / portfolio_walk_forward 用）
 # ─────────────────────────────────────────────────────────────────────
-
-
-def bridge_grid_search(
-    base_config: dict,
-    param_grid: list[dict],
-    splits: list[dict],
-    klines_by_code: dict[str, list],
-) -> dict | None:
-    """Walk-forward 网格搜索（CLI / verify pipeline 用）。
-
-    - Rust 可用：调 `run_grid_search_py`
-    - Rust 不可用 / 失败：返回 None（调用方应回退 Python `portfolio_grid_search_optimize`）
-
-    Returns:
-        `{all_results, best_params, best_score, n_results}` 或 None
-    """
-    fn_obj = compute_func("run_grid_search_py")
-    if fn_obj is None:
-        return None
-    # compute_func 返回 object | None；强制标为 Callable 让调用通过 mypy
-    fn = cast(Callable[..., Any], fn_obj)
-
-    try:
-        # K 线转 dict
-        klines_payload = {code: [_kline_to_dict(k) for k in series] for code, series in klines_by_code.items()}
-        return fn(base_config, param_grid, splits, klines_payload)
-    except Exception as e:
-        logger.warning("Rust grid search failed, falling back: %s", e)
-        return None
-
-
-def reset_all_caches() -> None:
-    """测试用：清空所有缓存（get_compute_module + 函数级）。"""
-    from modules.core import _rust_compat
-
-    _rust_compat.reset_cache()
-    _rust_compat.reset_func_cache()

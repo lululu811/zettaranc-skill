@@ -9,7 +9,7 @@
 - **核心交付物**：`SKILL.md`（Skill-Schema-V2 合规的角色扮演协议，被 Claude Code/Cursor 加载）——LLM 用 Z 哥角色生成点评/话术。
 - **数据层**：Python 包 `modules/`，只负责**数据准备**（指标、信号、回测、评分），不做投资话术——这是刻意分层，避免「AI 味」。
 - **可选层**：`api/`（FastAPI REST）+ `frontend/`（React 看板）+ `rust/`（Rust 加速计算核）。
-- **当前版本**：`v4.9.0`（`pyproject.toml:7`、`SKILL.md` frontmatter + 版本表、`skill.json:3`、`README.md` badge、`docs/CHANGELOG.md` 顶端、`AGENTS.md` 本行，共 **7 处**必须一致；改 `pyproject.toml` 的 `version` 时同步这 7 处，`docs/INDEX.md` 维护规则有同样的清单）。
+- **当前版本**：`v4.10.0`（`pyproject.toml:7`、`SKILL.md` frontmatter + 版本表、`skill.json:3`、`README.md` badge、`docs/CHANGELOG.md` 顶端、`AGENTS.md` 本行，共 **7 处**必须一致；改 `pyproject.toml` 的 `version` 时同步这 7 处，`docs/INDEX.md` 维护规则有同样的清单）。
 - **许可证**：MIT。
 
 ## Architecture & Data Flow
@@ -59,7 +59,7 @@ hithink（HITHINK_FINANCE_API_KEY 配置时最优先，v4.2.0）
 
 ```
 modules/core/_rust_compat.py      # ZETTARANC_BACKTEST_IMPL=rust|python|auto（默认 rust）
-modules/backtest/_rust_bridge.py  # is_rust_available() / try_call(name,...) → 失败业务层 fallback 到 Python
+modules/backtest/_rust_bridge.py  # is_rust_available() / bridge_shaofu_single() → Rust 单股加速，失败 fallback 到 Python
 ```
 
 - Rust 侧为 Cargo workspace（`rust/Cargo.toml`，6 crates）：`core_types / indicators / backtest_engine / grid_search / screener / bindings`。`bindings` 用 pyo3（abi3-py312）+ pyo3-polars（polars 0.54）。
@@ -67,6 +67,7 @@ modules/backtest/_rust_bridge.py  # is_rust_available() / try_call(name,...) →
 - 构建：在 `rust/crates/bindings` 下 `maturin develop --release`（macOS 用 `rust/scripts/build_macos.sh`，Linux 兜底 `rust/Dockerfile.test` / `rust/scripts/build-linux.sh`）。
 - **降级是静默的**：`auto` 模式导入失败就退回 Python，容易掩盖 Rust 回归。CI 有 `tests/test_rust_compat.py` + `tests/test_cli_uses_rust.py` 覆盖接线；`ZETTARANC_BACKTEST_IMPL=python` 可强制走 Python。
 - 注意：`api/services/backtest_service.py` 目前直接用 Python 回测模块，**不走** Rust 桥。
+- **Rust 只服务单股加速路径**（`run_single_strategy_backtest_py`）。组合与网格搜索的 Rust 入口从未被 Python 调用，且 Rust 侧**既无费率模型也无闸门模型**——当组合引擎会静默丢掉这两项，因此已删除。组合回测一律走 Python 的 `PortfolioBacktestEngine`。
 
 ### 单一事实来源
 
@@ -77,6 +78,8 @@ modules/backtest/_rust_bridge.py  # is_rust_available() / try_call(name,...) →
 - 错误 → `modules/core/errors.py`（`ZettarancError` 基类 + 统一错误码）。
 - 数据源决议 → `modules/datasource_resolution.py`（`resolve_provider()`：读路径与写路径共用同一份"环境变量 → provider"判断）。
 - 少妇战法回测实现 → `modules/backtest/shaofu.py`（`ShaofuBacktestResult` / `_calc_metrics` / `backtest_shaofu_single` / `summary_text`）。`modules/backtest_six_step.py` 只是**兼容 re-export**，新代码不要从那里导入。
+- 少妇战法 B1 战法规则 → `modules/strategies/shaofu_b1.py::detect_shaofu_b1`（指标级 `indicators.detect_b1_today` 只管指标，战法条件在 strategies 层）。**与 `strategies.detect_b1` 是两套不同策略**，实测重合度仅 3%，不可互相替代。
+- 组合回测实现 → `modules/backtest/portfolio.py::PortfolioBacktestEngine`（**唯一**的真组合：共享资金池 + 费率 + 闸门 + 仓位上限）。`zt backtest portfolio` 与 `zt verify v1.0` 都用它。
 - 活跃市值闸门 → `modules/active_market_gate.py`（`GateAction` 枚举、`GateThresholds` 阈值、`TradingGate` port、失败策略的唯一来源）。注意 `signal`（当日涨跌幅判多空）与 `gate`（两日累计判闸门）是**两组不同语义的阈值**，不可合并；详见 `CONTEXT.md` 与 `docs/adr/0001-*.md`。
 - **不要**在新代码里另立第二套 `MarketRegime`/`PerformanceMetrics`/ATR/路径常量；一律从 `modules/core` 导入。
 
@@ -180,7 +183,7 @@ RUN_REALDATA=true python -m pytest tests/test_indicators_realdata.py -v  # 真�
 - **错误处理**：API 调用 try/except 包裹，记录 error log，返回空 DataFrame/None 而非抛异常中断。
 - **DB-first 读**：K 线/指标先查 `daily_kline`/`indicator_cache`，没命中才调 API 并写回缓存。
 - **缓存**：`indicator_cache` 为内存 + SQLite 双层（见 `modules/indicators/data_layer.py`）。
-- **Rust 桥**：业务层用 `result = try_call(...); if result is not None: use_it() else: python_fallback(...)` 模式/语义（不要用 `or` 判断，Rust 成功返回 falsy 值会被误判）；可选实现经 `ZETTARANC_BACKTEST_IMPL` 切换，默认 `rust`。
+- **Rust 桥**：仅单股加速路径用 Rust（`bridge_shaofu_single`）。失败时静默 fallback 到 Python——**降级是静默的**，容易掩盖 Rust 回归；`ZETTARANC_BACKTEST_IMPL=python` 可强制走 Python。
 - **Ruff**：`line-length=120`，`target-version=py312`，`select=F,E,W,UP`，`ignore=E501,F401,F403`；format 双引号 + 空格。
 - **Mypy**：`python_version=3.12`，`ignore_missing_imports=true`，仅关键路径做类型检查（screener/cli/data_sync/indicators/core/strategies），非严格渐进式。
 - **类型统一**：`PerformanceMetrics` / `MarketRegime` / `TRADING_DAYS_PER_YEAR` / 收益率字段 `annualized_return` / `equity_curve: list[float]` / `calculate_atr` 一律以 `modules/core` 为准。

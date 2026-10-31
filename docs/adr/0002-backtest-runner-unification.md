@@ -35,11 +35,22 @@ status: accepted
 
 继续留在 `modules/loop_engine.py`，被两个包共用。它已经是正确的 seam——策略与离场规则的唯一实现。不动。
 
-### 3. B1 检测统一到 `strategies.detect_b1`
+### 3. 少妇战法 B1 提升到战法层（**决策已修正**）
 
-理由：`detect_b1` 属于上层正式战法接口（`strategies/__init__.py::detect_all_strategies` 是 AGENTS.md 声明的入口，背后就是它），带 MDC 打分与麒麟上下文；`indicators.detect_b1_today` 只是 `indicators/price_patterns/screener_helper.py` 里的筛选辅助。两个检测器产出不同的入场判定，是"回测数字不可比"的深层原因之一。
+> **原始决策**：B1 检测统一到 `strategies.detect_b1`。**实施时发现前提不成立，已修正。**
 
-代价：shaofu 路径的入场判定会变 → 验收数字会动 → 必须与验收阈值重新基线放在同一个 PR。
+原文的理由是"两个检测器互不调用，是最大的隐藏重复"。读实现后发现**它们不是重复实现，是两套不同的策略**：
+
+| | `detect_b1_today`（少妇战法） | `detect_b1`（通用战法） |
+|---|---|---|
+| J 值 | ≤ `config.j_threshold`（默认 12，验收用 5） | < -10（来自自优化器注册表，**可被 override**） |
+| 其他条件 | 振幅<4% / 涨幅∈[-2%,1.8%] / 缩量打分 ≥3、牛绳（白线≥黄线）、N 型上移 | 非绿砖、麒麟阶段等 MDC 加分项 |
+
+实测验收样本（50 只股票 / 14950 个交易日）：少妇战法命中 6639 次，通用战法 315 次，**交集仅 201 次——重合度 3%**。
+
+所以"统一到 `detect_b1`"等于换策略：入场信号 -95%，丢掉牛绳/N 型/缩量三个条件，还会让验收数字依赖自优化器注册表的**可变全局态**（`get_active_param` 的 override），基准不再可复现。
+
+**修正后的决策**：把少妇战法的**战法规则**提升到战法层 `modules/strategies/shaofu_b1.py::detect_shaofu_b1`，**规则一字未改**；指标级的 `indicators.detect_b1_today` 留在 indicators（indicators 不能反向依赖 strategies，否则成环）。两套 B1 各自命名、各自是独立策略——层级倒置由此修正，验收数字不受影响。
 
 ### 4. 删除死代码（约 1,800 行）
 
@@ -66,6 +77,35 @@ status: accepted
 ### 6. 结果形状与指标聚合归一
 
 一个 `BacktestResult` interface 承载 `LoopTrade` trades + 现有指标字段的并集（`PortfolioBacktestResult` 需补 `avg_pnl` / `avg_win` / `avg_loss` / `max_win` / `max_loss` / `avg_holding_days`）。指标聚合归到 `modules/core/metrics.py::calculate_metrics`——但要先修它的 SELL 过滤：`core/metrics.py:206` 按 `getattr(t, "action", None) == "SELL"` 筛成交，而 `LoopTrade` 没有 `action` 字段，喂进去会得到 `total_trades == 0`。
+
+### 7. 验收阈值保持不变
+
+验收切到真组合后，五项硬指标从 4/4 通过变成 **0/4 通过**（详见下方对照表）。
+
+**阈值保持不变**（sharpe ≥ 0.5 / calmar ≥ 0.5 / win_rate ≥ 40% / max_drawdown ≤ 25%）。理由：它们是**策略质量标准**，不是当前水平快照；按一个失败的结果去校准门槛等于自我认证——那样任何策略都能"通过"。
+
+差异的真实来源已核实**不是引擎 bug**：组合引擎的 entry/exit/exit_reason（白线跌破 87 / 止损 16 / 白线死叉黄线 11）与逐股对照一致。差异来自**等权平均把选股风险平均掉了**——50 条互不相关的单股曲线取均值天然分散，而真实组合只持 5 个仓位（30% 现金仓位、逐笔计费），承担策略的选股与持仓风险。旧的 4/4 是统计假象。
+
+### 8. Rust 只服务单股加速路径
+
+Rust 侧既无费率模型也无闸门模型，当组合引擎会**静默丢掉**这两项。因此：组合与网格搜索的 Rust 入口（`run_portfolio_backtest_py` / `run_grid_search_py`）及其从未被调用的 Python 桥函数（`bridge_grid_search` / `try_call` / `reset_all_caches`）一并删除。Rust 只保留 `run_single_strategy_backtest_py`（单股加速）。
+
+### 9. 闸门默认关闭、费率进入验收数字
+
+两项均由实施时拍板：0AMV 闸门在验收中**关闭**（`PortfolioConfig` 不传 `gate=`，与现状一致）；交易费率按 `PortfolioConfig` 默认值（佣金 0.025%、最低 5 元、印花税 0.05%）**进入**验收数字。
+
+### 附：新旧口径对照（50 只股票 / 300 天）
+
+| 指标 | 旧（等权组合 / 无费率） | 新（真组合 / 有费率） |
+|---|---|---|
+| total_trades | 193 | 114 |
+| win_rate | 0.456 | 0.360 |
+| total_return_pct | +0.0208 | **-0.3702** |
+| annualized_return | +0.0174 | -0.2908 |
+| sharpe | 1.250 | **-0.817** |
+| calmar | 4.183 | -0.544 |
+| max_drawdown | 0.0042 | 0.5345 |
+| gate 结果 | **4/4 通过** | **0/4 通过** |
 
 ## 被否决的选项
 

@@ -2,6 +2,55 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## v4.10.0 (2026-10-31) — 验收与组合回测切到真组合引擎（BacktestRunner 阶段 4–5）
+
+[ADR-0002](adr/0002-backtest-runner-unification.md) 阶段 4–5。**验收数字大幅变化，且五项硬指标从 4/4 通过变为 0/4 通过。**
+
+### 修复（真 bug）
+
+- **「用户看的」与「验收用的」不是同一个引擎。**
+  - `zt backtest portfolio` 走的是"各标的独立回测后按 `1/max_concurrent` 加权平均资金曲线"的**等权组合**——不建模资金竞争、不计费率，其收益数字与真实组合不可比。
+  - `zt verify v1.0` 走 shaofu 分支（逐股独立回测 + 等权合并曲线），而 `_aggregate_metrics` 的 docstring 写的却是"基于真实组合资金曲线"——实现与意图本来就不一致。
+  - 唯一在用真组合的是自优化器 `V10VerifyScorer`（`use_portfolio_engine` 默认 True）。于是**优化器优化的目标与验收报告的数字不是同一个引擎算出来的**。
+  - 现统一到 `PortfolioBacktestEngine`（真组合：共享资金池 + 费率 + 仓位上限），`zt backtest portfolio`（含单只股票）与 `zt verify v1.0` 都用它。
+- **Rust 侧组合/网格搜索入口从未被 Python 调用，且 Rust 侧既无费率模型也无闸门模型**——当组合引擎会静默丢掉这两项。已删除 `run_portfolio_backtest_py` / `run_grid_search_py` 与对应的零调用方 Python 桥函数（`bridge_grid_search` / `try_call` / `reset_all_caches`）。**Rust 只服务单股加速路径**。
+
+### 重构
+
+- **少妇战法 B1 提升到战法层** —— 新增 `modules/strategies/shaofu_b1.py::detect_shaofu_b1`，规则一字未改。指标级的 `indicators.detect_b1_today` 留在 indicators（indicators 不能反向依赖 strategies，否则成环）。
+  - ADR-0002 决策 3 原文说两个 B1 检测器是"重复实现"——读实现后发现**前提不成立**：它们是两套不同策略，实测在验收样本上**重合度仅 3%**（少妇战法 6639 次 vs 通用战法 315 次，交集 201 次）。ADR 已修正。
+- **删除等权组合实现** —— `backtest_six_step.backtest_shaofu_portfolio` 与 `cli_commands._shaofu_portfolio_to_dict`。`modules/backtest_six_step.py` 从 192 行降到 61 行，现在只做兼容 re-export。
+
+### 新旧口径对照（50 只股票 / 300 天）
+
+| 指标 | 旧（等权组合 / 无费率） | 新（真组合 / 有费率） |
+|---|---|---|
+| total_trades | 193 | 114 |
+| win_rate | 0.456 | 0.360 |
+| total_return_pct | +0.0208 | **-0.3702** |
+| annualized_return | +0.0174 | -0.2908 |
+| sharpe | 1.250 | **-0.817** |
+| calmar | 4.183 | -0.544 |
+| max_drawdown | 0.0042 | 0.5345 |
+| gate 结果 | **4/4 通过** | **0/4 通过** |
+
+已核实**不是引擎 bug**：组合引擎的 entry/exit/exit_reason（白线跌破 87 / 止损 16 / 白线死叉黄线 11）与逐股对照一致。差异来自**等权平均把选股风险平均掉了**——50 条互不相关的单股曲线取均值天然分散，而真实组合只持 5 个仓位（30% 现金仓位、逐笔计费），承担策略的选股与持仓风险。旧的 4/4 是统计假象。
+
+### 阈值决策
+
+**`modules/verify/gates.py` 的五项阈值保持不变**（sharpe ≥ 0.5 / calmar ≥ 0.5 / win_rate ≥ 40% / max_drawdown ≤ 25%）。它们是**策略质量标准**，不是当前水平快照；按一个失败的结果去校准门槛等于自我认证——那样任何策略都能"通过"。验收如实报告 0/4。
+
+### 参数决策
+
+- **0AMV 闸门在验收中关闭**（`PortfolioConfig` 不传 `gate=`，与现状一致）。
+- **交易费率进入验收数字**（佣金 0.025%、最低 5 元、印花税 0.05%）。
+
+### 验证
+
+- pytest **1570 passed** / ruff / mypy 83 文件 / SKILL 质量门 12/12。
+- Rust：`cargo check -p zt_bindings` 与 `cargo check --workspace --exclude zt_bindings` 均通过，clippy 无 error（剩余 8 个警告是既有的 pyo3 弃用警告）。
+  - 注：本机系统 Python 3.14 超出 PyO3 0.23 支持上限，构建需 `PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1`（abi3 稳定 ABI 本就与解释器版本解耦）。
+
 ## v4.9.0 (2026-10-31) — 回测结果形状与指标聚合归一（BacktestRunner 阶段 3）
 
 [ADR-0002](adr/0002-backtest-runner-unification.md) 阶段 3。**验收数字与基线逐位相同**。
