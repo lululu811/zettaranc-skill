@@ -65,9 +65,7 @@ class SyncContext:
                 time.sleep(sleep_time)
         return None  # unreachable
 
-    def log_sync(
-        self, data_type: str, ts_code: str | None, last_date: str, status: str, message: str = ""
-    ) -> None:
+    def log_sync(self, data_type: str, ts_code: str | None, last_date: str, status: str, message: str = "") -> None:
         """记录同步日志"""
         with get_connection() as conn:
             cursor = conn.cursor()
@@ -104,9 +102,7 @@ class SyncContext:
             result = cursor.fetchone()
             return result["last_date"] if result else None
 
-    def batch_sync(
-        self, task_name: str, sync_fn: Any, ts_codes: list[str]
-    ) -> dict[str, int]:
+    def batch_sync(self, task_name: str, sync_fn: Any, ts_codes: list[str]) -> dict[str, int]:
         """通用批量同步：并发执行 + 进度追踪 + 异常处理
 
         Args:

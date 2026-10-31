@@ -281,9 +281,9 @@ class TestCalculateMetricsUnified:
                 self.exit_date = exit_date
 
         trades = [
-            MockTrade(5.0, 3),   # +5%
+            MockTrade(5.0, 3),  # +5%
             MockTrade(-3.0, 2),  # -3%
-            MockTrade(8.0, 4),   # +8%
+            MockTrade(8.0, 4),  # +8%
         ]
 
         metrics = calculate_metrics_unified(net_values, trades, trading_days=4, pnl_unit="pct")

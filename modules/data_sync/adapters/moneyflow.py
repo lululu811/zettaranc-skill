@@ -48,11 +48,7 @@ def build_upsert_records(df: Any) -> list[tuple]:
                     if row_dict.get("net_mf_amount") is not None
                     else row_dict.get("net_mf")
                 ),
-                (
-                    row_dict.get("net_mf_rate")
-                    if row_dict.get("net_mf_rate") is not None
-                    else row_dict.get("pct_mf")
-                ),
+                (row_dict.get("net_mf_rate") if row_dict.get("net_mf_rate") is not None else row_dict.get("pct_mf")),
             )
         )
     return records

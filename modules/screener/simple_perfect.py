@@ -298,7 +298,12 @@ def detect_simple_perfect_2(klines: list) -> dict[str, Any]:
     ma5 = _vol_ma5(klines, yidong_idx)
     low_zone = min(x.low for x in klines[-60:])
     pct = (k.close - k.prev_close) / k.prev_close * 100 if k.prev_close else 0.0
-    if pct >= ZHUANG_LIMIT_UP_PCT and ma5 > 0 and k.vol < ma5 * ZHUANG_LOW_VOL_RATIO and k.close <= low_zone * LOW_ZONE_TOL:
+    if (
+        pct >= ZHUANG_LIMIT_UP_PCT
+        and ma5 > 0
+        and k.vol < ma5 * ZHUANG_LOW_VOL_RATIO
+        and k.close <= low_zone * LOW_ZONE_TOL
+    ):
         return _result(False, ["底部区间缩量涨停（庄股，避雷）"], {"pct": pct})
     reasons.append("非底部缩量涨停")
 

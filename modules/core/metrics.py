@@ -519,11 +519,11 @@ def calculate_metrics_unified(
             # Trade 风格：0.05 表示 5%，已经是分数
             pnls = [t.pnl_pct for t in trades if _is_closed_trade(t)]
 
-        holding_days_list = []
+        holding_days_list: list[float] = []
         for t in trades:
             if _is_closed_trade(t):
                 hd = getattr(t, "holding_days", None) or getattr(t, "hold_days", 0)
-                holding_days_list.append(hd)
+                holding_days_list.append(float(hd) if hd is not None else 0.0)
 
         stats = calc_trade_stats(pnls, holding_days_list if holding_days_list else None)
 

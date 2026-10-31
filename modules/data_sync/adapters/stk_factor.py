@@ -46,10 +46,10 @@ UPSERT_SQL = """
 
 def build_upsert_records(df: Any) -> list[tuple[Any, ...]]:
     """从 DataFrame 构建 UPSERT 记录列表。纯函数，可独立测试。"""
-    records = []
+    records: list[tuple[Any, ...]] = []
     for row in df.itertuples(index=False):
         row_dict = cast("Any", row)._asdict()
-        values = [row_dict.get(FIELD_MAP.get(k, k), 0) for k in FIELD_MAP.keys()]
+        values = tuple(row_dict.get(FIELD_MAP.get(k, k), 0) for k in FIELD_MAP.keys())
         records.append(values)
     return records
 

@@ -109,9 +109,7 @@ class DataSyncer:
         """同步股票基本信息。"""
         return self.stock_basic.sync_one()
 
-    def sync_daily_kline(
-        self, ts_code: str, start_date: str | None = None, end_date: str | None = None
-    ) -> int:
+    def sync_daily_kline(self, ts_code: str, start_date: str | None = None, end_date: str | None = None) -> int:
         """同步单只股票的日线数据。"""
         return self.daily_kline.sync_one(ts_code, start_date, end_date)
 
@@ -166,15 +164,11 @@ class DataSyncer:
             ts_codes_for_indic = [c for c, n in kline_results.items() if n > 0]
         return self.sync_all_indicators(ts_codes=ts_codes_for_indic or None)
 
-    def sync_stk_factor(
-        self, ts_code: str, start_date: str | None = None, end_date: str | None = None
-    ) -> int:
+    def sync_stk_factor(self, ts_code: str, start_date: str | None = None, end_date: str | None = None) -> int:
         """同步单只股票的 Tushare 官方技术指标。"""
         return self.stk_factor.sync_one(ts_code, start_date, end_date)
 
-    def sync_all_stk_factor(
-        self, ts_codes: list[str] | None = None, days: int = 365
-    ) -> dict[str, int]:
+    def sync_all_stk_factor(self, ts_codes: list[str] | None = None, days: int = 365) -> dict[str, int]:
         """批量同步 Tushare 官方指标。"""
         return self.stk_factor.sync_batch(ts_codes, days)
 
@@ -182,15 +176,11 @@ class DataSyncer:
         """确保 daily_kline 表包含估值列。"""
         self.daily_basic.ensure_columns()
 
-    def sync_daily_basic(
-        self, ts_code: str, start_date: str = "", end_date: str = ""
-    ) -> int:
+    def sync_daily_basic(self, ts_code: str, start_date: str = "", end_date: str = "") -> int:
         """同步单只股票的每日估值指标。"""
         return self.daily_basic.sync_one(ts_code, start_date, end_date)
 
-    def sync_all_daily_basic(
-        self, ts_codes: list[str] | None = None, days: int = 730
-    ) -> dict[str, int]:
+    def sync_all_daily_basic(self, ts_codes: list[str] | None = None, days: int = 730) -> dict[str, int]:
         """批量同步每日估值指标。"""
         return self.daily_basic.sync_batch(ts_codes, days)
 

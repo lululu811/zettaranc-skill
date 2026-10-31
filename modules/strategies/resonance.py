@@ -20,7 +20,7 @@ strategies/compound_strategies.py 中的检测器为选股/诊断设计，追求
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from ..indicators import calculate_kdj
 from ..indicators.core import DailyData
@@ -70,7 +70,7 @@ def detect_changan_resonance(klines: list[DailyData]) -> dict[str, Any] | None:
     day2 = klines[-2]
     day3 = klines[-1]
     kdj = calculate_kdj(klines[:-2])
-    j_val = kdj[2] if isinstance(kdj, tuple) else kdj.j
+    j_val = kdj[2] if isinstance(kdj, tuple) else cast(Any, kdj).j
     if j_val >= -13:
         return None
     if day2_prev.close <= 0:
@@ -103,7 +103,7 @@ def detect_nana_resonance(klines: list[DailyData]) -> dict[str, Any] | None:
     if len(klines) < 10:
         return None
     kdj = calculate_kdj(klines)
-    j_val = kdj[2] if isinstance(kdj, tuple) else kdj.j
+    j_val = kdj[2] if isinstance(kdj, tuple) else cast(Any, kdj).j
     if j_val >= 0:
         return None
     has_volume_up = False
@@ -131,13 +131,11 @@ def detect_pinghang_resonance(klines: list[DailyData]) -> dict[str, Any] | None:
     if len(klines) < 5:
         return None
     kdj = calculate_kdj(klines)
-    j_val = kdj[2] if isinstance(kdj, tuple) else kdj.j
+    j_val = kdj[2] if isinstance(kdj, tuple) else cast(Any, kdj).j
     if j_val >= 55:
         return None
     day1, day2, day3, day4 = klines[-5], klines[-4], klines[-3], klines[-2]
-    if not (
-        day1.close > day1.open and day2.close < day2.open and day3.close < day3.open and day4.close > day4.open
-    ):
+    if not (day1.close > day1.open and day2.close < day2.open and day3.close < day3.open and day4.close > day4.open):
         return None
     if day3.close <= 0:
         return None
