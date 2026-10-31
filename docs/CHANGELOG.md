@@ -42,9 +42,9 @@ CLI 与 API 各写一份装配代码，默认值已经漂移：
 
 ### 候选 2：KlineRead——K 线读取 SQL 收敛到单一来源
 
-同一段"取最近 N 天、升序返回"的 SQL 抄了 3 处（`SqliteDataSource.get_kline_dicts` / `CompositeDataSource.get_kline_dicts`（几乎是上一处的逐字副本）/ `indicators.data_layer.get_kline_data`），批量查询 `get_kline_dicts_batch` 是第 4 处副本。
+同一段"取最近 N 天、升序返回"的 SQL 抄了 3 处（`SqliteDataSource.get_kline_dicts` / `CompositeDataSource.get_kline_dicts`（几乎是上一处的逐字副本）/ `indicators.data_layer.get_kline_data`），批量查询 `get_kline_dicts_batch` 是第 4 处副本。复核时又找出 2 处同语义副本：`bridge_client._get_local_daily` 与 `market_timing._load_index_klines_sqlite`（后者列集少 `pct_chg`，且 `pct_chg` 由相邻收盘价本地计算）——一并收敛。
 
-新增 `modules/core/kline.py`：`KLINE_COLUMNS` + `read_kline_rows`（单只）+ `read_kline_rows_batch`（批量）+ `resolve_kline_limit`。
+新增 `modules/core/kline.py`：`KLINE_COLUMNS` + `read_kline_rows`（单只，支持列子集）+ `read_kline_rows_batch`（批量）+ `resolve_kline_limit`。
 
 **只统一 SQL，不统一 dict → DailyData 的转换**——`datasource.dict_to_daily` 显式计算 `is_rise` / `is_beidou` / `is_suoliang` 等派生标志，而 `indicators.data_layer.get_kline_data` 用 DailyData 默认值 False。下游战法检测依赖这些标志，两条路径的 DailyData **并不等价**，强行统一会改回测结果。
 
@@ -53,7 +53,7 @@ CLI 与 API 各写一份装配代码，默认值已经漂移：
 ### 测试
 
 - 顺带把 `tests/test_rate_limiter.py` 里两条**源码文本断言**换成行为断言（`assert "xxx" in inspect.getsource(...)` → 探针验证行为）。源码形状断言在这个仓库已经栽过一次——B1/B2 的闸门 bug 在源码断言下是绿的。
-- pytest **1597 passed** / ruff / mypy 85 文件 / SKILL 质量门 12/12。
+- pytest **1601 passed** / ruff / mypy 85 文件 / SKILL 质量门 12/12。
 
 ## v4.10.0 (2026-10-31) — 验收与组合回测切到真组合引擎（BacktestRunner 阶段 4–5）
 

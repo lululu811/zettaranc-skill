@@ -41,7 +41,7 @@ def resolve_kline_limit(days: int, start_date: str | None = None) -> int | None:
     return days if days > 0 else None
 
 
-def _rows_to_dicts(rows: list[Any]) -> list[dict]:
+def _rows_to_dicts(rows: list[Any], columns: tuple[str, ...] = KLINE_COLUMNS) -> list[dict]:
     """把查询结果转成 dict 列表（升序）。
 
     ``row_factory`` 为 ``sqlite3.Row`` 时走 ``dict(row)``；为 ``None``（裸元组）时
@@ -51,7 +51,7 @@ def _rows_to_dicts(rows: list[Any]) -> list[dict]:
         return []
     if not isinstance(rows[0], tuple):
         return [dict(row) for row in rows]
-    return [dict(zip(KLINE_COLUMNS, row)) for row in rows]
+    return [dict(zip(columns, row)) for row in rows]
 
 
 def read_kline_rows(
@@ -61,6 +61,7 @@ def read_kline_rows(
     limit: int | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
+    columns: tuple[str, ...] = KLINE_COLUMNS,
 ) -> list[dict]:
     """从 ``daily_kline`` 读一段 K 线（按日期**升序**）。
 
@@ -70,12 +71,14 @@ def read_kline_rows(
         limit: 取最近 N 行；``None`` 表示不限；``0`` 表示不取任何行。
         start_date: 起始日（含）；``None`` 表示不限。
         end_date: 结束日（含）；``None`` 表示不限。
+        columns: 要取的列；默认 :data:`KLINE_COLUMNS`。允许取**列子集**（如指数
+            路径不需要 ``pct_chg``），但**顺序必须与调用方的取值下标一致**。
 
     Returns:
         K 线 dict 列表，按 ``trade_date`` 升序。
     """
     cursor = conn.cursor()
-    sql = f"SELECT {', '.join(KLINE_COLUMNS)} FROM daily_kline WHERE ts_code = ?"
+    sql = f"SELECT {', '.join(columns)} FROM daily_kline WHERE ts_code = ?"
     params: list[Any] = [ts_code]
 
     if start_date:
@@ -92,7 +95,7 @@ def read_kline_rows(
 
     cursor.execute(sql, params)
     # SQL 按 DESC 取（配合 LIMIT 取"最近 N 天"），这里反转成升序
-    return _rows_to_dicts(list(reversed(cursor.fetchall())))
+    return _rows_to_dicts(list(reversed(cursor.fetchall())), columns)
 
 
 def read_kline_rows_batch(

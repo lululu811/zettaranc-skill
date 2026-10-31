@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-4.11.0-green)](docs/CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-1597%20passed%20%7C%2016%20skipped-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-1601%20passed%20%7C%2016%20skipped-brightgreen)](tests/)
 [![Quality Gate](https://img.shields.io/badge/quality-12%2F12-blue)](corpus/quality_check.py)
 [![Skill](https://img.shields.io/badge/Skill--Schema--V2-✓-purple)](SKILL.md)
 

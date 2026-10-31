@@ -200,3 +200,49 @@ class TestStartDateOverridesDaysInConsumers:
         with get_db_connection() as conn:
             result = read_kline_rows_batch(["600519.SH"], conn=conn, days=2)
         assert [r["trade_date"] for r in result["600519.SH"]] == ["20260102", "20260103"]
+
+
+class TestOtherConsumersUseTheSharedReader:
+    """bridge_client 与 market_timing 的 SQLite 路径此前也各抄了一份 SQL。"""
+
+    def test_bridge_local_daily_matches_shared_reader(self, klined_db):
+        from modules.bridge_client import _get_local_daily
+        from modules.core.kline import read_kline_rows
+        from modules.database import get_db_connection
+
+        with get_db_connection() as conn:
+            expected = read_kline_rows("600519.SH", conn=conn, limit=60)
+        assert _get_local_daily("600519.SH", days=60) == expected
+
+    def test_bridge_local_daily_keeps_full_range_with_start_date(self, klined_db):
+        """bridge 的截断规则同样必须服从"start_date 优先"。"""
+        from modules.bridge_client import _get_local_daily
+
+        rows = _get_local_daily("600519.SH", days=1, start_date="20260101")
+        assert [r["trade_date"] for r in rows] == ["20260101", "20260102", "20260103"]
+
+    def test_market_timing_index_klines_match_shared_reader(self, klined_db):
+        """market_timing 的指数路径取 8 列（无 pct_chg），值须与共享 reader 一致。"""
+        from modules.core.kline import read_kline_rows
+        from modules.database import get_db_connection
+        from modules.market_timing import _load_index_klines_sqlite
+
+        with get_db_connection() as conn:
+            expected = read_kline_rows(
+                "600519.SH",
+                conn=conn,
+                limit=100,
+                columns=("ts_code", "trade_date", "open", "high", "low", "close", "vol", "amount"),
+            )
+        daily = _load_index_klines_sqlite("600519.SH", days=100)
+        assert [d.trade_date for d in daily] == [r["trade_date"] for r in expected]
+        assert [d.close for d in daily] == [r["close"] for r in expected]
+
+    def test_market_timing_computes_pct_chg_locally(self, klined_db):
+        """指数行的 pct_chg 由相邻收盘价本地计算，不取库里的值。"""
+        from modules.market_timing import _load_index_klines_sqlite
+
+        daily = _load_index_klines_sqlite("600519.SH", days=100)
+        assert daily[0].pct_chg == 0.0  # 首行 prev_close == close
+        # 第二行 prev_close = 10.5，close = 11.0
+        assert abs(daily[1].pct_chg - (11.0 / 10.5 - 1.0) * 100.0) < 1e-9
