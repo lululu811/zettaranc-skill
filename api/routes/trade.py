@@ -1,5 +1,6 @@
 """交易记录路由"""
 
+from api.utils.errors import raise_api_error
 from fastapi import APIRouter, HTTPException, Query
 
 from api.models.trade import (
@@ -24,7 +25,7 @@ def list_trades(
     try:
         return trade_service.list_trades(page=page, page_size=page_size, ts_code=ts_code)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取列表失败: {e}")
+        raise_api_error(e, prefix="获取列表失败")
 
 
 @router.post("/parse", response_model=TradeParseResult)
@@ -33,7 +34,7 @@ def parse_trade(req: TradeAddRequest):
     try:
         return trade_service.parse_trade(req.text)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"解析失败: {e}")
+        raise_api_error(e, prefix="解析失败")
 
 
 @router.post("/")
@@ -42,7 +43,7 @@ def add_trade(req: TradeAddRequest):
     try:
         return trade_service.add_trade(req.text)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"保存失败: {e}")
+        raise_api_error(e, prefix="保存失败")
 
 
 @router.put("/{trade_id}", response_model=StatusResponse)
@@ -51,7 +52,7 @@ def update_trade(trade_id: int, updates: dict):
     try:
         return trade_service.update_trade(trade_id, updates)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"更新失败: {e}")
+        raise_api_error(e, prefix="更新失败")
 
 
 @router.delete("/{trade_id}", response_model=StatusResponse)
@@ -60,7 +61,7 @@ def delete_trade(trade_id: int):
     try:
         return trade_service.delete_trade(trade_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"删除失败: {e}")
+        raise_api_error(e, prefix="删除失败")
 
 
 @router.get("/stats", response_model=TradeStatsResponse)
@@ -69,4 +70,4 @@ def get_stats(ts_code: str | None = Query(default=None)):
     try:
         return trade_service.get_stats(ts_code=ts_code)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取统计失败: {e}")
+        raise_api_error(e, prefix="获取统计失败")

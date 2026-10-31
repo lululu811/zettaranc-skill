@@ -1,5 +1,6 @@
 """股票分析路由"""
 
+from api.utils.errors import raise_api_error
 from fastapi import APIRouter, HTTPException, Query
 
 from api.models.stock import (
@@ -18,7 +19,7 @@ def analyze_stock(ts_code: str, days: int = Query(default=120, ge=10, le=1000)):
     try:
         return stock_service.get_full_analysis(ts_code, days)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"分析失败: {e}")
+        raise_api_error(e, prefix="分析失败")
 
 
 @router.get("/analyze/{ts_code}/klines", response_model=KlineChartResponse)
@@ -27,7 +28,7 @@ def get_klines(ts_code: str, days: int = Query(default=120, ge=10, le=1000)):
     try:
         return stock_service.get_kline_chart_data(ts_code, days)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取 K 线失败: {e}")
+        raise_api_error(e, prefix="获取 K 线失败")
 
 
 @router.get("/analyze/{ts_code}/signals")
@@ -36,7 +37,7 @@ def get_signals(ts_code: str, days: int = Query(default=120, ge=10, le=1000)):
     try:
         return stock_service.get_signals(ts_code, days)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取信号失败: {e}")
+        raise_api_error(e, prefix="获取信号失败")
 
 
 @router.get("/score/{ts_code}")
@@ -45,4 +46,4 @@ def get_score(ts_code: str):
     try:
         return stock_service.get_score(ts_code)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取评分失败: {e}")
+        raise_api_error(e, prefix="获取评分失败")

@@ -9,6 +9,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.config import settings
+from api.routes.backtest import router as backtest_router
+from api.routes.commentary import router as commentary_router
+from api.routes.diagnosis import router as diagnosis_router
+from api.routes.screen import router as screen_router
+from api.routes.simulator import router as simulator_router
+from api.routes.stock import router as stock_router
+from api.routes.system import router as system_router
+from api.routes.trade import router as trade_router
+from api.routes.watchlist import router as watchlist_router
+from api.utils.errors import ApiError
+from modules.core.command_result import http_status_for
+from modules.core.errors import ZettarancError
 
 logger = logging.getLogger("zettaranc-api")
 
@@ -40,26 +52,46 @@ app.add_middleware(
 
 
 # 全局异常处理
+@app.exception_handler(ApiError)
+async def api_error_handler(request: Request, exc: ApiError):
+    """API 统一错误外壳 —— 扁平结构，与 CLI ``--json`` 的形状一致。
+
+    FastAPI 默认会把 ``HTTPException.detail`` 包进 ``{"detail": ...}``，那样
+    响应体就变成 ``{"detail": {"ok": false, ...}}``，与 CLI 的
+    ``{"ok": false, ...}`` 不同形，宿主要写两套解析。这里直接输出扁平外壳。
+    """
+    return JSONResponse(status_code=exc.status_code, content=exc.payload)
+
+
+@app.exception_handler(ZettarancError)
+async def zettaranc_error_handler(request: Request, exc: ZettarancError):
+    """结构化错误 → 带 error_code 的 HTTP 响应。
+
+    路由层的 ``except Exception`` 已把这类异常转成 ``ApiError``（状态码按错误码
+    判定）；这个处理器兜底那些没进路由 try 块的路径（如中间件、依赖注入）。
+    """
+    from modules.core.command_result import exception_to_dict
+
+    logger.warning("结构化错误: %s", exc)
+    return JSONResponse(
+        status_code=http_status_for(exc),
+        content=exception_to_dict(exc),
+    )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    """未分类异常兜底 —— 仍输出统一外壳，错误码为 INTERNAL_ERROR。"""
+    from modules.core.command_result import exception_to_dict
+
     logger.exception("未处理异常: %s", exc)
     return JSONResponse(
         status_code=500,
-        content={"error": "internal_error", "detail": str(exc)},
+        content=exception_to_dict(exc),
     )
 
 
 # ── 注册路由 ──
-from api.routes.stock import router as stock_router
-from api.routes.screen import router as screen_router
-from api.routes.watchlist import router as watchlist_router
-from api.routes.diagnosis import router as diagnosis_router
-from api.routes.backtest import router as backtest_router
-from api.routes.simulator import router as simulator_router
-from api.routes.trade import router as trade_router
-from api.routes.system import router as system_router
-from api.routes.commentary import router as commentary_router
-
 prefix = settings.api_prefix
 app.include_router(stock_router, prefix=f"{prefix}/stock", tags=["stock"])
 app.include_router(screen_router, prefix=f"{prefix}/screen", tags=["screen"])
@@ -75,6 +107,7 @@ app.include_router(commentary_router, prefix=f"{prefix}", tags=["commentary"])
 def start_web():
     """启动 API 服务，供 zt-web 快捷指令调用"""
     import uvicorn
+
     print("=" * 60)
     print("  Z哥量化 PC 看板后端 API 服务已启动")
     print(f"  地址: http://127.0.0.1:{settings.api_port}")

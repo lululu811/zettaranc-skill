@@ -24,9 +24,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 
 from .core.net import disable_proxy
+from .core.errors import ErrorCode
 from .cli_commands import (
     STRATEGY_ALIAS,
     STRATEGY_CHOICES,
@@ -276,10 +278,55 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _wants_json(argv: list[str]) -> bool:
+    """命令行里是否带了 ``--json``。
+
+    argparse 自身的参数错误（未知参数 / 缺必填参数）会在解析阶段就退出，
+    那时还没有 ``args`` 可用——只能回看 argv。用于让**参数错误**也产出
+    合法 JSON，避免宿主在 ``--json`` 模式下拿到空 stdout。
+    """
+    return "--json" in argv
+
+
+def _emit_error(exc: BaseException, *, as_json: bool) -> None:
+    """输出错误并退出。
+
+    ``--json`` 模式下 stdout 是**合法 JSON**（统一错误外壳，宿主可按
+    ``error_code`` 分支）；stderr 仍保留人类可读信息。退出码 2。
+    """
+    from .core.command_result import exception_to_dict
+
+    payload = exception_to_dict(exc)
+    if as_json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+    print(str(exc) if str(exc) else payload["message"], file=sys.stderr)
+    sys.exit(2)
+
+
 def main() -> None:
     """zt CLI 主入口"""
     parser = build_parser()
-    args = parser.parse_args()
+
+    # argparse 的参数错误也要走统一外壳：--json 模式下 stdout 不能是空的。
+    as_json = _wants_json(sys.argv[1:])
+    try:
+        args = parser.parse_args()
+    except SystemExit as exc:
+        if as_json and exc.code not in (0, None):
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error_code": ErrorCode.INVALID_PARAM.value,
+                        "message": "命令行参数错误",
+                        "cause": None,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            sys.exit(int(exc.code) or 2)
+        raise
 
     handlers = {
         "analyze": cmd_analyze,
@@ -308,8 +355,11 @@ def main() -> None:
         # 参数错误或未知 action 时进程仍退 0，宿主脚本会误判成功。
         exit_code = handlers[args.command](args) or 0
     except ZettarancError as e:
-        print(str(e), file=sys.stderr)
-        sys.exit(2)
+        _emit_error(e, as_json=bool(getattr(args, "json", False)))
+    except (ValueError, OSError, RuntimeError, KeyError, TypeError) as e:
+        # 这些是业务层漏网的异常（未包成 ZettarancError）。此前它们会向上冒泡成
+        # 裸 traceback，--json 模式下 stdout 同样是空的。
+        _emit_error(e, as_json=bool(getattr(args, "json", False)))
 
     if exit_code:
         sys.exit(exit_code)

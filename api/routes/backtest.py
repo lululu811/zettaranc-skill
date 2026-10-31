@@ -1,5 +1,6 @@
 """策略回测路由"""
 
+from api.utils.errors import raise_api_error
 from fastapi import APIRouter, HTTPException
 
 from api.models.backtest import (
@@ -26,7 +27,7 @@ def run_shaofu(req: BacktestRequest):
             position_pct=req.position_pct,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"回测失败: {e}")
+        raise_api_error(e, prefix="回测失败")
 
 
 @router.post("/multi", response_model=BacktestResponse)
@@ -42,7 +43,7 @@ def run_multi(req: MultiBacktestRequest):
             take_profit_pct=req.take_profit_pct,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"回测失败: {e}")
+        raise_api_error(e, prefix="回测失败")
 
 
 @router.post("/portfolio", response_model=PortfolioBacktestResponse)
@@ -58,4 +59,4 @@ def run_portfolio(req: PortfolioBacktestRequest):
             take_profit_pct=req.take_profit_pct,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"回测失败: {e}")
+        raise_api_error(e, prefix="回测失败")

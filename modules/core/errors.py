@@ -19,6 +19,7 @@ class ErrorCode(StrEnum):
     RATE_LIMIT = "RATE_LIMIT"  # 触发限流
     DB_ERROR = "DB_ERROR"  # 数据库读写失败
     INVALID_PARAM = "INVALID_PARAM"  # 参数非法
+    INTERNAL_ERROR = "INTERNAL_ERROR"  # 未分类的内部错误（兜底，避免退化成无语义字符串）
 
     # indevs_client (v3.10.4)
     INDEVS_NO_DATA = "INDEVS_NO_DATA"  # Indevs 返回数据为空 / 数据源未配置

@@ -3,6 +3,7 @@
 import logging
 from pathlib import Path
 
+from api.utils.errors import raise_api_error
 from fastapi import APIRouter, HTTPException
 
 from api.models.common import StatusResponse
@@ -49,7 +50,7 @@ def sync_status():
             })
         return {"logs": logs}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取同步状态失败: {e}")
+        raise_api_error(e, prefix="获取同步状态失败")
 
 
 @router.post("/sync/{ts_code}", response_model=StatusResponse)
@@ -64,4 +65,4 @@ def sync_stock(ts_code: str, days: int = 730, indicators: bool = True):
             syncer.sync_indicator_cache(ts_code, days=days)
         return StatusResponse(status="ok", message=f"{ts_code} 同步完成")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"同步失败: {e}")
+        raise_api_error(e, prefix="同步失败")
