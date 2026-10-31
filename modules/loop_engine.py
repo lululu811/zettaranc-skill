@@ -24,6 +24,14 @@ from enum import Enum
 from typing import Any, Optional, cast
 
 from .strategies.shaofu_b1 import detect_shaofu_b1
+from .strategies.resonance import (
+    DETECTOR_REGISTRY,
+    SignalDetector,
+    detect_b2_resonance,
+    detect_changan_resonance,
+    detect_nana_resonance,
+    detect_pinghang_resonance,
+)
 from .indicators import (
     DailyData,
     TradeSignal,
@@ -674,22 +682,22 @@ class ShaofuLoopEngine:
         details: dict[str, dict[str, Any]] = {"B1": {}}
 
         if cfg.enable_b2:
-            b2 = self._detect_b2(klines)
+            b2 = detect_b2_resonance(klines)
             if b2:
                 triggered.append("B2")
                 details["B2"] = b2
         if cfg.enable_changan:
-            ch = self._detect_changan(klines)
+            ch = detect_changan_resonance(klines)
             if ch:
                 triggered.append("长安")
                 details["长安"] = ch
         if cfg.enable_nana:
-            n = self._detect_nana(klines)
+            n = detect_nana_resonance(klines)
             if n:
                 triggered.append("娜娜")
                 details["娜娜"] = n
         if cfg.enable_pinghang:
-            p = self._detect_pinghang(klines)
+            p = detect_pinghang_resonance(klines)
             if p:
                 triggered.append("平行重炮")
                 details["平行重炮"] = p
@@ -706,122 +714,6 @@ class ShaofuLoopEngine:
             "signal_strength": total_strength,
             "signal_details": details,
         }
-
-    def _detect_b2(self, klines: list[DailyData]) -> dict[str, Any] | None:
-        """B2: B1 后放量长阳确认（前 5-15 日出现过 B1 + 当日涨幅≥4% + 放量）。"""
-        if len(klines) < 20:
-            return None
-        today = klines[-1]
-        yesterday = klines[-2]
-        if yesterday.close <= 0:
-            return None
-        price_change = (today.close - yesterday.close) / yesterday.close
-        if price_change < 0.04:
-            return None
-        if yesterday.vol > 0 and today.vol < yesterday.vol * 1.5:
-            return None
-        has_b1_recent = False
-        for i in range(max(0, len(klines) - 15), len(klines) - 1):
-            b1 = detect_b1_today(klines[: i + 1])
-            if b1.get("is_b1"):
-                has_b1_recent = True
-                break
-        if not has_b1_recent:
-            return None
-        return {
-            "price_change": price_change,
-            "volume_ratio": today.vol / yesterday.vol if yesterday.vol > 0 else 0,
-        }
-
-    def _detect_changan(self, klines: list[DailyData]) -> dict[str, Any] | None:
-        """长安战法：三日 B1 + 放量阳 + 缩半量。"""
-        if len(klines) < 5:
-            return None
-        day2_prev = klines[-4]
-        day2 = klines[-2]
-        day3 = klines[-1]
-        kdj = calculate_kdj(klines[:-2])
-        # calculate_kdj 恒返回 tuple[float, float, float]；else 分支为历史遗留的
-        # 对象兼容路径，用 cast 显式收窄以通过严格 mypy。
-        j_val = kdj[2] if isinstance(kdj, tuple) else cast(Any, kdj).j
-        if j_val >= -13:
-            return None
-        if day2_prev.close <= 0:
-            return None
-        day2_change = (day2.close - day2_prev.close) / day2_prev.close
-        if day2_change < 0.04:
-            return None
-        if day2.close < day2.open:
-            return None
-        if day2_prev.vol > 0 and day2.vol < day2_prev.vol * 1.3:
-            return None
-        if day2.close <= 0:
-            return None
-        day3_change = (day3.close - day2.close) / day2.close
-        if day3_change < 0 or day3_change > 0.02:
-            return None
-        if day3.close < day3.open:
-            return None
-        if day2.vol > 0 and day3.vol > day2.vol * 0.6:
-            return None
-        return {
-            "day1_j": j_val,
-            "day2_change": day2_change,
-            "day3_change": day3_change,
-        }
-
-    def _detect_nana(self, klines: list[DailyData]) -> dict[str, Any] | None:
-        """娜娜图形：放量涨 + 缩量回调 + J < 0。"""
-        if len(klines) < 10:
-            return None
-        kdj = calculate_kdj(klines)
-        # 同上：calculate_kdj 恒返回 tuple，else 分支为历史遗留兼容路径
-        j_val = kdj[2] if isinstance(kdj, tuple) else cast(Any, kdj).j
-        if j_val >= 0:
-            return None
-        has_volume_up = False
-        for i in range(max(0, len(klines) - 6), len(klines) - 2):
-            day = klines[i]
-            prev = klines[i - 1] if i > 0 else None
-            if prev and day.close > prev.close and day.vol > prev.vol:
-                has_volume_up = True
-                break
-        if not has_volume_up:
-            return None
-        shrink_days = 0
-        for i in range(len(klines) - 3, len(klines) - 1):
-            day = klines[i]
-            prev = klines[i - 1] if i > 0 else None
-            if prev and day.vol < prev.vol * 0.8:
-                shrink_days += 1
-        if shrink_days < 2:
-            return None
-        return {"j_value": j_val, "shrink_days": shrink_days}
-
-    def _detect_pinghang(self, klines: list[DailyData]) -> dict[str, Any] | None:
-        """平行重炮：双阳夹阴 + 第二阳≥4% + J < 55。"""
-        if len(klines) < 5:
-            return None
-        kdj = calculate_kdj(klines)
-        # 同上：calculate_kdj 恒返回 tuple，else 分支为历史遗留兼容路径
-        j_val = kdj[2] if isinstance(kdj, tuple) else cast(Any, kdj).j
-        if j_val >= 55:
-            return None
-        day1, day2, day3, day4 = klines[-5], klines[-4], klines[-3], klines[-2]
-        if not (
-            day1.close > day1.open and day2.close < day2.open and day3.close < day3.open and day4.close > day4.open
-        ):
-            return None
-        if day3.close <= 0:
-            return None
-        day4_change = (day4.close - day3.close) / day3.close
-        if day4_change < 0.04:
-            return None
-        if day2.vol > 0 and day1.vol < day2.vol * 1.2:
-            return None
-        if day3.vol > 0 and day4.vol < day3.vol * 1.2:
-            return None
-        return {"j_value": j_val, "day4_change": day4_change}
 
     # ----------------------------------------------------------
     # 主循环
