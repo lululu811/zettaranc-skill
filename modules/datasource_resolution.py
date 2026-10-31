@@ -80,8 +80,8 @@ def resolve_provider() -> ProviderResolution:
     if os.environ.get("INDEVS_API_KEY"):
         return ProviderResolution("indevs", "配置了 INDEVS_API_KEY")
     if os.environ.get("DATA_MODE", "websearch") == "jnb":
-        token = os.environ.get("TUSHARE_TOKEN")
-        api_url = os.environ.get("TUSHARE_API_URL")
+        token = _tushare_token()
+        api_url = _tushare_api_url()
         # JNB 模式下 tushare 要**两项**配置齐全才能用：``TushareClient.__init__``
         # 缺任一项都抛 CONFIG_MISSING（见该文件的 JNB 检查）。只判 token 会让
         # 决议说 "tushare" 而实际构造时回退 a-stock-data —— 决议与实际用的源
@@ -89,6 +89,33 @@ def resolve_provider() -> ProviderResolution:
         if token and api_url:
             return ProviderResolution("tushare", "JNB 模式且配置了 TUSHARE_TOKEN 与 TUSHARE_API_URL")
     return ProviderResolution(None, "未配置数据源，走免费源兜底")
+
+
+def _tushare_token() -> str:
+    """读 tushare token —— **与 TushareClient 完全同一来源**（见 :func:`_tushare_api_url`）。"""
+    try:
+        from .tushare_client import current_token
+
+        return current_token()
+    except ImportError:  # pragma: no cover - tushare 依赖缺失
+        return ""
+
+
+def _tushare_api_url() -> str:
+    """读 tushare 的中转 API 地址 —— **与 TushareClient 完全同一来源**。
+
+    走 ``tushare_client.current_api_url()``（实时环境变量），不能直接读
+    ``os.environ``：``TushareClient`` 判可用性与这里判决议必须看到同一个值，
+    否则会出现"决议说 tushare、实际构造抛 CONFIG_MISSING"。
+
+    延迟 import 是为了避免本模块与 ``tushare_client`` 的循环依赖。
+    """
+    try:
+        from .tushare_client import current_api_url
+
+        return current_api_url()
+    except ImportError:  # pragma: no cover - tushare 依赖缺失
+        return ""
 
 
 __all__ = ["ProviderResolution", "resolve_provider"]

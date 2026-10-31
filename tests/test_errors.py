@@ -72,10 +72,9 @@ class TestTushareClientPilot:
     def test_missing_token_raises_zettaranc_error(self, monkeypatch):
         monkeypatch.setenv("DATA_MODE", "jnb")
         monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
+        monkeypatch.setenv("TUSHARE_API_URL", "http://example.com")
         import modules.tushare_client as tc
 
-        monkeypatch.setattr(tc, "TUSHARE_TOKEN", "")
-        monkeypatch.setattr(tc, "TUSHARE_API_URL", "http://example.com")
         with pytest.raises(ZettarancError) as exc_info:
             tc.TushareClient()
         assert exc_info.value.code == ErrorCode.CONFIG_MISSING
@@ -83,10 +82,10 @@ class TestTushareClientPilot:
 
     def test_missing_api_url_raises_zettaranc_error(self, monkeypatch):
         monkeypatch.setenv("DATA_MODE", "jnb")
+        monkeypatch.setenv("TUSHARE_TOKEN", "fake_token")
+        monkeypatch.delenv("TUSHARE_API_URL", raising=False)
         import modules.tushare_client as tc
 
-        monkeypatch.setattr(tc, "TUSHARE_TOKEN", "fake_token")
-        monkeypatch.setattr(tc, "TUSHARE_API_URL", "")
         with pytest.raises(ZettarancError, match="TUSHARE_API_URL"):
             tc.TushareClient()
 

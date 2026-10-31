@@ -67,7 +67,11 @@ class DataSyncer:
     """数据同步器"""
 
     def __init__(self, token: str | None = None, datasource: DataSource | None = None) -> None:
-        self.token = token or os.environ.get("TUSHARE_TOKEN")
+        # token 来源与 TushareClient 一致（tushare_client.current_token()）——
+        # 两处来源不同会导致"决议说 tushare、实际构造抛 CONFIG_MISSING"
+        from ..tushare_client import current_token
+
+        self.token = token or current_token()
 
         # 依赖注入 DataSource；未显式注入时按【与读路径同一套】决议选源。
         # 决议规则集中在 modules/datasource_resolution.py——此前此处与

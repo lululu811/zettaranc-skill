@@ -172,7 +172,7 @@ def test_data_syncer_default_datasource_prefers_tushare_in_jnb(monkeypatch):
 
     monkeypatch.setenv("DATA_MODE", "jnb")
     # 模块级常量在 import 时读取，monkeypatch.setenv 无效，需直接改模块属性
-    monkeypatch.setattr(tc, "TUSHARE_API_URL", "https://tt.xiaodefa.cn")
+    monkeypatch.setenv("TUSHARE_API_URL", "https://tt.xiaodefa.cn")
     monkeypatch.delenv("INDEVS_API_KEY", raising=False)
     monkeypatch.setenv("TUSHARE_TOKEN", "env-token")
     syncer = DataSyncer()
@@ -188,7 +188,7 @@ def test_data_syncer_jnb_missing_url_falls_back_to_a_stock_data(monkeypatch):
     from modules.data_sync.syncer import DataSyncer
 
     monkeypatch.setenv("DATA_MODE", "jnb")
-    monkeypatch.setattr(tc, "TUSHARE_API_URL", "")
+    monkeypatch.setenv("TUSHARE_API_URL", "")
     monkeypatch.delenv("INDEVS_API_KEY", raising=False)
     monkeypatch.setenv("TUSHARE_TOKEN", "env-token")
     syncer = DataSyncer()

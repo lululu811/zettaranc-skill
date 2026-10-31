@@ -43,20 +43,17 @@ _ALL_ENV_KEYS = (
 
 
 def _clean_env(monkeypatch, env: dict[str, str]) -> None:
+    """把环境变量清干净，再按用例设置。
+
+    ``resolve_provider()`` 与 ``TushareClient`` 的可用性判定读的是**同一份实时
+    环境变量**（``tushare_client.current_api_url()`` / ``current_token()``），
+    所以这里只需管环境变量——本机 ``.env`` 有没有 ``TUSHARE_API_URL`` 都不影响
+    结果，CI 与本地行为一致。
+    """
     for key in _ALL_ENV_KEYS:
         monkeypatch.delenv(key, raising=False)
     for key, value in env.items():
         monkeypatch.setenv(key, value)
-    # ``TUSHARE_API_URL`` 是 **import 时**读的模块级常量，monkeypatch 环境变量
-    # 改不了已导入的模块——必须直接改模块属性。否则本机 .env 里有它、CI 没有，
-    # 同一个测试在两边结果不同（JNB + token 时期望 tushare，CI 缺 URL 会回退
-    # a-stock-data）。
-    from modules import tushare_client
-
-    monkeypatch.setattr(tushare_client, "TUSHARE_API_URL", env.get("TUSHARE_API_URL", ""), raising=False)
-    from modules.data_sync import syncer as syncer_mod
-
-    monkeypatch.setattr(syncer_mod, "TUSHARE_API_URL", env.get("TUSHARE_API_URL", ""), raising=False)
 
 
 class TestResolveProvider:

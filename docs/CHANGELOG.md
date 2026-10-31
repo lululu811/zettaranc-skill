@@ -8,11 +8,16 @@ PR #35 的 CI 暴露了三个问题——都是**本地测不出来**的那类�
 
 ### 修复：数据源决议与实际可用性口径不一致
 
-`resolve_provider()` 只判 `TUSHARE_TOKEN`，但 `TushareClient.__init__` 在 JNB 模式下要求 `TUSHARE_TOKEN` **与** `TUSHARE_API_URL` 两项齐全，缺任一项都抛 `CONFIG_MISSING`。
+JNB 模式下 tushare 要**两项**配置齐全才能用：`TUSHARE_TOKEN`（`TushareClient.__init__` 的 JNB 检查）与 `TUSHARE_API_URL`（中转 API 地址）。但：
 
-后果：**决议说 "tushare"，实际构造失败回退 a-stock-data** —— 读路径与决议不一致。`tests/test_datasource_resolution.py` 的 `TestReadPathMatchesResolution`（断言"读路径首选源 == 决议结果"）在 CI 上直接失败。
+- `resolve_provider()` 只判 `TUSHARE_TOKEN` → 决议说 "tushare"，实际构造抛 `CONFIG_MISSING` 回退 a-stock-data。**决议与实际用的源分叉**——`tests/test_datasource_resolution.py::TestReadPathMatchesResolution`（断言"读路径首选源 == 决议结果"）在 CI 上直接失败。
+- 判定来源还不统一：`TushareClient` 读 **import 时**的模块常量，`DataSyncer` 读**实时环境变量**。同一份配置在两处看到不同的值。
 
-现在 `resolve_provider()` 与构造条件对齐：JNB 模式要两项齐全才路由 tushare。
+现在：
+
+- 新增 `tushare_client.current_api_url()` / `current_token()`——**实时环境变量**是唯一来源，`TushareClient`、`DataSyncer`、`resolve_provider()` 三处共用。
+- `resolve_provider()` 要求 JNB 模式下两项配置齐全才路由 tushare，与构造条件对齐。
+- 相关测试统一改用 `setenv`/`delenv` 控制配置（原先有的改常量、有的改环境变量，两套机制混用导致本地与 CI 行为不一致）。
 
 这个缺陷靠**本机 `.env` 恰好配了 `TUSHARE_API_URL`** 一直没暴露——CI 没有该变量才现形。
 
@@ -36,8 +41,10 @@ ModuleNotFoundError: No module named 'pydantic'
 
 ### 验证
 
-- pytest **1655 passed** / 16 skipped（有 pydantic）/ **1639 passed / 27 skipped**（无 pydantic，模拟 CI）
+- pytest **1655 passed** / 16 skipped（有 pydantic）
+- pytest **1639 passed** / 27 skipped / **0 failed**（移走 `.env` + 屏蔽 pydantic，**严格模拟 CI 环境**）
 - ruff check + format（modules + tests + api）、mypy（按 CI 范围 27 文件）、SKILL 质量门 12/12
+- 验收 7 项核心数字与 v4.10.0 逐位相同
 
 ## v4.13.0 (2026-10-31) — 子命令错误出口补齐 + OOS/IS「算不出来」的诚实表达
 

@@ -278,8 +278,7 @@ def test_composite_auto_prefers_tushare_when_token_set(monkeypatch):
 
     monkeypatch.setenv("DATA_MODE", "jnb")
     # 模块级常量在 import 时读取，monkeypatch.setenv 无效，需直接改模块属性
-    monkeypatch.setattr(tc, "TUSHARE_API_URL", "https://tt.xiaodefa.cn")
-    monkeypatch.setattr(tc, "TUSHARE_TOKEN", "dummy-token")
+    monkeypatch.setenv("TUSHARE_API_URL", "https://tt.xiaodefa.cn")
     monkeypatch.delenv("INDEVS_API_KEY", raising=False)
     monkeypatch.setenv("TUSHARE_TOKEN", "dummy-token")
     sentinel = pd.DataFrame([{"close": 1.0}])
@@ -320,7 +319,7 @@ def test_composite_auto_jnb_missing_url_falls_back(monkeypatch):
 
     monkeypatch.setenv("DATA_MODE", "jnb")
     # 模块属性需显式置空：其他测试可能 reload 模块留下非空 TUSHARE_API_URL
-    monkeypatch.setattr(tc, "TUSHARE_API_URL", "")
+    monkeypatch.setenv("TUSHARE_API_URL", "")
     monkeypatch.delenv("TUSHARE_API_URL", raising=False)
     monkeypatch.delenv("INDEVS_API_KEY", raising=False)
     monkeypatch.setenv("TUSHARE_TOKEN", "dummy-token")
@@ -353,8 +352,7 @@ def test_composite_auto_falls_back_to_a_stock_data_when_tushare_returns_none(mon
     import modules.tushare_client as tc
 
     monkeypatch.setenv("DATA_MODE", "jnb")
-    monkeypatch.setattr(tc, "TUSHARE_API_URL", "https://tt.xiaodefa.cn")
-    monkeypatch.setattr(tc, "TUSHARE_TOKEN", "dummy-token")
+    monkeypatch.setenv("TUSHARE_API_URL", "https://tt.xiaodefa.cn")
     monkeypatch.delenv("INDEVS_API_KEY", raising=False)
     monkeypatch.setenv("TUSHARE_TOKEN", "dummy-token")
     sentinel = pd.DataFrame([{"close": 1.0}])
@@ -371,8 +369,7 @@ def test_composite_auto_call_swallows_source_exception(monkeypatch):
     import modules.tushare_client as tc
 
     monkeypatch.setenv("DATA_MODE", "jnb")
-    monkeypatch.setattr(tc, "TUSHARE_API_URL", "https://tt.xiaodefa.cn")
-    monkeypatch.setattr(tc, "TUSHARE_TOKEN", "dummy-token")
+    monkeypatch.setenv("TUSHARE_API_URL", "https://tt.xiaodefa.cn")
     monkeypatch.delenv("INDEVS_API_KEY", raising=False)
     monkeypatch.setenv("TUSHARE_TOKEN", "dummy-token")
     sentinel = pd.DataFrame([{"close": 1.0}])
@@ -392,8 +389,7 @@ def test_composite_explicit_tushare_routes_to_tushare(monkeypatch):
     import modules.tushare_client as tc
 
     monkeypatch.setenv("DATA_MODE", "jnb")
-    monkeypatch.setattr(tc, "TUSHARE_API_URL", "https://tt.xiaodefa.cn")
-    monkeypatch.setattr(tc, "TUSHARE_TOKEN", "dummy-token")
+    monkeypatch.setenv("TUSHARE_API_URL", "https://tt.xiaodefa.cn")
     monkeypatch.setenv("TUSHARE_TOKEN", "dummy-token")
     monkeypatch.delenv("INDEVS_API_KEY", raising=False)
     sentinel = pd.DataFrame([{"close": 1.0}])
@@ -426,7 +422,7 @@ def test_composite_auto_health_check_bool_contract(monkeypatch):
     import modules.tushare_client as tc
 
     monkeypatch.setenv("DATA_MODE", "jnb")
-    monkeypatch.setattr(tc, "TUSHARE_API_URL", "")  # TushareClient 构造抛 ZettarancError
+    monkeypatch.setenv("TUSHARE_API_URL", "")  # TushareClient 构造抛 ZettarancError
     monkeypatch.delenv("INDEVS_API_KEY", raising=False)
     monkeypatch.setenv("TUSHARE_TOKEN", "dummy-token")
 

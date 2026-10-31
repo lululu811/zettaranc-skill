@@ -28,6 +28,25 @@ VERIFY_TOKEN_URL = os.environ.get("TUSHARE_VERIFY_TOKEN_URL", "")
 TUSHARE_TOKEN = os.environ.get("TUSHARE_TOKEN", "")
 
 
+def current_api_url() -> str:
+    """当前生效的 tushare 中转 API 地址。
+
+    **唯一来源是实时环境变量**。它同时是 :class:`TushareClient` 的可用性判定
+    与 :func:`modules.datasource_resolution.resolve_provider` 的决议依据——
+    两边必须看到同一个值，否则会出现"决议说 tushare、实际构造抛 CONFIG_MISSING"。
+
+    刻意**不**回退到模块常量：常量是 import 时的快照，回退会让"清空配置"
+    这个操作失效（环境变量已清空，常量却把旧值捡回来）。``TUSHARE_API_URL``
+    常量保留给外部读取，但不再参与判定。
+    """
+    return os.environ.get("TUSHARE_API_URL", "")
+
+
+def current_token() -> str:
+    """当前生效的 tushare token（与 :func:`current_api_url` 同源同逻辑）。"""
+    return os.environ.get("TUSHARE_TOKEN", "")
+
+
 class TushareClient:
     """Tushare 中转 SDK 客户端
 
@@ -44,7 +63,10 @@ class TushareClient:
     """
 
     def __init__(self, token: str | None = None) -> None:
-        self.token = token or TUSHARE_TOKEN
+        # 用 current_token()/current_api_url() 而不是 import 时的模块常量——
+        # 判定口径必须与 resolve_provider() 完全一致（见那两个函数的 docstring）
+        self.token = token or current_token()
+        api_url = current_api_url()
         data_mode = os.getenv("DATA_MODE", "websearch")
 
         # 仅在 JNB 模式下强制检查 API 配置
@@ -54,7 +76,7 @@ class TushareClient:
                     ErrorCode.CONFIG_MISSING,
                     "JNB 模式下未设置 TUSHARE_TOKEN，请在 .env 中配置。\n或者将 DATA_MODE 改为 websearch。",
                 )
-            if not TUSHARE_API_URL:
+            if not api_url:
                 raise ZettarancError(
                     ErrorCode.CONFIG_MISSING,
                     "JNB 模式下未设置 TUSHARE_API_URL，请在 .env 中配置中转 API 地址。\n"
@@ -64,7 +86,7 @@ class TushareClient:
             # 初始化 Tushare SDK
             ts.set_token(self.token)
             self._pro = ts.pro_api()
-            self._pro._DataApi__http_url = TUSHARE_API_URL
+            self._pro._DataApi__http_url = api_url
         else:
             self._pro = None
 
