@@ -125,7 +125,7 @@ class TestDataSyncerExcept:
 
         syncer = DataSyncer()
         with caplog.at_level(logging.ERROR):
-            with patch.object(syncer, "_call_api_with_retry") as mock_api:
+            with patch.object(syncer.daily_kline.ctx, "call_api_with_retry") as mock_api:
                 mock_api.side_effect = sqlite3.OperationalError("db locked")
                 result = syncer.sync_daily_kline("600519.SH")
         assert result == 0, "sqlite 失败应返回 0 (recoverable)"
@@ -151,7 +151,7 @@ class TestDataSyncerExcept:
         from modules.data_sync.syncer import DataSyncer
 
         syncer = DataSyncer()
-        with patch.object(syncer, "_call_api_with_retry") as mock_api:
+        with patch.object(syncer.daily_kline.ctx, "call_api_with_retry") as mock_api:
             mock_api.side_effect = RuntimeError("totally unexpected")
             with pytest.raises(RuntimeError, match="totally unexpected"):
                 syncer.sync_daily_kline("600519.SH")

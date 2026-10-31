@@ -176,22 +176,16 @@ def test_data_syncer_keeps_legacy_attrs():
         assert syncer._rate_limit_lock is not None
 
 
-def test_data_syncer_rate_limit_does_not_crash():
+def test_data_syncer_rate_limit_does_not_crash(temp_db):
     """DataSyncer._rate_limit(api_name) 调一次不应该崩（即使没真发请求）"""
     from modules.data_sync import DataSyncer
 
-    # 用 __new__ 绕过 __init__ 的 Tushare token 强制检查（websearch 模式下不影响，
-    # 但更稳是手动设 attrs）。设 min_interval/last_request_time/_rate_limit_lock 与 __init__ 一致。
-    syncer = DataSyncer.__new__(DataSyncer)
-    syncer.min_interval = 60 / 120
-    syncer.last_request_time = {}
-    import threading as _t
-
-    syncer._rate_limit_lock = _t.Lock()
+    # 使用完整初始化的 DataSyncer（temp_db 确保数据库可用）
+    syncer = DataSyncer()
     # 调一次不应抛异常
     syncer._rate_limit("test_api")
-    # last_request_time 仍被更新
-    assert "test_api" in syncer.last_request_time
+    # _ctx.last_request_time 应被更新
+    assert "test_api" in syncer._ctx.last_request_time
 
 
 # ==================== TUSHARE_RPM env 变量 ====================

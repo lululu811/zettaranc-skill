@@ -44,6 +44,14 @@ from .adapters import (
     MoneyflowAdapter,
 )
 
+# 向后兼容：测试可能从 syncer 导入这些符号
+from .indicator_cache import (
+    _INDICATOR_INSERT_COLUMNS,
+    _build_indicator_row,
+    _compute_day_indicators,
+    _get_indicator_funcs,
+)
+
 logger = logging.getLogger(__name__)
 
 
