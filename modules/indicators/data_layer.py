@@ -2,6 +2,8 @@ from typing import Any, Optional
 from collections.abc import Callable
 import logging
 
+from ..core.kline import read_kline_rows
+
 """
 技术指标数据层模块
 """
@@ -313,24 +315,9 @@ def get_kline_data(ts_code: str, days: int = 100) -> list[DailyData]:
         K线数据列表（按日期升序）
     """
     conn = get_db_connection()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        SELECT ts_code, trade_date, open, high, low, close, vol, amount, pct_chg
-        FROM (
-            SELECT ts_code, trade_date, open, high, low, close, vol, amount, pct_chg
-            FROM daily_kline
-            WHERE ts_code = ?
-            ORDER BY trade_date DESC
-            LIMIT ?
-        )
-        ORDER BY trade_date ASC
-    """,
-        (ts_code, days),
-    )
-
-    rows = cursor.fetchall()
+    # K 线读取 SQL 的唯一来源：modules.core.kline（此前这里与 datasource 的两处
+    # 各自抄了一份同样语义的查询）
+    rows = read_kline_rows(ts_code, conn=conn, limit=days)
     conn.close()
 
     data_list = []

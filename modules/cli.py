@@ -24,9 +24,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 
 from .core.net import disable_proxy
+from .core.errors import ErrorCode
 from .cli_commands import (
     STRATEGY_ALIAS,
     STRATEGY_CHOICES,
@@ -276,10 +278,88 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _wants_json(argv: list[str]) -> bool:
+    """命令行里是否带了 ``--json``。
+
+    argparse 自身的参数错误（未知参数 / 缺必填参数）会在解析阶段就退出，
+    那时还没有 ``args`` 可用——只能回看 argv。用于让**参数错误**也产出
+    合法 JSON，避免宿主在 ``--json`` 模式下拿到空 stdout。
+    """
+    return "--json" in argv
+
+
+def _emit_error(exc: BaseException, *, as_json: bool) -> None:
+    """输出错误并退出。
+
+    ``--json`` 模式下 stdout 是**合法 JSON**（统一错误外壳，宿主可按
+    ``error_code`` 分支）；stderr 仍保留人类可读信息。退出码 2。
+    """
+    from .core.command_result import exception_to_dict
+
+    payload = exception_to_dict(exc)
+    if as_json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+    print(str(exc) if str(exc) else payload["message"], file=sys.stderr)
+    sys.exit(2)
+
+
+def _argparse_error_message(parser: argparse.ArgumentParser, argv: list[str]) -> str:
+    """提取 argparse 的具体错误原因。
+
+    argparse 默认把 "the following arguments are required: ts_code" 写到 stderr
+    然后退出。宿主在 ``--json`` 模式下拿到的若只是笼统的"命令行参数错误"，
+    就无法告诉用户**缺哪个参数**。
+
+    这里重放一次解析（``--help`` 除外，它会正常退出），捕获 argparse 自己
+    写出的最后一行错误信息。
+    """
+    import io
+    import contextlib
+
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stderr(buf):
+            parser.parse_args(argv)
+    except SystemExit:
+        pass
+    except argparse.ArgumentError:
+        # argparse 内部错误（理论上不该发生）——同样返回可读文案
+        return "命令行参数错误"
+    lines = [ln.strip() for ln in buf.getvalue().splitlines() if ln.strip()]
+    # 末行通常是 "prog: error: <原因>"
+    for line in reversed(lines):
+        if ": error: " in line:
+            return line.split(": error: ", 1)[1].strip()
+    return "命令行参数错误"
+
+
 def main() -> None:
     """zt CLI 主入口"""
     parser = build_parser()
-    args = parser.parse_args()
+
+    # argparse 的参数错误也要走统一外壳：--json 模式下 stdout 不能是空的。
+    as_json = _wants_json(sys.argv[1:])
+    try:
+        args = parser.parse_args()
+    except SystemExit as exc:
+        exit_code = exc.code
+        if as_json and exit_code not in (0, None):
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error_code": ErrorCode.INVALID_PARAM.value,
+                        "message": _argparse_error_message(parser, sys.argv[1:]),
+                        "cause": None,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            # SystemExit.code 可能是 str（argparse 的 --help 等场景），
+            # 这里只关心非零整数退出码
+            sys.exit(exit_code if isinstance(exit_code, int) else 2)
+        raise
 
     handlers = {
         "analyze": cmd_analyze,
@@ -303,10 +383,19 @@ def main() -> None:
     from .core.errors import ZettarancError
 
     try:
-        handlers[args.command](args)
+        # handler 的返回值是进程退出码。多数 handler 返回 None（等价 0），
+        # 但 cmd_verify_v10 / cmd_self_optimize 会返回非 0——以前这里丢弃返回值，
+        # 参数错误或未知 action 时进程仍退 0，宿主脚本会误判成功。
+        exit_code = handlers[args.command](args) or 0
     except ZettarancError as e:
-        print(str(e), file=sys.stderr)
-        sys.exit(2)
+        _emit_error(e, as_json=bool(getattr(args, "json", False)))
+    except (ValueError, OSError, RuntimeError, KeyError, TypeError) as e:
+        # 这些是业务层漏网的异常（未包成 ZettarancError）。此前它们会向上冒泡成
+        # 裸 traceback，--json 模式下 stdout 同样是空的。
+        _emit_error(e, as_json=bool(getattr(args, "json", False)))
+
+    if exit_code:
+        sys.exit(exit_code)
 
 
 if __name__ == "__main__":

@@ -18,7 +18,7 @@ import csv
 import logging
 import os
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -40,6 +40,17 @@ class ActiveMarketValuePoint:
     signal: str = "NEUTRAL"  # UP / DOWN / NEUTRAL
 
 
+@dataclass(frozen=True)
+class SignalThresholds:
+    """活跃市值信号阈值：按【当日】涨跌幅判定多空。"""
+
+    up: float = 4.0
+    down: float = -2.3
+
+
+SIGNAL_THRESHOLDS = SignalThresholds()
+
+
 def default_path() -> Path:
     """默认 CSV 路径。优先读 DATA_DIR 环境变量，缺省时回退到包内 data/ 目录。"""
     data_dir = os.getenv("DATA_DIR")
@@ -55,9 +66,9 @@ def _finalize_points(raw_rows: list[dict]) -> list[ActiveMarketValuePoint]:
     for row in raw_rows:
         close = float(row["close"])
         pct_chg = (close / prev_close - 1.0) * 100.0 if prev_close and prev_close > 0 else 0.0
-        if pct_chg >= 4.0:
+        if pct_chg >= SIGNAL_THRESHOLDS.up:
             signal = "UP"
-        elif pct_chg <= -2.3:
+        elif pct_chg <= SIGNAL_THRESHOLDS.down:
             signal = "DOWN"
         else:
             signal = "NEUTRAL"
@@ -251,8 +262,8 @@ def get_active_market_value(
 
 def get_active_market_signal(
     date: str | None = None,
-    up_threshold: float = 4.0,
-    down_threshold: float = -2.3,
+    up_threshold: float = SIGNAL_THRESHOLDS.up,
+    down_threshold: float = SIGNAL_THRESHOLDS.down,
     path: str | None = None,
     duckdb_path: str | None = None,
 ) -> str:
@@ -267,60 +278,6 @@ def get_active_market_signal(
     return "NEUTRAL"
 
 
-def _cum_pct(rows: list[ActiveMarketValuePoint], idx: int, lookback: int) -> float | None:
-    """计算第 idx 天相对前 lookback 个交易日收盘的累计涨幅（%）。"""
-    if idx < lookback:
-        return None
-    base = rows[idx - lookback].close
-    if base <= 0:
-        return None
-    return (rows[idx].close / base - 1.0) * 100.0
-
-
-def get_active_market_gate(
-    date: str | None = None,
-    open_lookback: int = 2,
-    open_threshold: float = 4.0,
-    clear_threshold: float = -2.3,
-    path: str | None = None,
-    duckdb_path: str | None = None,
-) -> str:
-    """活跃市值全局交易闸门。
-
-    规则：
-    - 累计涨幅（默认 2 日）> open_threshold（默认 +4%）→ OPEN，允许开仓
-    - 当日跌幅 <= clear_threshold（默认 -2.3%） 或 累计跌幅 <= clear_threshold → CLEAR，清仓
-    - 其他情况 → WAIT，不开新仓
-
-    Returns:
-        OPEN / WAIT / CLEAR
-    """
-    rows, index = _load_index_and_rows(path, duckdb_path)
-    if not rows:
-        return "WAIT"
-
-    if date is None:
-        idx = len(rows) - 1
-    else:
-        target = _normalize_query_date(date)
-        # index 是 date→point 的 O(1) 字典，先验证存在；rows 本身 date-asc，
-        # 用 bisect 把 target → idx 走 O(log n)，替代原来的 O(n) 线性扫描
-        if target not in index:
-            return "WAIT"
-        idx = bisect.bisect_left([r.date for r in rows], target)
-
-    point = rows[idx]
-    cum = _cum_pct(rows, idx, open_lookback)
-
-    if point.pct_chg <= clear_threshold:
-        return "CLEAR"
-    if cum is not None and cum <= clear_threshold:
-        return "CLEAR"
-    if cum is not None and cum > open_threshold:
-        return "OPEN"
-    return "WAIT"
-
-
 def format_active_market_value(point: ActiveMarketValuePoint) -> str:
     """人类可读输出。"""
     signal_text = {
@@ -331,62 +288,6 @@ def format_active_market_value(point: ActiveMarketValuePoint) -> str:
     return (
         f"活跃市值(0AMV) · {point.date}\n收盘: {point.close:,.2f}\n日环比: {point.pct_chg:+.2f}%\n信号: {signal_text}"
     )
-
-
-class GateAction(Enum):
-    """活跃市值全局闸门动作（v4.3+ 统一闸门 API 返回值）。
-
-    - OPEN  - 允许开新仓
-    - WAIT  - 观望（不开新仓、不平仓）
-    - CLEAR - 强平（清仓所有/当前持仓）
-    """
-
-    OPEN = "OPEN"
-    WAIT = "WAIT"
-    CLEAR = "CLEAR"
-
-
-def apply_active_mv_gate(
-    date: str,
-    *,
-    enabled: bool = True,
-    duckdb_path: str | None = None,
-    path: str | None = None,
-) -> GateAction:
-    """活跃市值全局闸门统一入口（v4.3+ 替代各 engine 自己的 _gate 实现）。
-
-    规则：
-    - enabled=False：返回 OPEN（闸门关闭，不限制任何行为）
-    - enabled=True：调 get_active_market_gate 把字符串映射为 GateAction 枚举
-      - 任何映射失败/异常：返回 WAIT（保守：不开新仓、不强平），不抛异常阻断回测
-
-    Args:
-        date: YYYYMMDD 或 YYYY-MM-DD 格式交易日
-        enabled: 是否启用闸门；False 等价于"闸门不存在"
-        duckdb_path: 优先 DuckDB 路径
-        path: 备选 CSV 路径
-
-    Returns:
-        GateAction 枚举值（OPEN / WAIT / CLEAR），调用方按需解释
-
-    Note:
-        各 backtest engine（B1B2 / Portfolio）应在自己的循环里调本函数，
-        拿到 GateAction 后决定：WAIT 跳过开仓、CLEAR 触发自己的强平逻辑。
-        强平 scope（当前持仓 vs 所有持仓）由各 engine 自己决定，因为单股 vs 组合
-        上下文不同。
-    """
-    if not enabled:
-        return GateAction.OPEN
-    try:
-        gate_str = get_active_market_gate(date, duckdb_path=duckdb_path, path=path)
-    except Exception:  # noqa: BLE001
-        # 闸门查询失败时保守返回 WAIT,不让异常阻断回测主流程
-        return GateAction.WAIT
-    return {
-        "OPEN": GateAction.OPEN,
-        "WAIT": GateAction.WAIT,
-        "CLEAR": GateAction.CLEAR,
-    }.get(gate_str, GateAction.WAIT)
 
 
 def import_0amv_csv_to_duckdb(csv_path: str, duckdb_path: str) -> int:
@@ -458,9 +359,51 @@ def import_0amv_csv_to_duckdb(csv_path: str, duckdb_path: str) -> int:
     return len(points)
 
 
+# ---- 兼容层：闸门 API 的旧导入路径 ----
+# 闸门判定已迁至 modules/active_market_gate。该 module 依赖本 module 的加载器，
+# 若在此处直接 `from .active_market_gate import ...` 会形成循环导入，
+# 因此用 PEP 562 的模块级 __getattr__ 惰性转出：
+#     from modules.active_market_value import get_active_market_gate  ← 仍然可用
+# 包已发布到 PyPI，旧路径必须保持可用。
+
+_GATE_EXPORTS = frozenset(
+    {
+        "GateAction",
+        "GateConfig",
+        "GateThresholds",
+        "GATE_THRESHOLDS",
+        "get_active_market_gate",
+        "apply_active_mv_gate",
+        "evaluate",
+    }
+)
+
+
+def __getattr__(name: str):
+    if name in _GATE_EXPORTS:
+        from . import active_market_gate
+
+        return getattr(active_market_gate, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted([*globals().keys(), *_GATE_EXPORTS])
+
+
 if __name__ == "__main__":
     import argparse
     import json
+    import sys
+    from pathlib import Path
+
+    # 直接以脚本方式运行（python modules/active_market_value.py）时 sys.path[0]
+    # 是 modules/ 目录，会遮蔽标准库 statistics（modules/statistics/）；闸门 module
+    # 的包内导入也需要仓库根目录。换成仓库根目录。
+    if __package__ in (None, ""):
+        sys.path[0] = str(Path(__file__).resolve().parent.parent)
+
+    from modules.active_market_gate import get_active_market_gate
 
     parser = argparse.ArgumentParser(description="活跃市值 0AMV")
     parser.add_argument("--date", default=None, help="日期 YYYY-MM-DD，默认最新")

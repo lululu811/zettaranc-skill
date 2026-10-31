@@ -34,6 +34,12 @@ from .b1_b2_backtest import (
     run_b1_b2_walkforward,
 )
 
+from .shaofu import (
+    ShaofuBacktestResult,
+    backtest_shaofu_single,
+    summary_text,
+)
+
 __all__ = [
     # single
     "Trade",
@@ -57,4 +63,8 @@ __all__ = [
     "run_b1_b2_single",
     "run_b1_b2_pool",
     "run_b1_b2_walkforward",
+    # shaofu（v4.8.0 从 backtest_six_step.py 迁入）
+    "ShaofuBacktestResult",
+    "backtest_shaofu_single",
+    "summary_text",
 ]

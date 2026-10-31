@@ -130,10 +130,8 @@ fn _core_compute(m: &Bound<'_, PyModule>) -> PyResult<()> {
         backtest_bindings::run_single_strategy_backtest_py,
         m
     )?)?;
-    m.add_function(wrap_pyfunction!(
-        backtest_bindings::run_portfolio_backtest_py,
-        m
-    )?)?;
-    m.add_function(wrap_pyfunction!(backtest_bindings::run_grid_search_py, m)?)?;
+    // v4.10.0：组合与网格搜索的 Rust 入口已删除——它们从未被 Python 调用，
+    // 而 Rust 侧既无费率模型也无闸门模型，当组合引擎会静默丢掉这两项。
+    // Rust 只服务单股加速路径（run_single_strategy_backtest_py）。
     Ok(())
 }

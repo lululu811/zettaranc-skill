@@ -15,32 +15,38 @@ def diagnose(ts_code: str, days: int = 120) -> dict:
     exit_signals = []
     for sig in getattr(report, "exit_signals", []):
         if isinstance(sig, dict):
-            exit_signals.append({
-                "signal_type": sig.get("signal_type", ""),
-                "date": sig.get("date", ""),
-                "description": sig.get("description", ""),
-                "confidence": sig.get("confidence", 0),
-            })
+            exit_signals.append(
+                {
+                    "signal_type": sig.get("signal_type", ""),
+                    "date": sig.get("date", ""),
+                    "description": sig.get("description", ""),
+                    "confidence": sig.get("confidence", 0),
+                }
+            )
 
     # 序列化买入信号
     buy_signals = []
     for sig in getattr(report, "buy_signals", []):
         if isinstance(sig, dict):
-            buy_signals.append({
-                "signal_type": sig.get("signal_type", ""),
-                "date": sig.get("date", ""),
-                "description": sig.get("description", ""),
-                "confidence": sig.get("confidence", 0),
-                "action": sig.get("action", ""),
-            })
+            buy_signals.append(
+                {
+                    "signal_type": sig.get("signal_type", ""),
+                    "date": sig.get("date", ""),
+                    "description": sig.get("description", ""),
+                    "confidence": sig.get("confidence", 0),
+                    "action": sig.get("action", ""),
+                }
+            )
         elif hasattr(sig, "strategy"):
-            buy_signals.append({
-                "signal_type": sig.strategy.value if hasattr(sig.strategy, "value") else str(sig.strategy),
-                "date": sig.trade_date,
-                "description": sig.description,
-                "confidence": sig.confidence,
-                "action": sig.action,
-            })
+            buy_signals.append(
+                {
+                    "signal_type": sig.strategy.value if hasattr(sig.strategy, "value") else str(sig.strategy),
+                    "date": sig.trade_date,
+                    "description": sig.description,
+                    "confidence": sig.confidence,
+                    "action": sig.action,
+                }
+            )
 
     return {
         "ts_code": ts_code,

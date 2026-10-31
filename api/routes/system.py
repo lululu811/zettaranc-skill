@@ -3,6 +3,7 @@
 import logging
 from pathlib import Path
 
+from api.utils.errors import raise_api_error
 from fastapi import APIRouter, HTTPException
 
 from api.models.common import StatusResponse
@@ -34,22 +35,23 @@ def sync_status():
 
         with get_connection() as conn:
             rows = conn.execute(
-                "SELECT data_type, ts_code, last_date, status, message "
-                "FROM sync_log ORDER BY id DESC LIMIT 50"
+                "SELECT data_type, ts_code, last_date, status, message FROM sync_log ORDER BY id DESC LIMIT 50"
             ).fetchall()
 
         logs = []
         for row in rows:
-            logs.append({
-                "data_type": row[0],
-                "ts_code": row[1],
-                "last_date": row[2],
-                "status": row[3],
-                "message": row[4],
-            })
+            logs.append(
+                {
+                    "data_type": row[0],
+                    "ts_code": row[1],
+                    "last_date": row[2],
+                    "status": row[3],
+                    "message": row[4],
+                }
+            )
         return {"logs": logs}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取同步状态失败: {e}")
+        raise_api_error(e, prefix="获取同步状态失败")
 
 
 @router.post("/sync/{ts_code}", response_model=StatusResponse)
@@ -64,4 +66,4 @@ def sync_stock(ts_code: str, days: int = 730, indicators: bool = True):
             syncer.sync_indicator_cache(ts_code, days=days)
         return StatusResponse(status="ok", message=f"{ts_code} 同步完成")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"同步失败: {e}")
+        raise_api_error(e, prefix="同步失败")

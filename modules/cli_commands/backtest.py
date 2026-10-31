@@ -6,6 +6,10 @@ import logging
 from dataclasses import asdict
 from typing import Any
 
+from ..active_market_gate import GateConfig, TradingGate
+from ..backtest.portfolio import portfolio_result_to_dict
+from ..backtest.single import multi_strategy_result_to_dict
+from ..backtest.shaofu import shaofu_result_to_dict
 from ._helpers import error, json_output, warn
 from .simulate import cmd_simulate
 
@@ -16,82 +20,23 @@ logger = logging.getLogger(__name__)
 
 
 def _shaofu_result_to_dict(result: Any) -> dict:
-    """将 ShaofuBacktestResult 转换为可序列化的字典"""
-    trades = []
-    for t in result.trades:
-        trades.append(
-            {
-                "entry_date": t.entry_date,
-                "entry_price": t.entry_price,
-                "exit_date": t.exit_date,
-                "exit_price": t.exit_price,
-                "exit_reason": t.exit_reason,
-                "pnl_pct": round(t.pnl_pct, 2),
-                "holding_days": t.holding_days,
-            }
-        )
+    """将 ShaofuBacktestResult 转换为可序列化的字典。
 
-    return {
-        "ts_code": result.ts_code,
-        "total_trades": result.total_trades,
-        "win_count": result.win_count,
-        "win_rate": round(result.win_rate, 3),
-        "avg_pnl": round(result.avg_pnl, 2),
-        "max_win": round(result.max_win, 2),
-        "max_loss": round(result.max_loss, 2),
-        "profit_factor": round(result.profit_factor, 2),
-        "total_return": round(result.total_return * 100, 2),
-        "max_drawdown": round(result.max_drawdown * 100, 2),
-        "sharpe_ratio": round(result.sharpe_ratio, 2),
-        "avg_holding_days": round(result.avg_holding_days, 1),
-        "trades": trades,
-    }
+    字段集与取值来自 ``ShaofuBacktestResult.to_dict()``——CLI 与 API 共用同一份
+    规范字典，只是嵌套方式不同（CLI 扁平、API 用 summary 嵌套）。
+    """
+    return shaofu_result_to_dict(result)
 
 
 def _portfolio_result_to_dict(result: Any) -> dict:
-    """将 PortfolioBacktestResult 转换为可序列化的字典"""
-    trades = []
-    for t in result.trades:
-        trades.append(
-            {
-                "ts_code": t.ts_code,
-                "entry_date": t.entry_date,
-                "entry_price": round(t.entry_price, 2),
-                "exit_date": t.exit_date,
-                "exit_price": round(t.exit_price, 2) if t.exit_price else None,
-                "exit_reason": t.exit_reason,
-                "pnl_pct": round(t.pnl_pct, 2),
-            }
-        )
+    """将 MultiStrategyBacktestResult 转换为可序列化的字典。
 
-    return {
-        "initial_capital": result.initial_capital,
-        "final_value": round(result.final_value, 2),
-        "total_return": round(result.total_return * 100, 2),
-        "annualized_return": round(result.annualized_return * 100, 2),
-        "sharpe_ratio": round(result.sharpe_ratio, 2),
-        "max_drawdown": round(result.max_drawdown * 100, 2),
-        "win_rate": round(result.win_rate, 3),
-        "profit_factor": round(result.profit_factor, 2),
-        "total_trades": result.total_trades,
-        "trades": trades,
-    }
-
-
-def _shaofu_portfolio_to_dict(result: dict) -> dict:
-    """将 backtest_shaofu_portfolio 返回的 dict 清理为可序列化格式"""
-    per_stock = []
-    for r in result.get("results", []):
-        per_stock.append(_shaofu_result_to_dict(r))
-
-    return {
-        "per_stock": per_stock,
-        "total_return": round(result.get("total_return", 0) * 100, 2),
-        "total_trades": result.get("total_trades", 0),
-        "overall_win_rate": round(result.get("overall_win_rate", 0), 3),
-        "max_drawdown": round(result.get("max_drawdown", 0) * 100, 2),
-        "sharpe_ratio": round(result.get("sharpe_ratio", 0), 2),
-    }
+    字段集与取值来自 ``MultiStrategyBacktestResult.to_dict()``——CLI 与 API 共用
+    同一份规范字典，只是嵌套方式不同。单位约定：trades 来自
+    modules.backtest.single.Trade，其 pnl_pct 是【分数】（0.1 表示 +10%），
+    canonical 已统一换算成百分数。
+    """
+    return multi_strategy_result_to_dict(result)
 
 
 def _print_shaofu_summary(ts_code: str, dict_result: dict) -> None:
@@ -172,14 +117,14 @@ def cmd_backtest(args) -> None:
     days = getattr(args, "days", 250)
 
     if not sub:
-        error("请指定回测子命令: shaofu / multi / portfolio / b2-confirm")
+        error("请指定回测子命令: shaofu / multi / portfolio / b2-confirm", as_json=use_json)
 
     ts_code = getattr(args, "ts_code", None)
 
     # ── shaofu: 少妇战法单股回测 ──
     if sub == "shaofu":
         if not ts_code:
-            error("请指定股票代码，如: backtest shaofu 600487.SH")
+            error("请指定股票代码，如: backtest shaofu 600487.SH", as_json=use_json)
 
         from modules.backtest._rust_bridge import bridge_shaofu_single
 
@@ -196,7 +141,7 @@ def cmd_backtest(args) -> None:
     # ── multi: 多策略融合回测 ──
     elif sub == "multi":
         if not ts_code:
-            error("请指定股票代码，如: backtest multi 600487.SH")
+            error("请指定股票代码，如: backtest multi 600487.SH", as_json=use_json)
 
         from modules.backtest import backtest_multi_strategy
 
@@ -214,42 +159,44 @@ def cmd_backtest(args) -> None:
     elif sub == "portfolio":
         codes_str = getattr(args, "codes", None)
         if not codes_str:
-            error("请指定股票代码列表（逗号分隔），如: backtest portfolio 600487.SH,601318.SH")
+            error("请指定股票代码列表（逗号分隔），如: backtest portfolio 600487.SH,601318.SH", as_json=use_json)
 
         ts_codes = [c.strip() for c in codes_str.split(",") if c.strip()]
         if not ts_codes:
-            error("股票代码列表为空")
+            error("股票代码列表为空", as_json=use_json)
 
-        if len(ts_codes) == 1:
-            from modules.backtest._rust_bridge import bridge_shaofu_single
+        # 真组合引擎（共享资金池 + 交易费率 + 闸门 + 仓位上限）。
+        # 此前这里走的是"各标的独立回测后按 1/max_concurrent 加权平均资金曲线"
+        # 的等权组合——那不是组合（无资金竞争、无费率），其收益数字与真实组合
+        # 不可比。ADR-0002 决策 1：唯一实现引擎收敛到 PortfolioBacktestEngine。
+        # 单只股票同样走组合引擎（最多 1 个仓位），口径与多只一致。
+        from modules.backtest.portfolio import PortfolioBacktestEngine, PortfolioConfig
+        from modules.loop_engine import LoopConfig
 
-            dict_single = bridge_shaofu_single(ts_codes[0], days=days)
-            if dict_single.get("total_trades", 0) == 0:
-                warn(f"{ts_codes[0]} 在 {days} 天内无交易记录（数据不足或无信号触发）")
-            if use_json:
-                json_output(dict_single)
-            else:
-                _print_shaofu_summary(ts_codes[0], dict_single)
+        lc_cfg = LoopConfig.from_registry("shaofu_v1") or LoopConfig()
+        pc = PortfolioConfig(
+            initial_capital=1_000_000.0,
+            max_positions=5,
+            position_pct=lc_cfg.position_pct,
+            # 闸门默认关闭（验收与 CLI 一致）
+            gate=None,
+        )
+        engine = PortfolioBacktestEngine(portfolio_config=pc, loop_config=lc_cfg)
+        result_port = engine.run(ts_codes, days=days)
+
+        if use_json:
+            json_output(portfolio_result_to_dict(result_port))
         else:
-            from modules.backtest_six_step import backtest_shaofu_portfolio
-
-            result_port = backtest_shaofu_portfolio(ts_codes, days=days)
-            if use_json:
-                json_output(_shaofu_portfolio_to_dict(result_port))
-            else:
-                print(f"{'=' * 60}")
-                print("少妇战法组合回测结果")
-                print(f"{'=' * 60}")
-                print(f"股票数量:     {len(ts_codes)}")
-                print(f"总交易次数:   {result_port['total_trades']}")
-                print(f"整体胜率:     {result_port['overall_win_rate']:.1%}")
-                print(f"累计收益:     {result_port['total_return']:+.2%}")
-                print(f"最大回撤:     {result_port['max_drawdown']:.2%}")
-                print(f"夏普比率:     {result_port['sharpe_ratio']:.2f}")
-                print(f"{'=' * 60}")
-                for r in result_port.get("results", []):
-                    status = "有交易" if r.total_trades > 0 else "无交易"
-                    print(f"  {r.ts_code}: {status} {r.total_trades}笔 胜率{r.win_rate:.0%} 收益{r.total_return:+.2%}")
+            print(f"{'=' * 60}")
+            print("少妇战法组合回测结果（真组合：共享资金池 + 费率 + 仓位约束）")
+            print(f"{'=' * 60}")
+            print(f"股票数量:     {len(ts_codes)}")
+            print(f"总交易次数:   {result_port.total_trades}")
+            print(f"整体胜率:     {result_port.win_rate:.1%}")
+            print(f"累计收益:     {result_port.total_return:+.2%}")
+            print(f"最大回撤:     {result_port.max_drawdown:.2%}")
+            print(f"夏普比率:     {result_port.sharpe_ratio:.2f}")
+            print(f"{'=' * 60}")
 
     # ── b2-confirm: B1观察+B2确认+次日开盘回测 ──
     elif sub == "b2-confirm":
@@ -267,7 +214,9 @@ def cmd_backtest(args) -> None:
         elif ts_code:
             ts_codes = [ts_code]
         else:
-            error("请指定股票代码，如: backtest b2-confirm 600487.SH 或 b2-confirm 000001.SZ,000002.SZ")
+            error(
+                "请指定股票代码，如: backtest b2-confirm 600487.SH 或 b2-confirm 000001.SZ,000002.SZ", as_json=use_json
+            )
 
         b2_j_max = getattr(args, "b2_j_max", None)
         cfg = B1B2Config(
@@ -285,9 +234,14 @@ def cmd_backtest(args) -> None:
             min_holding_days=getattr(args, "min_hold", 2),
             position_pct=1.0,
         )
-        active_mv_enabled = getattr(args, "active_mv_gate", False)
-        active_mv_duckdb = getattr(args, "active_mv_duckdb", None)
-        active_mv_path = getattr(args, "active_mv_path", None)
+        # 闸门在此处构造一次，之后注入给 engine——engine 不自己造闸门
+        gate = TradingGate(
+            GateConfig(
+                enabled=getattr(args, "active_mv_gate", False),
+                duckdb_path=getattr(args, "active_mv_duckdb", None),
+                path=getattr(args, "active_mv_path", None),
+            )
+        )
 
         if getattr(args, "walk_forward", False):
             wf = run_b1_b2_walkforward(
@@ -297,9 +251,7 @@ def cmd_backtest(args) -> None:
                 window=getattr(args, "window", 120),
                 config=cfg,
                 loop_config=lc_cfg,
-                active_mv_enabled=active_mv_enabled,
-                active_mv_duckdb_path=active_mv_duckdb,
-                active_mv_path=active_mv_path,
+                gate=gate,
             )
             if use_json:
                 json_output(wf)
@@ -322,9 +274,7 @@ def cmd_backtest(args) -> None:
                 days=days,
                 config=cfg,
                 loop_config=lc_cfg,
-                active_mv_enabled=active_mv_enabled,
-                active_mv_duckdb_path=active_mv_duckdb,
-                active_mv_path=active_mv_path,
+                gate=gate,
             )
             if use_json:
                 json_output(
@@ -367,9 +317,7 @@ def cmd_backtest(args) -> None:
                 days=days,
                 config=cfg,
                 loop_config=lc_cfg,
-                active_mv_enabled=active_mv_enabled,
-                active_mv_duckdb_path=active_mv_duckdb,
-                active_mv_path=active_mv_path,
+                gate=gate,
             )
             if use_json:
                 json_output(_b1_b2_pool_to_dict(pool))
@@ -377,48 +325,51 @@ def cmd_backtest(args) -> None:
                 _print_b1_b2_pool_summary(pool)
 
     else:
-        error(f"未知回测子命令: {sub}")
+        error(f"未知回测子命令: {sub}", as_json=use_json)
 
 
 # ==================== cmd_verify_v10 ====================
 
 
 def cmd_verify_v10(args) -> int:
-    """少妇战法 v1.0 验收子命令"""
-    from modules.core.paths import REPORTS_DIR
-    from modules.verify.cli import main as verify_main
+    """少妇战法 v1.0 验收子命令。
 
-    argv = []
-    if args.limit != 50:
-        argv.extend(["--limit", str(args.limit)])
-    if args.days != 250:
-        argv.extend(["--days", str(args.days)])
-    if getattr(args, "walk_forward", False):
-        argv.append("--walk-forward")
-    if getattr(args, "wf_train", 120) != 120:
-        argv.extend(["--wf-train", str(args.wf_train)])
-    if getattr(args, "wf_test", 60) != 60:
-        argv.extend(["--wf-test", str(args.wf_test)])
-    if getattr(args, "ts_codes", None):
-        argv.extend(["--ts-codes", args.ts_codes])
-    if getattr(args, "json", False):
-        argv.append("--json")
-    if getattr(args, "no_markdown", False):
-        argv.append("--no-markdown")
-    return verify_main(argv)
+    直接调 run_verify_v10_command，不再把解析好的参数重新拼成 argv 交给
+    第二个 argparse——那条往返路径会漏转发 --output，也会把退出码丢掉。
+    """
+    from modules.verify.cli import (
+        DEFAULT_DAYS,
+        DEFAULT_LIMIT,
+        DEFAULT_WF_TEST,
+        DEFAULT_WF_TRAIN,
+        run_verify_v10_command,
+    )
+
+    return run_verify_v10_command(
+        ts_codes_arg=getattr(args, "ts_codes", None),
+        limit=getattr(args, "limit", DEFAULT_LIMIT),
+        days=getattr(args, "days", DEFAULT_DAYS),
+        walk_forward=getattr(args, "walk_forward", False),
+        wf_train_days=getattr(args, "wf_train", DEFAULT_WF_TRAIN),
+        wf_test_days=getattr(args, "wf_test", DEFAULT_WF_TEST),
+        write_markdown=not getattr(args, "no_markdown", False),
+        output_dir=getattr(args, "output", None),
+        as_json=getattr(args, "json", False),
+    )
 
 
 def add_verify_v10_parser(subparsers) -> None:
     """注册 verify v1.0 验收子命令"""
     from modules.core.paths import REPORTS_DIR
+    from modules.verify.cli import DEFAULT_DAYS, DEFAULT_LIMIT, DEFAULT_WF_TEST, DEFAULT_WF_TRAIN
 
     p_verify = subparsers.add_parser("verify", help="v1.0 验收")
     p_verify.add_argument("version", choices=["v1.0"], help="验收版本")
-    p_verify.add_argument("--limit", type=int, default=50)
-    p_verify.add_argument("--days", type=int, default=250)
+    p_verify.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
+    p_verify.add_argument("--days", type=int, default=DEFAULT_DAYS)
     p_verify.add_argument("--walk-forward", action="store_true")
-    p_verify.add_argument("--wf-train", type=int, default=120)
-    p_verify.add_argument("--wf-test", type=int, default=60)
+    p_verify.add_argument("--wf-train", type=int, default=DEFAULT_WF_TRAIN)
+    p_verify.add_argument("--wf-test", type=int, default=DEFAULT_WF_TEST)
     p_verify.add_argument("--ts-codes", type=str, default=None, help="指定股票列表（逗号分隔）")
     p_verify.add_argument("--output", type=str, default=str(REPORTS_DIR), help="报告输出目录")
     p_verify.add_argument("--json", action="store_true")
@@ -433,6 +384,5 @@ __all__ = [
     "add_verify_v10_parser",
     "_shaofu_result_to_dict",
     "_portfolio_result_to_dict",
-    "_shaofu_portfolio_to_dict",
     "_b1_b2_pool_to_dict",
 ]

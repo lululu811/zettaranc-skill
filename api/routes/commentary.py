@@ -1,5 +1,6 @@
 """Z哥点评路由"""
 
+from api.utils.errors import raise_api_error
 from fastapi import APIRouter, HTTPException, Query
 
 from api.models.commentary import CommentaryResponse
@@ -18,7 +19,7 @@ def generate_commentary(
     try:
         analysis = stock_service.get_full_analysis(ts_code, days)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"分析数据获取失败: {e}")
+        raise_api_error(e, prefix="分析数据获取失败")
 
     result = commentary_service.generate_commentary(analysis)
 

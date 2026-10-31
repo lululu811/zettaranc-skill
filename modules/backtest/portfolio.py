@@ -11,7 +11,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from ..core.metrics import TRADING_DAYS_PER_YEAR, compute_drawdown, compute_sharpe, daily_returns
+from ..active_market_gate import GateAction, TradingGate
+from ..core.metrics import calc_curve_metrics, calc_trade_stats
 from ..core.market_context import MarketRegime
 from ..indicators import DailyData, get_kline_data
 from ..loop_engine import LoopConfig, LoopTrade, ShaofuLoopEngine, _calc_stop_loss_price
@@ -96,10 +97,9 @@ class PortfolioConfig:
     enabled_strategies: list[str] = field(default_factory=lambda: ["B1"])
     strategy_weights: dict[str, float] = field(default_factory=lambda: {"B1": 1.0, "B2": 0.8, "SB1": 1.2, "长安": 0.9})
     min_composite_score: float = 0.3
-    # 活跃市值（0AMV）全局闸门：OPEN 才允许开仓，CLEAR 强制清仓
-    active_mv_enabled: bool = False
-    active_mv_duckdb_path: str | None = None
-    active_mv_path: str | None = None
+    # 活跃市值（0AMV）全局闸门 port：OPEN 才允许开仓，CLEAR 强制清仓。
+    # None 表示闸门不存在（等价关闭）。由调用方注入，engine 不自己造。
+    gate: TradingGate | None = None
     # v3.10.0：按市场环境分组的策略权重（键: STRONG / NEUTRAL / WEAK）
     # 若某环境未配置则退回 strategy_weights
     regime_strategy_weights: dict[str, dict[str, float]] = field(
@@ -141,6 +141,8 @@ class PortfolioBacktestResult:
     """组合回测结果"""
 
     dates: list[str] = field(default_factory=list)
+    initial_capital: float = 0.0
+    final_value: float = 0.0
     net_values: list[float] = field(default_factory=list)
     cash_history: list[float] = field(default_factory=list)
     trades: list[LoopTrade] = field(default_factory=list)
@@ -148,6 +150,14 @@ class PortfolioBacktestResult:
     win_count: int = 0
     loss_count: int = 0
     win_rate: float = 0.0
+    # 交易统计（百分数口径，与 ShaofuBacktestResult 一致；avg_loss 为有符号负值）
+    avg_pnl: float = 0.0
+    avg_win: float = 0.0
+    avg_loss: float = 0.0
+    max_win: float = 0.0
+    max_loss: float = 0.0
+    profit_factor: float = 0.0
+    avg_holding_days: float = 0.0
     total_return: float = 0.0
     annualized_return: float = 0.0
     sharpe_ratio: float = 0.0
@@ -155,6 +165,55 @@ class PortfolioBacktestResult:
     calmar: float = 0.0
     # v3.10.0：按策略分组的贡献度统计
     strategy_stats: dict[str, StrategyStats] = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        """规范化结果字典（见 :func:`portfolio_result_to_dict`）。"""
+        return portfolio_result_to_dict(self)
+
+
+def portfolio_result_to_dict(result: PortfolioBacktestResult) -> dict:
+    """规范化的结果字典 —— CLI 与 API 都从这份派生。
+
+    单位约定（对外展示单位）：
+    - ``total_return`` / ``max_drawdown`` / ``avg_pnl`` / ``avg_win`` /
+      ``avg_loss`` / ``max_win`` / ``max_loss`` / ``pnl_pct`` 为**百分数**
+    - ``win_rate`` 为分数（0.455）
+
+    写成模块级函数（而非方法）以便鸭子类型：测试可以用 SimpleNamespace 替身。
+    """
+    return {
+        "initial_capital": result.initial_capital,
+        "final_value": round(result.final_value, 2),
+        "total_trades": result.total_trades,
+        "win_count": result.win_count,
+        "loss_count": result.loss_count,
+        "win_rate": round(result.win_rate, 3),
+        "avg_pnl": round(result.avg_pnl, 2),
+        "avg_win": round(result.avg_win, 2),
+        "avg_loss": round(result.avg_loss, 2),
+        "max_win": round(result.max_win, 2),
+        "max_loss": round(result.max_loss, 2),
+        "profit_factor": round(result.profit_factor, 2),
+        "total_return": round(result.total_return * 100, 2),
+        "annualized_return": round(result.annualized_return * 100, 2),
+        "max_drawdown": round(result.max_drawdown * 100, 2),
+        "sharpe_ratio": round(result.sharpe_ratio, 2),
+        "calmar": round(result.calmar, 2),
+        "avg_holding_days": round(result.avg_holding_days, 1),
+        "trades": [
+            {
+                "ts_code": getattr(t, "ts_code", ""),
+                "entry_date": t.entry_date,
+                "entry_price": round(t.entry_price, 2),
+                "exit_date": t.exit_date,
+                "exit_price": round(t.exit_price, 2) if t.exit_price else None,
+                "exit_reason": t.exit_reason,
+                "pnl_pct": round(t.pnl_pct, 2),
+                "holding_days": t.holding_days,
+            }
+            for t in result.trades
+        ],
+    }
 
 
 class PortfolioBacktestEngine:
@@ -301,10 +360,8 @@ class PortfolioBacktestEngine:
 
             # 活跃市值全局闸门：CLEAR 强制清仓，非 OPEN 禁止新开仓
             active_mv_allow_new = True
-            if config.active_mv_enabled:
-                from modules.active_market_value import GateAction
-
-                active_mv_gate = self._active_mv_gate(date)
+            if config.gate is not None:
+                active_mv_gate = config.gate.evaluate(date)
                 if active_mv_gate is GateAction.CLEAR:
                     cash = self._force_close_all_active_mv(
                         date=date,
@@ -557,20 +614,6 @@ class PortfolioBacktestEngine:
             base_score += 0.1 * (len(signals) - 1)
         return base_score
 
-    def _active_mv_gate(self, date: str):
-        """获取活跃市值全局闸门（v4.3+ 统一走 apply_active_mv_gate）。
-
-        返回 GateAction 枚举；调用方按 .value 与字符串比较，或直接 == GateAction.CLEAR。
-        """
-        from modules.active_market_value import apply_active_mv_gate
-
-        return apply_active_mv_gate(
-            date,
-            enabled=self.portfolio_config.active_mv_enabled,
-            duckdb_path=self.portfolio_config.active_mv_duckdb_path,
-            path=self.portfolio_config.active_mv_path,
-        )
-
     def _force_close_all_active_mv(
         self,
         date: str,
@@ -787,6 +830,8 @@ class PortfolioBacktestEngine:
         """从回测记录构建 PortfolioBacktestResult"""
         result = PortfolioBacktestResult(
             dates=dates,
+            initial_capital=self.portfolio_config.initial_capital,
+            final_value=net_values[-1] if net_values else 0.0,
             net_values=net_values,
             cash_history=cash_history,
             trades=completed_trades,
@@ -795,27 +840,30 @@ class PortfolioBacktestEngine:
         if not net_values or len(net_values) < 2:
             return result
 
-        # 交易统计
-        result.total_trades = len(completed_trades)
-        wins = [t for t in completed_trades if t.pnl_pct > 0]
-        result.win_count = len(wins)
-        result.loss_count = result.total_trades - result.win_count
-        result.win_rate = result.win_count / result.total_trades if result.total_trades > 0 else 0.0
+        # 交易统计：统一走 core.metrics.calc_trade_stats（唯一的交易统计算法）
+        stats = calc_trade_stats(
+            [t.pnl_pct for t in completed_trades],
+            [t.holding_days for t in completed_trades],
+        )
+        result.total_trades = stats.total_trades
+        result.win_count = stats.win_count
+        result.loss_count = stats.loss_count
+        result.win_rate = stats.win_rate
+        result.avg_pnl = stats.avg_pnl
+        result.avg_win = stats.avg_win
+        result.avg_loss = stats.avg_loss
+        result.max_win = stats.max_win
+        result.max_loss = stats.max_loss
+        result.profit_factor = stats.profit_factor
+        result.avg_holding_days = stats.avg_holding_days
 
-        # 收益：按实际净值序列长度年化，避免日期窗口被截断后失真
-        actual_trading_days = len(net_values)
-        initial = net_values[0]
-        final = net_values[-1]
-        result.total_return = final / initial - 1.0
-        result.annualized_return = (1.0 + result.total_return) ** (TRADING_DAYS_PER_YEAR / actual_trading_days) - 1.0
-
-        # 最大回撤
-        max_dd, _ = compute_drawdown(net_values)
-        result.max_drawdown = max_dd
-
-        # Sharpe（基于日收益率，年化 252）
-        daily_rets = daily_returns(net_values)
-        result.sharpe_ratio = compute_sharpe(daily_rets)
+        # 曲线类指标：统一走 core.metrics.calc_curve_metrics
+        # 年化按实际净值序列长度，避免日期窗口被截断后失真
+        curve = calc_curve_metrics(net_values, trading_days=len(net_values))
+        result.total_return = curve.total_return
+        result.annualized_return = curve.annualized_return
+        result.max_drawdown = curve.max_drawdown
+        result.sharpe_ratio = curve.sharpe_ratio
 
         # Calmar
         result.calmar = result.annualized_return / result.max_drawdown if result.max_drawdown > 0.001 else 0.0

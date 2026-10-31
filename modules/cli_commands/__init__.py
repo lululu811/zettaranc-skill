@@ -18,7 +18,6 @@ from .analyze import analyze_core, cmd_analyze, cmd_score
 from .backtest import (
     _b1_b2_pool_to_dict,
     _portfolio_result_to_dict,
-    _shaofu_portfolio_to_dict,
     _shaofu_result_to_dict,
     add_verify_v10_parser,
     cmd_backtest,
@@ -66,7 +65,6 @@ __all__ = [
     "cmd_simulate",
     "_shaofu_result_to_dict",
     "_portfolio_result_to_dict",
-    "_shaofu_portfolio_to_dict",
     "_b1_b2_pool_to_dict",
     "STRATEGY_ALIAS",
     "STRATEGY_CHOICES",

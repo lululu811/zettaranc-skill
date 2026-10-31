@@ -83,3 +83,43 @@ def test_write_report_creates_file_at_path(tmp_path: Path):
     data = json.loads(paths.json_path.read_text())
     assert data["passed_count"] == 1
     assert data["total_count"] == 2
+
+
+def _make_result_with_not_applicable_gate() -> VerifyResult:
+    """构造一个含"不适用"gate 的验收结果（OOS/IS 算不出来）。"""
+    result = _make_full_result()
+    result.gates["oos_is_ratio"] = GateResult(
+        name="oos_is_ratio",
+        value=None,
+        threshold=0.6,
+        passed=True,
+        message="OOS/IS 无法计算（IS 段 Sharpe 非正或 OOS 段无有效样本），本项不适用",
+        applicable=False,
+    )
+    return result
+
+
+class TestNotApplicableGateRendering:
+    """不适用项的呈现：显示 N/A，不进分母，不算失败。"""
+
+    def test_markdown_shows_na_not_zero(self):
+        md = render_markdown(_make_result_with_not_applicable_gate())
+        assert "OOS/IS | N/A" in md
+        assert "0.00" not in md.split("## 改进建议")[0].split("OOS/IS")[1][:40], "不应显示成比值 0.00"
+
+    def test_markdown_total_excludes_not_applicable(self):
+        """分母只算适用项——否则会出现 "1/3 通过" 但实际 1 项适用的情况。"""
+        md = render_markdown(_make_result_with_not_applicable_gate())
+        assert "**总评**：1/2 通过" in md
+
+    def test_not_applicable_not_listed_as_failure(self):
+        md = render_markdown(_make_result_with_not_applicable_gate())
+        failure_section = md.split("## 改进建议")[1] if "## 改进建议" in md else ""
+        assert "oos_is_ratio" not in failure_section
+
+    def test_json_value_is_null_and_total_excludes_it(self):
+        data = json.loads(render_json(_make_result_with_not_applicable_gate()))
+        assert data["gates"]["oos_is_ratio"]["value"] is None
+        assert data["gates"]["oos_is_ratio"]["applicable"] is False
+        assert data["total_count"] == 2
+        assert data["passed_count"] == 1

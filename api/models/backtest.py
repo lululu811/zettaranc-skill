@@ -50,7 +50,10 @@ class BacktestSummary(BaseModel):
     avg_holding_days: float = 0
     annualized_return: float = 0
     win_count: int = 0
+    loss_count: int = 0
     avg_pnl: float = 0
+    avg_win: float = 0
+    avg_loss: float = 0
     max_win: float = 0
     max_loss: float = 0
 
@@ -63,7 +66,10 @@ class BacktestResponse(BaseModel):
 
 
 class PortfolioBacktestResponse(BaseModel):
+    # ts_code 此前未声明 → service 返回的 ts_code 被 Pydantic 静默丢弃
+    ts_code: str = ""
     summary: BacktestSummary
     equity_curve: list[list] = []
     trades: list[dict] = []
+    # 按标的分组的逐股摘要——此前声明了却从不填充，恒为 []
     per_stock: list[BacktestResponse] = []

@@ -55,18 +55,20 @@ def run_screen(strategy: str, limit: int = 20, use_parallel: bool = True) -> dic
 
     stocks = []
     for s in scores[:limit]:
-        stocks.append({
-            "ts_code": s.ts_code,
-            "name": s.name,
-            "score": round(s.score, 1),
-            "b1_score": round(s.b1_score, 1),
-            "trend_score": round(s.trend_score, 1),
-            "volume_score": round(s.volume_score, 1),
-            "risk_score": round(s.risk_score, 1),
-            "rating": s.rating,
-            "reasons": s.reasons,
-            "warnings": s.warnings,
-        })
+        stocks.append(
+            {
+                "ts_code": s.ts_code,
+                "name": s.name,
+                "score": round(s.score, 1),
+                "b1_score": round(s.b1_score, 1),
+                "trend_score": round(s.trend_score, 1),
+                "volume_score": round(s.volume_score, 1),
+                "risk_score": round(s.risk_score, 1),
+                "rating": s.rating,
+                "reasons": s.reasons,
+                "warnings": s.warnings,
+            }
+        )
 
     return {
         "strategy": strategy,

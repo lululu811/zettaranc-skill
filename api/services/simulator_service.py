@@ -10,17 +10,11 @@ logger = logging.getLogger(__name__)
 
 def _request_to_config(req: SimulationRequest):
     """将 API 请求转换为 SimulationConfig。"""
-    from modules.simulator import CostModel, SimulationConfig, SlippageModel
+    from modules.simulator import SlippageModel
+    from modules.simulator.config import build_cost_model, build_simulation_config
     from modules.simulator.walk_forward import WalkForwardConfig
 
-    cost_model = CostModel()
-    if req.cost_model == "zero":
-        cost_model = CostModel(
-            commission_rate=0,
-            min_commission=0,
-            stamp_duty_rate=0,
-            transfer_fee_rate=0,
-        )
+    cost_model = build_cost_model(req.cost_model)
 
     use_dynamic_slippage = req.slippage == "dynamic"
 
@@ -32,7 +26,7 @@ def _request_to_config(req: SimulationRequest):
             objective=req.wf_objective,
         )
 
-    return SimulationConfig(
+    return build_simulation_config(
         initial_capital=req.capital,
         max_positions=req.max_positions,
         risk_per_trade=req.risk_per_trade,
@@ -47,7 +41,7 @@ def _request_to_config(req: SimulationRequest):
         benchmark_code=req.benchmark,
         strategy_mode=req.strategy_mode,
         strategy_lookback_days=req.strategy_lookback,
-        min_resonance_score=req.min_resonance_score / 100.0,
+        min_resonance_score=req.min_resonance_score,
         walk_forward=req.walk_forward,
         wf_config=wf_config,
     )
@@ -119,15 +113,12 @@ def _result_to_response(result) -> dict:
     else:
         # 兼容旧格式：只有 equity_curve（list[float]）
         equity_curve = [
-            {"date": "", "equity": round(v, 2), "cash": 0, "positions": 0, "regime": ""}
-            for v in result.equity_curve
+            {"date": "", "equity": round(v, 2), "cash": 0, "positions": 0, "regime": ""} for v in result.equity_curve
         ]
 
     benchmark_curve = []
     for p in result.benchmark_curve:
-        benchmark_curve.append(
-            {"date": p.get("date", ""), "close": round(float(p.get("close", 0)), 2)}
-        )
+        benchmark_curve.append({"date": p.get("date", ""), "close": round(float(p.get("close", 0)), 2)})
 
     trades = []
     for t in result.trades:

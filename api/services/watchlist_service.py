@@ -12,15 +12,17 @@ def list_watchlist(tags: str | None = None) -> dict:
     items = list_watch(tags=tags)
     result_items = []
     for item in items:
-        result_items.append({
-            "id": item.get("id", 0),
-            "ts_code": item.get("ts_code", ""),
-            "name": item.get("name", ""),
-            "tags": item.get("tags", ""),
-            "notes": item.get("notes", ""),
-            "added_date": item.get("added_date", ""),
-            "alert_enabled": item.get("alert_enabled", True),
-        })
+        result_items.append(
+            {
+                "id": item.get("id", 0),
+                "ts_code": item.get("ts_code", ""),
+                "name": item.get("name", ""),
+                "tags": item.get("tags", ""),
+                "notes": item.get("notes", ""),
+                "added_date": item.get("added_date", ""),
+                "alert_enabled": item.get("alert_enabled", True),
+            }
+        )
     return {"count": len(result_items), "items": result_items}
 
 
@@ -48,21 +50,25 @@ def scan_watchlist() -> dict:
     alerts = []
     for a in result.get("alerts", []):
         if hasattr(a, "ts_code"):
-            alerts.append({
-                "ts_code": a.ts_code,
-                "name": a.name,
-                "alert_type": a.alert_type,
-                "level": a.level,
-                "message": a.message,
-            })
+            alerts.append(
+                {
+                    "ts_code": a.ts_code,
+                    "name": a.name,
+                    "alert_type": a.alert_type,
+                    "level": a.level,
+                    "message": a.message,
+                }
+            )
         elif isinstance(a, dict):
-            alerts.append({
-                "ts_code": a.get("ts_code", ""),
-                "name": a.get("name", ""),
-                "alert_type": a.get("alert_type", ""),
-                "level": a.get("level", ""),
-                "message": a.get("message", ""),
-            })
+            alerts.append(
+                {
+                    "ts_code": a.get("ts_code", ""),
+                    "name": a.get("name", ""),
+                    "alert_type": a.get("alert_type", ""),
+                    "level": a.get("level", ""),
+                    "message": a.get("message", ""),
+                }
+            )
 
     summary = result.get("summary", {})
     return {

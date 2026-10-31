@@ -6,9 +6,9 @@
 基于 ~200 万字语料蒸馏，60+ 指标，30+ 战法，可回测可模拟、可自改进、可走完整闭环。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-4.3.1-green)](docs/CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-4.13.1-green)](docs/CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-1501%20passed%20%7C%2016%20skipped-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-1655%20passed%20%7C%2016%20skipped-brightgreen)](tests/)
 [![Quality Gate](https://img.shields.io/badge/quality-12%2F12-blue)](corpus/quality_check.py)
 [![Skill](https://img.shields.io/badge/Skill--Schema--V2-✓-purple)](SKILL.md)
 
@@ -141,12 +141,15 @@ zt backtest b2-confirm 601318.SH --days 500
 | 盈亏比 | > 1.5 |
 | 最大回撤 | < 25% |
 
-```python
-from modules.backtest_six_step import backtest_shaofu_with_validation
+统计检验的**底层能力**（`modules/statistics/`：夏普 t 检验、蒙特卡洛置换检验、子区间分析）仍在，可直接调用：
 
-result = backtest_shaofu_with_validation("601318.SH", days=500)
-print(result.validation_report.generate_summary())
+```python
+from modules.statistics import sharpe_t_test, monte_carlo_permutation_test
+
+p_value = sharpe_t_test(sharpe_ratio, n_periods)
 ```
+
+> ⚠️ **该框架尚未接入验收链路**：v4.6.0 起，统计检验与 v1.0 验收（`zt verify v1.0`）是两条独立的路径——验收用的是五项硬指标（Sharpe / Calmar / WinRate / MaxDD / OOS-IS），不含统计检验。历史上的 `backtest_shaofu_with_validation` 入口因零调用方已删除。设计稿见 [docs/STATISTICS_VALIDATION.md](docs/STATISTICS_VALIDATION.md)。
 
 详见 [docs/STATISTICS_VALIDATION.md](docs/STATISTICS_VALIDATION.md)。
 

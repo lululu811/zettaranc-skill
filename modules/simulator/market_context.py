@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 
+from ..core.market_context import classify_market_regime
 from ..database import get_connection
 from ..datasource import DataSource, get_datasource
 from ..indicators import DailyData, calculate_zg_white, calculate_dg_yellow, calculate_ma
@@ -216,13 +217,9 @@ def get_market_context(
     breadth = _breadth_approx(klines)
     mf = _moneyflow_score(klines)
 
-    # 环境判定
-    if trend >= 65 and breadth > 0.1 and mf >= 55:
-        regime = MarketRegime.STRONG
-    elif trend <= 40 or breadth < -0.15 or mf <= 40:
-        regime = MarketRegime.WEAK
-    else:
-        regime = MarketRegime.NEUTRAL
+    # 环境判定：统一走 core.market_context.classify_market_regime
+    # （此前此处手抄了一份阈值与判定逻辑，文件里还有第二份）
+    regime = classify_market_regime(trend, breadth, mf)
 
     limit_up, limit_down = _fetch_breadth(normalized_date)
     turnover_trend = _fetch_turnover_trend(normalized_date)
@@ -333,12 +330,7 @@ def precompute_market_contexts(
         breadth = _breadth_approx(window20)
         mf = _moneyflow_score(window20)
 
-        if trend >= 65 and breadth > 0.1 and mf >= 55:
-            regime = MarketRegime.STRONG
-        elif trend <= 40 or breadth < -0.15 or mf <= 40:
-            regime = MarketRegime.WEAK
-        else:
-            regime = MarketRegime.NEUTRAL
+        regime = classify_market_regime(trend, breadth, mf)
 
         limit_up, limit_down = breadth_map.get(normalized, (0, 0))
 

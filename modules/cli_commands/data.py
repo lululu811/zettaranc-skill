@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from ._helpers import json_output, warn
+from ._helpers import error, json_output, warn
 
 logger = logging.getLogger(__name__)
 
@@ -29,22 +29,30 @@ def cmd_sync(args) -> None:
         print("数据库初始化完成")
 
     elif action == "sync":
-        syncer = DataSyncer(datasource=get_datasource("tushare"))
+        # 数据源按统一决议选（与读路径 analyze/screen 走同一套判断），
+        # 不再钉死 tushare：默认的 websearch 模式下 tushare 没有数据后端
+        # （TushareClient._pro is None），钉死它会让整次同步静默同步 0 行，
+        # 却照样打印"同步完成"。
+        syncer = DataSyncer()
         if args.ts_code:
-            syncer.sync_daily_kline(args.ts_code)
+            kline_count = syncer.sync_daily_kline(args.ts_code)
             if not args.skip_indicators:
                 print(f"正在同步指标缓存: {args.ts_code} ...")
                 syncer.sync_indicator_cache(args.ts_code, days=args.days)
+            print(f"同步完成：{args.ts_code} K 线 {kline_count} 行")
         else:
-            syncer.sync_stock_basic()
-            syncer.sync_all_daily_kline(days=args.days)
+            stock_count = syncer.sync_stock_basic()
+            kline_counts = syncer.sync_all_daily_kline(days=args.days)
+            kline_count = sum(kline_counts.values()) if isinstance(kline_counts, dict) else 0
             if args.indicators and not args.skip_indicators:
                 print("正在批量同步指标缓存...")
                 syncer.sync_all_indicators()
-        print("同步完成")
+            print(f"同步完成：股票 {stock_count} 只，K 线 {kline_count} 行")
         print(syncer.get_sync_status())
 
     elif action == "stk-factor":
+        # 技术因子只有 tushare / indevs 提供（hithink 与 a-stock-data 都不支持），
+        # 这个命令本身就是"同步 Tushare 官方指标"，因此显式钉死 tushare。
         syncer = DataSyncer(datasource=get_datasource("tushare"))
         if args.ts_code:
             print(f"正在同步 Tushare 官方指标: {args.ts_code} ...")
@@ -88,7 +96,8 @@ def cmd_sync(args) -> None:
         print(f"导入完成，共 {count} 条")
 
     elif action == "status":
-        syncer = DataSyncer(datasource=get_datasource("tushare"))
+        # 状态只读数据库，与数据源无关
+        syncer = DataSyncer()
         status = syncer.get_sync_status()
         print("=" * 50)
         print(f"  数据库: {status.get('db_path', 'N/A')}")
@@ -150,8 +159,7 @@ def cmd_track(args) -> None:
 
     if action == "add":
         if not args.ts_code:
-            print("错误：添加股票需要指定股票代码")
-            return
+            error("添加股票需要指定股票代码", as_json=bool(getattr(args, "json", False)))
         success = manager.add_stock(
             ts_code=args.ts_code, name=args.name, reason=args.reason, strategy_tags=args.strategy, notes=args.notes
         )
@@ -160,8 +168,7 @@ def cmd_track(args) -> None:
 
     elif action == "remove":
         if not args.ts_code:
-            print("错误：移除股票需要指定股票代码")
-            return
+            error("移除股票需要指定股票代码", as_json=bool(getattr(args, "json", False)))
         success = manager.remove_stock(ts_code=args.ts_code, reason=args.reason)
         if args.json:
             json_output({"success": success})
@@ -187,8 +194,7 @@ def cmd_track(args) -> None:
 
     elif action == "info":
         if not args.ts_code:
-            print("错误：查看股票信息需要指定股票代码")
-            return
+            error("查看股票信息需要指定股票代码", as_json=bool(getattr(args, "json", False)))
         stock_info: dict[str, Any] | None = manager.get_stock_info(args.ts_code)
         if args.json:
             json_output(stock_info if stock_info else {})
@@ -208,8 +214,7 @@ def cmd_track(args) -> None:
 
     elif action == "status":
         if not args.ts_code:
-            print("错误：更新状态需要指定股票代码")
-            return
+            error("更新状态需要指定股票代码", as_json=bool(getattr(args, "json", False)))
         success = manager.update_stock_status(ts_code=args.ts_code, status=args.status, notes=args.notes)
         if args.json:
             json_output({"success": success})

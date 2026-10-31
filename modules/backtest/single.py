@@ -14,7 +14,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from ..core.metrics import TRADING_DAYS_PER_YEAR, compute_drawdown, compute_sharpe, daily_returns
+from ..core.metrics import calc_curve_metrics, calc_trade_stats, compute_drawdown
 from ..core.net import disable_proxy
 from ..strategies import detect_all_strategies, get_kline_data
 from modules.core.errors import ErrorCode, ZettarancError
@@ -73,7 +73,8 @@ class BacktestResult:
             lines.append("最近5笔交易:")
             for t in self.trades[-5:]:
                 status = "🟢" if t.pnl > 0 else "🔴" if t.pnl < 0 else "⚪"
-                lines.append(f"  {status} {t.entry_date}→{t.exit_date or '持有中'} {t.pnl_pct:+.2f}% ({t.exit_reason})")
+                # Trade.pnl_pct 是分数（0.1 = +10%），用 :.2% 才是 10.00%
+                lines.append(f"  {status} {t.entry_date}→{t.exit_date or '持有中'} {t.pnl_pct:+.2%} ({t.exit_reason})")
 
         return "\n".join(lines)
 
@@ -324,6 +325,20 @@ class MultiStrategyBacktestResult:
     equity_dates: list[str] = field(default_factory=list)
     net_values: list[float] = field(default_factory=list)
     trades: list[Trade] = field(default_factory=list)
+    # 交易统计（百分数口径，与 ShaofuBacktestResult / PortfolioBacktestResult 一致；
+    # avg_loss / max_loss 为有符号的负值）
+    win_count: int = 0
+    loss_count: int = 0
+    avg_pnl: float = 0.0
+    avg_win: float = 0.0
+    avg_loss: float = 0.0
+    max_win: float = 0.0
+    max_loss: float = 0.0
+    avg_holding_days: float = 0.0
+
+    def to_dict(self) -> dict:
+        """规范化结果字典（见 :func:`multi_strategy_result_to_dict`）。"""
+        return multi_strategy_result_to_dict(self)
 
     def summary(self) -> str:
         """格式化回测摘要"""
@@ -347,9 +362,10 @@ class MultiStrategyBacktestResult:
             lines.append("最近5笔交易:")
             for t in self.trades[-5:]:
                 status = "🟢" if t.pnl > 0 else "🔴" if t.pnl < 0 else "⚪"
+                # Trade.pnl_pct 是分数（0.1 = +10%），用 :.2% 才是 10.00%
                 lines.append(
                     f"  {status} {t.ts_code} {t.entry_date}→{t.exit_date or '持有中'} "
-                    f"{t.pnl_pct:+.2f}% ({t.exit_reason})"
+                    f"{t.pnl_pct:+.2%} ({t.exit_reason})"
                 )
 
         return "\n".join(lines)
@@ -420,27 +436,78 @@ def _calc_stats(result: MultiStrategyBacktestResult, trading_days: int = 0):
     if not result.net_values:
         return
 
-    # 总收益率
-    result.total_return = (result.net_values[-1] - result.net_values[0]) / result.net_values[0]
-
-    # 年化收益（按252个交易日/年）
-    if trading_days > 0:
-        result.annualized_return = (1 + result.total_return) ** (TRADING_DAYS_PER_YEAR / trading_days) - 1
-
-    # 最大回撤
-    result.max_drawdown, _ = compute_drawdown(result.net_values)
-
-    # 日收益率序列
-    daily_rets = daily_returns(result.net_values)
-
-    # 夏普比率（sample std，不减无风险利率）
-    result.sharpe_ratio = compute_sharpe(daily_rets)
+    # 曲线类指标：统一走 core.metrics.calc_curve_metrics（唯一的曲线指标算法）
+    # 年化分母由调用方显式传入——单股按 K 线天数、组合按净值序列长度，两者不同
+    curve = calc_curve_metrics(result.net_values, trading_days=trading_days)
+    result.total_return = curve.total_return
+    result.annualized_return = curve.annualized_return
+    result.max_drawdown = curve.max_drawdown
+    result.sharpe_ratio = curve.sharpe_ratio
 
     # 交易统计
     if result.trades:
-        result.total_trades = len(result.trades)
-        win_trades = sum(1 for t in result.trades if t.pnl_pct > 0)
-        result.win_rate = win_trades / result.total_trades
+        # single.Trade.pnl_pct 是【分数】（0.1 = +10%），统计结果换算成百分数
+        stats = calc_trade_stats(
+            [t.pnl_pct for t in result.trades],
+            [t.hold_days for t in result.trades],
+        )
+        result.total_trades = stats.total_trades
+        result.win_count = stats.win_count
+        result.loss_count = stats.loss_count
+        result.win_rate = stats.win_rate
+        result.avg_pnl = stats.avg_pnl * 100
+        result.avg_win = stats.avg_win * 100
+        result.avg_loss = stats.avg_loss * 100
+        result.max_win = stats.max_win * 100
+        result.max_loss = stats.max_loss * 100
+        result.avg_holding_days = stats.avg_holding_days
+
+
+def multi_strategy_result_to_dict(result: MultiStrategyBacktestResult) -> dict:
+    """规范化的结果字典 —— CLI 与 API 都从这份派生。
+
+    单位约定（对外展示单位）：
+    - ``total_return`` / ``max_drawdown`` / ``avg_pnl`` / ``avg_win`` /
+      ``avg_loss`` / ``max_win`` / ``max_loss`` / ``pnl_pct`` 为**百分数**
+    - ``win_rate`` 为分数（0.455）
+
+    注意本类的 ``Trade.pnl_pct`` 本身是【分数】（0.1 = +10%），
+    这里统一换算成百分数再输出。
+
+    写成模块级函数（而非方法）以便鸭子类型：测试可以用 SimpleNamespace 替身。
+    """
+    return {
+        "initial_capital": result.initial_capital,
+        "final_value": round(result.final_value, 2),
+        "total_trades": result.total_trades,
+        "win_count": result.win_count,
+        "loss_count": result.loss_count,
+        "win_rate": round(result.win_rate, 3),
+        "avg_pnl": round(result.avg_pnl, 2),
+        "avg_win": round(result.avg_win, 2),
+        "avg_loss": round(result.avg_loss, 2),
+        "max_win": round(result.max_win, 2),
+        "max_loss": round(result.max_loss, 2),
+        "profit_factor": round(result.profit_factor, 2),
+        "total_return": round(result.total_return * 100, 2),
+        "annualized_return": round(result.annualized_return * 100, 2),
+        "max_drawdown": round(result.max_drawdown * 100, 2),
+        "sharpe_ratio": round(result.sharpe_ratio, 2),
+        "avg_holding_days": round(result.avg_holding_days, 1),
+        "trades": [
+            {
+                "ts_code": t.ts_code,
+                "entry_date": t.entry_date,
+                "entry_price": round(t.entry_price, 2),
+                "exit_date": t.exit_date,
+                "exit_price": round(t.exit_price, 2) if t.exit_price else None,
+                "exit_reason": t.exit_reason,
+                "pnl_pct": round(t.pnl_pct * 100, 2),
+                "holding_days": t.hold_days,
+            }
+            for t in result.trades
+        ],
+    }
 
 
 def backtest_multi_strategy(

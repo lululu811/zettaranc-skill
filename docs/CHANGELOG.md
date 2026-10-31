@@ -2,6 +2,488 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## v4.13.1 (2026-10-31) — CI 修复：决议口径对齐 + 测试优雅降级
+
+PR #35 的 CI 暴露了三个问题——都是**本地测不出来**的那类（本地环境比 CI 完整）。
+
+### 修复：数据源决议与实际可用性口径不一致
+
+JNB 模式下 tushare 要**两项**配置齐全才能用：`TUSHARE_TOKEN`（`TushareClient.__init__` 的 JNB 检查）与 `TUSHARE_API_URL`（中转 API 地址）。但：
+
+- `resolve_provider()` 只判 `TUSHARE_TOKEN` → 决议说 "tushare"，实际构造抛 `CONFIG_MISSING` 回退 a-stock-data。**决议与实际用的源分叉**——`tests/test_datasource_resolution.py::TestReadPathMatchesResolution`（断言"读路径首选源 == 决议结果"）在 CI 上直接失败。
+- 判定来源还不统一：`TushareClient` 读 **import 时**的模块常量，`DataSyncer` 读**实时环境变量**。同一份配置在两处看到不同的值。
+
+现在：
+
+- 新增 `tushare_client.current_api_url()` / `current_token()`——**实时环境变量**是唯一来源，`TushareClient`、`DataSyncer`、`resolve_provider()` 三处共用。
+- `resolve_provider()` 要求 JNB 模式下两项配置齐全才路由 tushare，与构造条件对齐。
+- 相关测试统一改用 `setenv`/`delenv` 控制配置（原先有的改常量、有的改环境变量，两套机制混用导致本地与 CI 行为不一致）。
+
+这个缺陷靠**本机 `.env` 恰好配了 `TUSHARE_API_URL`** 一直没暴露——CI 没有该变量才现形。
+
+### 修复：测试未对可选依赖做优雅降级
+
+API 侧依赖（fastapi / pydantic / pydantic-settings）**不在 `requirements.txt`** 里（见 AGENTS.md），CI 环境不装。本机装了，所以新增的 API 测试在本地全绿、在 CI 全红：
+
+```
+ModuleNotFoundError: No module named 'pydantic'
+```
+
+涉及 `tests/test_simulation_config.py`（2 项）与 `tests/test_output_units.py`（3 项）。现用 `pytest.importorskip` 优雅跳过——**"CI 缺可选依赖"不该变成"测试失败"**。
+
+验证：屏蔽 pydantic 后全量 **1639 passed / 27 skipped / 0 failed**。
+
+### 修复：mypy 与文件末尾换行
+
+- `modules/cli.py`：`SystemExit.code` 是 `str | int | None`，`int(exc.code)` 过不了 mypy。改为显式 `isinstance` 判断。
+  - 注：本地 mypy 跑的是 86 个文件，**没覆盖 `modules/cli.py`**；CI 的 pre-commit 钩子检查 `modules/(screener|cli|data_sync|indicators/core|strategies/.*)\.py$` 才暴露出来。现本地也按 CI 的范围跑。
+- `docs/BACKTEST_RUNNER_BASELINE.json` 缺文件末尾换行，pre-commit 的 `end-of-file-fixer` 会改它 → CI 判定"files were modified by this hook"。
+
+### 验证
+
+- pytest **1655 passed** / 16 skipped（有 pydantic）
+- pytest **1639 passed** / 27 skipped / **0 failed**（移走 `.env` + 屏蔽 pydantic，**严格模拟 CI 环境**）
+- ruff check + format（modules + tests + api）、mypy（按 CI 范围 27 文件）、SKILL 质量门 12/12
+- 验收 7 项核心数字与 v4.10.0 逐位相同
+
+## v4.13.0 (2026-10-31) — 子命令错误出口补齐 + OOS/IS「算不出来」的诚实表达
+
+收掉两个此前遗留的出口问题。**验收核心指标逐位未变**（114 笔 / sharpe −0.8169）——本轮只改错误出口与指标的可解释性，不动任何计算口径。
+
+### 修复：子命令自己吞掉异常的错误路径（候选 5 的漏网）
+
+v4.12.0 统一了 CLI 顶层的错误出口，但**子命令内部自己捕获异常并 print** 的路径绕过了它：
+
+- `modules/verify/cli.py` 参数非法时 `print(f"参数错误：{e}")` 打到 **stdout**——`--json` 模式下这是**非法 JSON**（裸文本），宿主的 JSON 解析直接失败。
+- `modules/cli_commands/analyze.py::cmd_score` 缺股票代码时同样 print 到 stdout。
+- `modules/cli_commands/data.py::cmd_track` 的 4 处"错误：…"提示同样打到 stdout。
+- 12 处 `error(...)` 调用在 `--json` 模式下 stdout **完全为空**（宿主拿不到任何东西）。
+
+现在：
+
+- `error()` 支持 `as_json=True` → stdout 输出统一错误外壳；`--json` 模式的 12 处调用全部接上。
+- `cmd_track` / `cmd_score` 的 stdout 错误提示改走 `error()`。
+- `verify/cli.py` 的参数错误在 `--json` 模式下输出统一外壳。
+- **错误退出码统一为 2**——此前 `error()` 退 1、异常退 2，宿主脚本要记两套码。
+
+### 改进：argparse 错误信息具体到缺哪个参数
+
+此前 `--json` 模式下的 argparse 错误一律是笼统的"命令行参数错误"。现在重放一次解析、提取 argparse 自己写出的原因：
+
+```
+zt backtest shaofu --json  →  "the following arguments are required: ts_code"
+zt trade add --json        →  "the following arguments are required: text"
+```
+
+### 修复：OOS/IS 把「算不出来」伪装成「比值是 0」
+
+**这是 v4.10.0 以来一直存在、且被误读的缺陷。**
+
+`oos_is_ratio = OOS Sharpe / IS Sharpe`，但旧实现是 `if is_sharpe > 0.001: ratio = oos/is`，**其余情况留 0.0**。于是当 IS 段 Sharpe 为负（当前策略正是 −0.817）时，比值在数学上就没有意义，却被写成 0.0，报告显示成：
+
+```
+| OOS/IS | 0.00 | ≥ 0.60 | ❌ |
+```
+
+**总评 0/5 通过**——看起来像"策略过拟合到 OOS 完全没收益"。实际是：IS 段本身就是亏的，负÷负的正号取决于两个负数谁的绝对值大，是噪声不是过拟合程度。
+
+现在：
+
+- `oos_is_ratio` 改为 `float | None`，`None` = **无法计算**（IS 段 Sharpe 非正 / OOS 段无有效样本），与"算出是 0"严格区分。
+- 新增 `compute_oos_is_ratio()`，单股版与组合版共用同一口径（此前两份实现各自写一遍）。
+- `GateResult` 新增 `applicable` 字段；不适用项报告里显示 **"N/A ➖ 不适用"**，**不进分母**、不算失败项。
+- `GateResult.value` 在不适用时为 `None`（JSON 里是 `null`）而非 0.0——0.0 会被下游读成"比值确实是 0"。
+- 自优化器 `V10VerifyScorer` 的适应度计算同步排除不适用项——否则会**凭空拿到 +10 分**（`passed_count × 10`）。
+
+修好后同一份验收报告显示：
+
+```
+| Sharpe | -0.82 | ≥ 0.50 | ❌ |
+| Calmar | -0.54 | ≥ 0.50 | ❌ |
+| WinRate | 36.0% | ≥ 40% | ❌ |
+| MaxDD | 53.4% | ≤ 25% | ❌ |
+| OOS/IS | N/A | ≥ 0.60 | ➖ 不适用 |
+
+**总评**：0/4 通过
+```
+
+### 测试
+
+- `tests/test_command_result.py` 新增 7 项：5 个子命令错误路径的 JSON 合法性、退出码统一、非 JSON 模式行为不变。
+- `tests/test_verify_walk_forward.py` 新增 7 项：`compute_oos_is_ratio` 的 None/0 区分、端到端负 Sharpe 返回 None。
+- `tests/test_verify_gates.py` 新增 3 项：不适用项的 `applicable` / `value is None` / 真 0.0 仍按阈值判定。
+- `tests/test_verify_report.py` 新增 4 项：Markdown 显示 N/A、分母排除不适用项、不列入失败项、JSON value 为 null。
+- pytest **1652 passed** / ruff（`modules` + `tests` + `api` 全清）/ mypy 86 文件 / SKILL 质量门 12/12。
+
+## v4.12.0 (2026-10-31) — 命令结果外壳归一（架构评审候选 5）
+
+架构评审的**最后一个候选**落地。**验收数字与 v4.11.0 逐位相同**（114 笔 / sharpe −0.8169 / 0-4 通过）——本轮只改错误出口，不动任何计算口径。
+
+### 修复（真 bug）
+
+**CLI `--json` 出错时 stdout 完全为空。** 实测 `zt simulate --days 0 --json`：退出码 2，stdout **0 字节**。宿主拿到的不是 JSON 而是空串——JSON 解析直接失败，连错误原因都看不到，只能去翻 stderr。同时 `[SIMULATOR_INVALID_PRICE]` 这个错误码被整个丢弃。
+
+根因在 `modules/cli.py`：顶层只 `print(str(e), file=sys.stderr)` 就退出。**argparse 自身的参数错误**（未知参数 / 缺必填参数）也一样——它在解析阶段就退出，那时连 `args` 都还没有。
+
+**API 侧把 50+ 个 `ErrorCode` 压成一句话。** 10 个路由文件里散落着 25 处 `except Exception → HTTPException(500, detail="回测失败: ...")`，`api/main.py` 的全局兜底返回 `{"error": "internal_error"}`——宿主既拿不到错误码，也无法区分"参数非法"（客户端问题）和"数据库挂了"（服务端问题）。
+
+`modules/core/errors.py::ZettarancError.to_dict()` 的 docstring 写着"供 CLI --json / Web API 使用"，但全仓 `grep to_dict()` **只有它自己的 `__main__` demo 一处**——结构化错误系统一直是个摆设。
+
+### 重构
+
+- **新增 `modules/core/command_result.py`** —— 命令结果外壳的唯一实现：
+  - `exception_to_dict(exc)`：异常 → 统一外壳（`ok` / `error_code` / `message` / `cause`）。`ZettarancError` 保留其 `ErrorCode`；其他异常归到新增的 `INTERNAL_ERROR`（此前退化成无语义的字符串）。
+  - `http_status_for(exc)`：错误码 → HTTP 状态码。客户端错误 4xx / 资源不存在 404 / 其余 5xx。
+  - `CommandResult`：成功/失败结果的统一表示。
+- **CLI 接入**（`modules/cli.py`）：`--json` 模式下**错误也输出合法 JSON**（stdout），stderr 保留人类可读信息，退出码仍为 2。argparse 的参数错误同样走统一外壳（`INVALID_PARAM`）。不加 `--json` 时行为完全不变。
+- **API 接入**：
+  - 新增 `api/utils/errors.py::raise_api_error` —— 25 处 `except Exception` 全部改为调用它，不再各写一遍。
+  - 新增 `ApiError` 异常 + `api/main.py` 处理器。**不用 `HTTPException`**，因为 FastAPI 会把 `HTTPException.detail` 包进 `{"detail": ...}`，那样响应体变成 `{"detail": {"ok": false, ...}}`，与 CLI 的扁平外壳不同形，宿主要写两套解析。现在两侧**完全同形**。
+  - `ZettarancError` 的 message **原样保留**（不加"回测失败:"这类前缀）——它已经是具体原因，前缀会让两侧 message 长得不一样。
+
+### 成功路径的 JSON 形状保持不变
+
+16 条命令成功时的输出**一字未改**（裸 list / `{"success": …}` / `asdict()` 裸结构…）——那是各命令的既有契约，改动会破坏所有宿主。**只有错误路径统一**。
+
+### 顺带修掉 `api/` 的既有 lint 问题
+
+`api/` 此前有 10 个 ruff 错误（9× E402 + 1× F841）与 10 个文件格式不合规。本轮改了 `api/`，一并修干净：路由 import 移到文件顶部（FastAPI 允许——路由模块只定义 router）、`watchlist.py` 未使用的 `result` 变量移除、全目录格式化。**现在 `api/` lint 与 format 全清**。
+
+### 测试
+
+- 新增 `tests/test_command_result.py`（24 项）：CLI 错误路径 stdout 合法性、`error_code` 保真、stderr 可读性、argparse 错误路径、CLI/API 外壳同形。
+- 新增 `tests/test_api_error_shell.py`（6 项）：API 扁平外壳（不被 `detail` 多包一层）、`error_code` 保真、4xx/404/5xx 状态码判定。
+- pytest **1631 passed** / ruff（`modules` + `tests` + `api` 全清）/ mypy 86 文件 / SKILL 质量门 12/12。
+
+## v4.11.0 (2026-10-31) — 架构评审候选收敛（模拟器配置 / 限流 / 市场状态 / K 线读取）
+
+架构评审的 4 个候选落地。**验收数字与 v4.10.0 逐位相同**（114 笔 / sharpe −0.8169 / 0-4 通过）——本轮全是"同一语义的多份实现收敛到单一来源"，不改任何计算口径。
+
+### 候选 8：SimulationConfig——模拟器默认值归一
+
+CLI 与 API 各写一份装配代码，默认值已经漂移：
+
+| 字段 | CLI | API |
+|---|---|---|
+| position_score_threshold | 70.0 | 60 |
+| max_position_pct | 0.20 | 0.15 |
+| use_dynamic_slippage | False | True |
+| cost_model | "simple" / "advanced" | "zero" / "realistic" |
+| min_resonance_score | 0.35（0-1） | 50÷100（字段是 0-100） |
+
+两处最严重：
+
+- **cost_model 词汇不同，且 "simple" 与 "zero" 不是一回事**——CLI 的 simple 佣金 0.0003（非零），API 的 zero 全零。
+- **min_resonance_score 单位不同**——同一个 0.35 在 CLI 是 35 分，在 API 被除以 100 变成 0.0035 分，差 100 倍。
+
+新增 `modules/simulator/config.py`：`SIMULATION_DEFAULTS`（规范默认值）+ `build_cost_model(name)`（统一词汇 zero/simple/realistic，"advanced" 保留为历史别名）+ `build_simulation_config(**overrides)`（唯一装配点）。规范值以 `SimulationConfig` 自身默认值与 `BACKTEST_DEFAULT_MAX_POSITION_PCT` 为准——CLI 侧本来是对的，API 侧是离群值。
+
+**API 的 `min_resonance_score` 由 0-100 改为 0-1**（破坏性变更）。
+
+### 候选 7：CallBudget——请求限流收敛到公共实现
+
+仓库里此前有 6 处限流实现，各自为政：
+
+- 4 个客户端各抄了一份**完全相同**的"最小间隔 sleep"逻辑，只有间隔参数不同（tushare 0.55s / indevs 0.5s / a-stock-data 0.5s / hithink 0.25s）；
+- syncer 用一份 60s 滑动窗口 + 多进程锁（只读 `TUSHARE_RPM`）。
+
+两种算法语义不同（间隔 vs 窗口），都保留，但实现只此一处：新增 `modules/core/rate_limit.py`（`wait_min_interval` / `WindowRateLimiter` / `make_window_limiter`），`modules/data_sync/rate_limiter.py` 降为薄封装。4 个客户端的 `_rate_limit` 改为委托共享原语，**保留原有属性名**，测试用它们关闭限流的写法不受影响。
+
+### 候选 6：MarketRegimeDecision——市场状态判定收敛到单一来源
+
+市场状态此前有 3 份判定逻辑 + 1 个死的单源。新增 `modules/core/market_context.py::classify_market_regime`（STRONG / NEUTRAL / WEAK），调用方（模拟器市场环境、行情择时等）统一走它。
+
+### 候选 2：KlineRead——K 线读取 SQL 收敛到单一来源
+
+同一段"取最近 N 天、升序返回"的 SQL 抄了 3 处（`SqliteDataSource.get_kline_dicts` / `CompositeDataSource.get_kline_dicts`（几乎是上一处的逐字副本）/ `indicators.data_layer.get_kline_data`），批量查询 `get_kline_dicts_batch` 是第 4 处副本。复核时又找出 2 处同语义副本：`bridge_client._get_local_daily` 与 `market_timing._load_index_klines_sqlite`（后者列集少 `pct_chg`，且 `pct_chg` 由相邻收盘价本地计算）——一并收敛。
+
+新增 `modules/core/kline.py`：`KLINE_COLUMNS` + `read_kline_rows`（单只，支持列子集）+ `read_kline_rows_batch`（批量）+ `resolve_kline_limit`。
+
+**只统一 SQL，不统一 dict → DailyData 的转换**——`datasource.dict_to_daily` 显式计算 `is_rise` / `is_beidou` / `is_suoliang` 等派生标志，而 `indicators.data_layer.get_kline_data` 用 DailyData 默认值 False。下游战法检测依赖这些标志，两条路径的 DailyData **并不等价**，强行统一会改回测结果。
+
+顺带发现并修掉一个**潜在行为回退**：6 个数据源实现各自写了一遍截断规则（`if not start_date and days > 0`，sqlite/composite 走 SQL LIMIT，tushare/hithink/a-stock/indevs 走 Python 切片）——规则是"给了日期区间就以区间为准，`days` 只在无区间时截断"。统一时若丢掉这条，DB 路径会与 API 路径给出**不同长度**的 K 线。现收敛到 `resolve_kline_limit` 一处，并有行为测试护栏。
+
+### 测试
+
+- 顺带把 `tests/test_rate_limiter.py` 里两条**源码文本断言**换成行为断言（`assert "xxx" in inspect.getsource(...)` → 探针验证行为）。源码形状断言在这个仓库已经栽过一次——B1/B2 的闸门 bug 在源码断言下是绿的。
+- pytest **1601 passed** / ruff / mypy 85 文件 / SKILL 质量门 12/12。
+
+## v4.10.0 (2026-10-31) — 验收与组合回测切到真组合引擎（BacktestRunner 阶段 4–5）
+
+[ADR-0002](adr/0002-backtest-runner-unification.md) 阶段 4–5。**验收数字大幅变化，且五项硬指标从 4/4 通过变为 0/4 通过。**
+
+### 修复（真 bug）
+
+- **「用户看的」与「验收用的」不是同一个引擎。**
+  - `zt backtest portfolio` 走的是"各标的独立回测后按 `1/max_concurrent` 加权平均资金曲线"的**等权组合**——不建模资金竞争、不计费率，其收益数字与真实组合不可比。
+  - `zt verify v1.0` 走 shaofu 分支（逐股独立回测 + 等权合并曲线），而 `_aggregate_metrics` 的 docstring 写的却是"基于真实组合资金曲线"——实现与意图本来就不一致。
+  - 唯一在用真组合的是自优化器 `V10VerifyScorer`（`use_portfolio_engine` 默认 True）。于是**优化器优化的目标与验收报告的数字不是同一个引擎算出来的**。
+  - 现统一到 `PortfolioBacktestEngine`（真组合：共享资金池 + 费率 + 仓位上限），`zt backtest portfolio`（含单只股票）与 `zt verify v1.0` 都用它。
+- **Rust 侧组合/网格搜索入口从未被 Python 调用，且 Rust 侧既无费率模型也无闸门模型**——当组合引擎会静默丢掉这两项。已删除 `run_portfolio_backtest_py` / `run_grid_search_py` 与对应的零调用方 Python 桥函数（`bridge_grid_search` / `try_call` / `reset_all_caches`）。**Rust 只服务单股加速路径**。
+
+### 重构
+
+- **少妇战法 B1 提升到战法层** —— 新增 `modules/strategies/shaofu_b1.py::detect_shaofu_b1`，规则一字未改。指标级的 `indicators.detect_b1_today` 留在 indicators（indicators 不能反向依赖 strategies，否则成环）。
+  - ADR-0002 决策 3 原文说两个 B1 检测器是"重复实现"——读实现后发现**前提不成立**：它们是两套不同策略，实测在验收样本上**重合度仅 3%**（少妇战法 6639 次 vs 通用战法 315 次，交集 201 次）。ADR 已修正。
+- **删除等权组合实现** —— `backtest_six_step.backtest_shaofu_portfolio` 与 `cli_commands._shaofu_portfolio_to_dict`。`modules/backtest_six_step.py` 从 192 行降到 61 行，现在只做兼容 re-export。
+
+### 新旧口径对照（50 只股票 / 300 天）
+
+| 指标 | 旧（等权组合 / 无费率） | 新（真组合 / 有费率） |
+|---|---|---|
+| total_trades | 193 | 114 |
+| win_rate | 0.456 | 0.360 |
+| total_return_pct | +0.0208 | **-0.3702** |
+| annualized_return | +0.0174 | -0.2908 |
+| sharpe | 1.250 | **-0.817** |
+| calmar | 4.183 | -0.544 |
+| max_drawdown | 0.0042 | 0.5345 |
+| gate 结果 | **4/4 通过** | **0/4 通过** |
+
+已核实**不是引擎 bug**：组合引擎的 entry/exit/exit_reason（白线跌破 87 / 止损 16 / 白线死叉黄线 11）与逐股对照一致。差异来自**等权平均把选股风险平均掉了**——50 条互不相关的单股曲线取均值天然分散，而真实组合只持 5 个仓位（30% 现金仓位、逐笔计费），承担策略的选股与持仓风险。旧的 4/4 是统计假象。
+
+### 阈值决策
+
+**`modules/verify/gates.py` 的五项阈值保持不变**（sharpe ≥ 0.5 / calmar ≥ 0.5 / win_rate ≥ 40% / max_drawdown ≤ 25%）。它们是**策略质量标准**，不是当前水平快照；按一个失败的结果去校准门槛等于自我认证——那样任何策略都能"通过"。验收如实报告 0/4。
+
+### 参数决策
+
+- **0AMV 闸门在验收中关闭**（`PortfolioConfig` 不传 `gate=`，与现状一致）。
+- **交易费率进入验收数字**（佣金 0.025%、最低 5 元、印花税 0.05%）。
+
+### 验证
+
+- pytest **1570 passed** / ruff / mypy 83 文件 / SKILL 质量门 12/12。
+- Rust：`cargo check -p zt_bindings` 与 `cargo check --workspace --exclude zt_bindings` 均通过，clippy 无 error（剩余 8 个警告是既有的 pyo3 弃用警告）。
+  - 注：本机系统 Python 3.14 超出 PyO3 0.23 支持上限，构建需 `PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1`（abi3 稳定 ABI 本就与解释器版本解耦）。
+
+## v4.9.0 (2026-10-31) — 回测结果形状与指标聚合归一（BacktestRunner 阶段 3）
+
+[ADR-0002](adr/0002-backtest-runner-unification.md) 阶段 3。**验收数字与基线逐位相同**。
+
+### 新增
+
+- **`modules/core/metrics.py` 的共享原语** —— 指标算法收敛到一处：
+  - `TradeStats` + `calc_trade_stats(pnls, holding_days)`：**交易统计的唯一实现**。口径统一为 `p > 0` 盈 / `p < 0` 亏 / `p == 0` 不盈不亏（计入总交易数，但既不算盈也不算亏）。此前有三套不同口径——其中 `core/metrics.py` 把零盈亏算成亏损，`backtest/six_step.py` 不算，`backtest/portfolio.py` 用 `total - win` 间接算成亏损。**零盈亏不是亏损**，现已统一。
+  - `CurveStats` + `calc_curve_metrics(values, trading_days)`：**曲线指标的唯一实现**。年化分母由调用方显式传入——单股按 K 线天数、组合按净值序列长度，两者不同，年化结果因此不同，不能由函数替调用方决定。
+- **三个结果类型的 canonical 字典**（模块级函数，鸭子类型可用）：`shaofu_result_to_dict` / `multi_strategy_result_to_dict` / `portfolio_result_to_dict`。CLI 与 API 都从它们派生，只差嵌套方式（CLI 扁平、API 用 `summary` 嵌套）。
+
+### 修复
+
+- **`core/metrics.py::calculate_metrics` 的 SELL 过滤只认 `action == "SELL"`**，而回测的 `LoopTrade` 没有 `action` 字段，喂进去会得到 `total_trades == 0`。现在按"已平仓"判定：有 `action` 字段的按 action 判，没有的按 `exit_date` 非空判。
+- **API 把回测结果字段硬编码成 0。** `_portfolio_to_response` 的 `avg_holding_days` / `win_count` / `max_win` / `max_loss` 全是 0，`avg_pnl` 因结果类没有该字段也退化成 0；而 CLI 侧根本不输出这些字段。**同一份回测结果，两个出口给出的是两套数。** 现统一从 canonical 字典派生。
+- **`PortfolioBacktestResponse` 会静默丢弃 `ts_code`**——模型没声明该字段，Pydantic 把它过滤掉了。
+- **`PortfolioBacktestResponse.per_stock` 声明了却从不填充**，恒为 `[]`。现在按标的分组真正填上逐股摘要（含逐股资金曲线）。
+
+### 补齐的字段
+
+- `PortfolioBacktestResult` 补 `avg_pnl` / `avg_win` / `avg_loss` / `max_win` / `max_loss` / `avg_holding_days` / `initial_capital` / `final_value`——CLI 与 API 一直在消费其中几个，但结果类型上并不存在。
+- `MultiStrategyBacktestResult` 补 `win_count` / `loss_count` / `avg_pnl` / `avg_win` / `avg_loss` / `max_win` / `max_loss` / `avg_holding_days`，同上。
+
+### 测试
+
+- `tests/test_output_units.py` 新增 `TestCliApiParity`（2 项）：断言 CLI 与 API 对同一份结果的**字段集与取值完全一致**，且都来自同一个 canonical 函数——防止两个出口再次各写一份。
+- 测试里的假结果补齐 `loss_count` / `avg_win` / `avg_loss`（canonical 新增的字段）。
+
+### 验证
+
+- **验收数字与基线逐位相同**：`total_trades` 193 / `sharpe` 1.2502485663220784 / `calmar` 4.183420808217639 / `win_rate` 0.45595854922279794 / `max_drawdown` 0.004161901067962086，四项 gate 全通过。
+- CLI 与 API 对同一份结果：字段集仅差 API 独有的 `annualized_return`（少妇战法的资金曲线是**交易序**而非日序，无法按日频年化，该指标不可得），**共有字段取值全部一致**。
+- pytest **1570 passed** / ruff / mypy 82 文件 / SKILL 质量门 12/12。
+
+## v4.8.0 (2026-10-31) — 解除回测依赖倒挂（BacktestRunner 阶段 2）
+
+[ADR-0002](adr/0002-backtest-runner-unification.md) 阶段 2。**纯搬迁，验收数字逐位不变。**
+
+### 修复
+
+- **依赖方向倒挂解除。** 此前 `modules/backtest/`（"新"包）反过来 import 已弃用的 `modules/backtest_six_step.py`：`b1_b2_backtest.py:22` 与 `_rust_bridge.py:276`。现在新包不再依赖旧包，**倒挂断言成立**：
+  ```
+  grep -rE "^\s*(from|import)\s+.*backtest_six_step" modules/backtest/*.py   # 无命中
+  ```
+  起因是 `6198aa1` 自己写的弃用说明承诺「将在 v4.5 后逐步替换为 `modules/backtest/single.py` 与 `portfolio.py`」——但 `modules/backtest/` 从来没有 shaofu 等价物，替代从未发生。
+
+### 重构
+
+- **新增 `modules/backtest/shaofu.py`** —— 少妇战法回测的**唯一实现**，原样迁入 `ShaofuBacktestResult` / `_calc_metrics` / `backtest_shaofu_single` / `summary_text`（176 行，函数体一字未改）。`modules/backtest/__init__.py` 导出前三个。
+- **`modules/backtest_six_step.py` 降级为兼容 re-export** —— 旧导入路径 `from modules.backtest_six_step import X` 继续可用（包已发布到 PyPI）。`backtest_shaofu_portfolio` 暂留（ADR-0002 决策 1：阶段 4 由真组合取代），并加 `.. deprecated::` 说明它与真组合的数字不可比。
+- **9 处生产导入点改指新位置**：`verify/pipeline.py`、`verify/walk_forward.py`、`statistics/sensitivity.py`、`statistics/ensemble.py`、`api/services/backtest_service.py`、`scripts/eval_strategies.py`、`backtest/_rust_bridge.py`、`backtest/b1_b2_backtest.py`。
+
+### 修复（测试隔离）
+
+- **`tests/test_cli_uses_rust.py` 的 autouse fixture 会污染后续测试。** 它在 setup 时快照 `sys.modules` 的若干键，teardown 时"若 setup 时不存在就 pop"。`modules.backtest.shaofu` 在 setup 时尚未被 import（快照记成"不存在"），测试体首次 import 才把它放进 `sys.modules`——teardown 的 pop 把它删掉，于是**包属性与 `sys.modules` 指向不同对象**：后续测试从包属性拿到真模块并 patch 它，而 `from modules.backtest.shaofu import ...` 重新 import 出一个**未被 patch 的新模块**，mock 全部失效（5 个 Rust 桥测试失败）。
+  - 修复：fixture 在快照前先真正 import 被跟踪的 module，确保快照拿到的是真模块。
+  - 这是一个**此前就潜伏**的坑——同样的 pop 逻辑对 `modules.backtest_six_step` 同样成立，只是那个模块恰好在 setup 时已被导入，才没暴露。
+
+### 文档
+
+- `AGENTS.md`：「单一事实来源」补"少妇战法回测实现 → `modules/backtest/shaofu.py`"，并注明 `backtest_six_step.py` 只是兼容 re-export、新代码不要从那里导入；Key Directories 里 `modules/backtest/` 的文件列表补 `shaofu.py` 并修正写错的 `b1_b2.py` → `b1_b2_backtest.py`。
+- `docs/STATISTICS_VALIDATION.md`：示例改用 `from modules.backtest import backtest_shaofu_single`。
+- `docs/WEB_ROADMAP.md`：算法层清单里移除已删的 `position_manager`，`backtest_six_step` 改为 `backtest/`。
+
+### 验证
+
+- **验收数字与基线逐位相同**：`total_trades` 193 / `sharpe` 1.2502485663220784 / `calmar` 4.183420808217639 / `win_rate` 0.45595854922279794 / `max_drawdown` 0.004161901067962086，四项 gate 全通过。
+- 旧导入路径仍可用且与新路径指向**同一批对象**（两种导入顺序都验过）。
+- pytest **1568 passed** / ruff / mypy 82 文件 / SKILL 质量门 12/12。
+
+## v4.7.0 (2026-10-30) — 回测死代码清理（BacktestRunner 阶段 0–1）
+
+[ADR-0002](adr/0002-backtest-runner-unification.md) 的阶段 0–1。**验收数字逐位不变**——删除的全部是零生产调用方、零测试覆盖的代码。
+
+### 清理（−1,815 行）
+
+| 删除对象 | 行数 | 理由 |
+|---|---|---|
+| `modules/position_manager.py` | 445 | 整个模块；唯一消费者是待删的 `backtest_shaofu_portfolio_integrated` |
+| `modules/industry_filter.py` | 394 | 整个模块；只被 `position_manager` 使用 |
+| `modules/statistics/criteria.py` | 309 | 整个模块；唯一消费者是待删的 `backtest_shaofu_with_validation` |
+| `backtest_six_step.py::backtest_shaofu_portfolio_integrated` | 381 | 零调用方 |
+| `dynamic_config.py::DynamicConfigAdapter` | 164 | 零调用方（同文件的 `MarketTimingWeights` 仍被 `market_timing.py` 使用，保留） |
+| `backtest_six_step.py::backtest_shaofu_with_validation` | 90 | 零调用方 |
+| `backtest_six_step.py::summary_with_validation` | 18 | 零调用方 |
+
+连带清理：`backtest_six_step.py` 的 `ShaofuBacktestResult.validation_report` 字段（唯一写入者与唯一读取者都是待删的函数）随之失效，一并移除；该文件的 `TYPE_CHECKING` 块与 6 组失效 import 同步删除。`modules/backtest_six_step.py` 从 848 行降到 343 行，`modules/dynamic_config.py` 从 298 行降到 134 行。
+
+### 基线快照（新增）
+
+- **`docs/BACKTEST_RUNNER_BASELINE.json`** — 阶段 0 的对照基准：`zt verify v1.0 --limit 50 --days 300` 的单次与 walk-forward 两份完整输出、五项硬指标的原始值、`modules/verify/gates.py` 的阈值，以及数据来源说明。阶段 1–3 靠它判断"数字有没有动"。
+
+### 文档
+
+- `README.md` 的统计检验章节：删除对 `backtest_shaofu_with_validation` 的使用示例，改为直接调用仍在的 `modules/statistics` 底层能力，并加注"统计检验与 v1.0 验收是两条独立路径"。
+- `docs/STATISTICS_VALIDATION.md`：顶部加状态说明；"完整验证流程"从"一键验证"改为**手动组合**写法；"验证级别"三节的门槛清单保留，但注明 `CriteriaLevel` / `validate_strategy` 已删除、无内置级别开关。
+
+### 验证
+
+- **验收数字逐位相同**：以基线快照对账，`total_trades` / `win_rate` / `total_return_pct` / `annualized_return` / `sharpe` / `calmar` / `sortino` / `max_drawdown` 与四项 gate 全部 `==`。
+- pytest **1568 passed**（不变——被删的代码本来就没有测试）/ ruff / mypy 81 文件 / SKILL 质量门 12/12。
+
+## v4.6.0 (2026-10-30) — BacktestRunner 设计 ADR 与分阶段实施计划
+
+### 新增
+
+- **`docs/adr/0002-backtest-runner-unification.md`** — 回测引擎归一的架构决策。本轮架构评审发现的核心问题不是"四套引擎各自实现"，而是**依赖方向倒挂**：`modules/backtest_six_step.py` 自称 DEPRECATED 却被 8 处生产代码调用，而它宣称的替代者 `modules/backtest/` 根本没有 shaofu 等价物——"新"包反过来 import "已弃用"的包（`backtest/b1_b2_backtest.py:22`、`backtest/_rust_bridge.py:276`）。ADR 记录了六项决策：
+  1. 唯一实现引擎收敛到 `PortfolioBacktestEngine`（唯一带费率、闸门、仓位规则与 `calmar` 的引擎，而 `verify/gates.py` 的五项硬指标要求 calmar）
+  2. `ShaofuLoopEngine` + `LoopConfig` + `LoopTrade` 继续作为共享的策略/离场内核
+  3. B1 检测统一到 `strategies.detect_b1`（此前 shaofu 路径用 `indicators.detect_b1_today`、组合路径用 `strategies.detect_b1`，两者互不调用）
+  4. 删除约 1,800 行零调用方死代码
+  5. 解除倒挂依赖：`ShaofuBacktestResult` / `_calc_metrics` / `backtest_shaofu_single` / `summary_text` 迁入 `modules/backtest/shaofu.py`，`backtest_six_step.py` 降级为兼容 re-export
+  6. 结果形状与指标聚合归一（`core/metrics.calculate_metrics` 的 SELL 过滤对 `LoopTrade` 会得到 `total_trades == 0`，需先修）
+- **`docs/BACKTEST_RUNNER_PLAN.md`** — 配套的分阶段实施计划：阶段 0 基线快照 → 1 删死代码 → 2 解除倒挂 → 3 结果形状与指标归一 → 4 换引擎 + 换 B1 检测器 → 5 Rust 对齐。每阶段列明改动清单、验证判据与回滚点。
+
+### 文档
+
+- `CONTEXT.md` 补三个领域术语：**组合回测**（共享资金池）、**等权组合回测**（各标的独立回测后加权平均）、**资金曲线**。此前仓库里两种都被叫作"组合回测"，而它们的收益数字不可比——`zt backtest portfolio` 用的是等权组合（无共享资金、无费率），`zt verify v1.0` 验收用的是真组合。
+- `docs/INDEX.md` 补 ADR 与实施计划入口。
+
+## v4.5.0 (2026-10-30) — 数据源决议统一（读路径与写路径对齐）
+
+### 修复（真实 bug）
+
+- **零配置用户的 `zt sync` 一直静默同步 0 行，却照样打印"同步完成"。** `zt sync` 曾直接钉死 `get_datasource("tushare")`，绕过了任何数据源决议；而默认的 `websearch` 模式下 `TushareClient._pro is None`（无数据后端），取数恒返回 `None`，命令却报告成功。
+  - 修复前实测：exit 0、打印"同步完成"、`stock_basic` 与 `daily_kline` 均 0 行。
+  - 修复后实测（同样零配置）：实际入库 **5579 只股票 / 333,007 行 K 线**。
+- **读路径与写路径选到不同的数据源。** `CompositeDataSource._preferred_token_source()`（读）与 `DataSyncer.__init__`（写）各抄了一份"环境变量 → provider"的判断，且已经漂移——**写路径没有 hithink 分支**：配了 `HITHINK_FINANCE_API_KEY` 的用户，`zt analyze` 走同花顺官方数据，`zt sync` 却走免费源，两边数据对不上。
+
+### 新增
+
+- **`modules/datasource_resolution.py`** — 「当前配置下该用哪个 provider」的唯一来源。纯函数，不读数据库、不构造数据源、不发请求，只把环境变量翻译成一个 provider 名。
+  - `ProviderResolution(provider, reason)` — provider 为 `None` 表示无配置，调用方回退免费源；`reason` 说明决议依据，写进日志与测试断言。
+  - `resolve_provider()` — 优先级：hithink → indevs → tushare（仅 JNB 模式）→ 无（免费源兜底）。
+
+### 重构
+
+- `CompositeDataSource._preferred_token_source()` 与 `DataSyncer.__init__()` 改为消费 `resolve_provider()`。读路径仍按方法链式回退；写路径取**同一个首选源**（单源，保留重试与退避语义——链式回退会吞掉异常，使 syncer 的重试失效）。
+- `modules/cli_commands/data.py`：`zt sync` 与 `zt status` 不再钉死数据源；`zt sync stk-factor` **保留** tushare 钉死（技术因子只有 tushare/indevs 提供，该命令本身就是"同步 Tushare 官方指标"）。
+- `zt sync` 的完成提示改为报告实际条数（`同步完成：股票 N 只，K 线 M 行`），不再只打印"同步完成"。
+
+### 测试
+
+- 新增 `tests/test_datasource_resolution.py`（31 项）：`(env → provider)` 矩阵只写一次；读路径与写路径各自的测试不再重复抄矩阵，只断言"我选出来的 == 决议结果"。已验证对旧行为有 3 项失败（hithink 漂移 + CLI 钉死）。
+
+## v4.4.1 (2026-10-30) — 输出正确性修复
+
+### 修复（真实 bug）
+
+- **同一笔 +10% 的交易，在 API 里被报成 1000%。** 本仓库有三种交易载体，`pnl_pct` 的单位并不相同：`loop_engine.LoopTrade` 是**百分数**（10.0 = +10%），`backtest.single.Trade` 与 `simulator.TradeRecord` 是**分数**（0.1 = +10%）。四个序列化器各按不同假设换算：
+  - `api/services/backtest_service.py::_shaofu_to_response`（LoopTrade）却又乘了 100 → `pnl_pct` / `avg_pnl` / `max_win` / `max_loss` 全部大 100 倍。
+  - `api/services/backtest_service.py::_build_equity_curve_from_trades` 复利用 `capital *= (1 + pnl)` 而 `pnl` 是百分数 → **资金曲线大 10 倍**（100000 经一笔 +10% 变成 1100000 而不是 110000）。
+  - `modules/cli_commands/backtest.py::_portfolio_result_to_dict`（single.Trade）却没乘 100 → `pnl_pct` 小 100 倍。**CLI 与 API 对同一份组合结果给出的是两个不同的数**。
+  - `modules/backtest_six_step.py::summary_text` 与 `modules/backtest/single.py::summary` 把已经是百分数的值再用 `:.2%`（会再乘 100）→ 报告里显示 `+1000.00%`。
+  - 修复后各序列化器与报告口径一致：+10% 一律报 `10.0` / `+10.00%`。`api/services/simulator_service.py` 的 `×100` 本就正确（TradeRecord 是分数），保留不动并补注释，避免将来被"顺手修错"。
+- **`zt verify v1.0 --output` 被静默丢弃。** 顶层 CLI 曾把解析好的参数重新拼成 argv 交给第二个 argparse，`--output` 因此丢失——报告仍写到 `data/reports` 而不是用户指定的目录。现两边都直接调 `modules/verify/cli.py` 新增的 `run_verify_v10_command`，参数校验、报告输出目录、退出码只定义一处。
+- **命令失败时进程仍退 0。** `modules/cli.py` 的分发处丢弃了 handler 的返回值，于是 `cmd_verify_v10` 的"参数错误 → 2"与 `cmd_self_optimize` 的"未知 action → 1"全部丢失——CI 里最典型的一类假绿。现接住返回值，非 0 才 `sys.exit`；成功路径不抛 `SystemExit`，`main()` 仍可被程序内调用。
+
+### 重构
+
+- `modules/verify/cli.py`：新增 `run_verify_v10_command` 作为 `zt verify` 的唯一执行入口（参数校验 → 执行 → 输出 → 退出码）。参数默认值收敛到 `DEFAULT_*` 常量，取值范围收敛到 `*_RANGE` 常量（此前 `_bounded_int` 与 `_validate_args` 各写一遍同样的 `[10, 500]`）。
+- `modules/cli_commands/backtest.py`：`cmd_verify_v10` 不再构造 argv；`add_verify_v10_parser` 的默认值改为引用 `DEFAULT_*`。
+
+### 测试
+
+- 新增 `tests/test_output_units.py`（12 项）：把三个交易载体的 `pnl_pct` 单位约定钉死，其中一条断言"CLI 与 API 对同一份组合结果必须给出相同的 `pnl_pct`"。已验证这批测试在修复前有 8 项失败。
+- `tests/test_verify_cli.py` 新增 4 项：`--output` 指定的目录里确实出现报告、参数非法返回 2、argparse 适配层同样返回 2、合法参数返回 0。
+- `tests/test_errors.py` 新增 2 项：handler 返回 2 → `SystemExit(2)`；handler 返回 `None` → 不抛 `SystemExit`。已验证退出码测试在修复前失败。
+
+## v4.4.0 (2026-10-30) — 活跃市值闸门判定归一（ADR-0001）
+
+活跃市值闸门（0AMV gate）的判定结果此前有三种表示（裸字符串 / 普通 `Enum` / 语义不同的 `signal`），阈值散落三处，调用方还要知道开关与两个数据源路径——判定语义跨 seam 泄漏。2026-08-23 的统一重构 `3e882b9` 正是因此把 B1/B2 的开仓判断改坏（详见 v4.3.2）。本次把闸门彻底收口。
+
+### 新增
+
+- **`modules/active_market_gate.py`** — 闸门判定的唯一实现。对外只暴露一个 interface：`evaluate(date, config) -> GateAction`。判定、阈值、失败降级策略全在 implementation 内部，调用方不必知道。
+  - `GateAction`（`enum.StrEnum`）— 闸门动作的唯一表示
+  - `GateThresholds` / `GATE_THRESHOLDS` — 闸门阈值（**两日累计**口径）
+  - `GateConfig(enabled, duckdb_path, path)` — 闸门配置
+  - `TradingGate` — 闸门 port 对象，供回测 engine 注入
+- **`CONTEXT.md`** — 领域词汇表（纯术语，不含实现细节）：活跃市值 / 闸门 / 闸门动作 / 活跃市值信号 / 闸门配置 / B1-B2 策略。
+- **`docs/adr/0001-gate-action-representation-and-failure-policy.md`** — 记录表示层、失败策略、注入方式、模块边界与阈值分组的决策与被否决的选项。
+
+### 重构
+
+- **闸门动作表示层唯一化**：`GateAction` 由普通 `Enum` 改为 `enum.StrEnum`。枚举本身就是字符串，旧调用方的字符串比较、`isinstance` 断言、集合成员判断全部继续成立，而"枚举 vs 字符串"从此不再是错误类别——这正是 `3e882b9` 漏迁一半调用点所暴露的隐患类别。`get_active_market_gate` 也直接返回枚举，删掉字符串→枚举映射表。
+- **阈值收敛为两组**：`SignalThresholds`（**当日**涨跌幅判多空）与 `GateThresholds`（**两日累计**涨幅判闸门）。两者口径与用途都不同，数值相同纯属巧合，此前 `4.0 / -2.3` 各写三遍。
+- **注入而非现场创建**：回测 engine 不再在循环里现场 import 闸门实现，改为构造时注入闸门 port。
+  - `modules/backtest/b1_b2_backtest.py`：`_run_stock_klines` / `run_b1_b2_single` / `run_b1_b2_pool` / `run_b1_b2_walkforward` 的 `active_mv_enabled` + `active_mv_duckdb_path` + `active_mv_path` 三个参数（共 12 个参数位）收敛为一个 `gate`
+  - `modules/backtest/portfolio.py`：`PortfolioConfig` 的三个 `active_mv_*` 字段收敛为一个 `gate` 字段
+  - `modules/cli_commands/backtest.py`：闸门在一处构造、三处注入；CLI flag 名不变（`--active-mv-gate` / `--active-mv-duckdb` / `--active-mv-path`）
+- **`modules/active_market_value.py`** 退为数据层（点位模型 + 加载器 + 信号 + 格式化），并用 PEP 562 的模块级 `__getattr__` 惰性转出闸门 API——`from modules.active_market_value import get_active_market_gate` 仍然可用（包已发布到 PyPI）。用惰性转出是因为闸门 module 依赖本 module 的加载器，普通 import 会形成循环导入。
+
+### 失败策略
+
+闸门一律 **fail-closed**：闸门关闭 → `OPEN`（不拦）；**无数据** → `WAIT`（拦）；**加载异常** → `WAIT`（拦）。闸门存在却读不到数据时放行开仓等于伪造信号；fail-open 会把数据同步故障静默变成"全部放行"。
+
+### 测试
+
+- 新增 `tests/test_active_market_gate.py`（10 项）：只通过 `evaluate` 与公开 API 观察行为，不断言实现细节。
+- 新增 `tests/test_verify_portfolio_engine.py::TestPortfolioInjectedGate`（5 项）：engine 每个交易日都问闸门 / OPEN 允许开仓 / WAIT 与 CLEAR 禁止开仓 / 不注入闸门即不限制。
+- b1_b2 的闸门测试改用注入的假闸门 adapter，不再 patch module 属性。
+- **删除两条源码文本断言**（`assert "get_active_market_gate(" not in src` 一类）——它们在 bug 存在时同样是绿的，已被证明测的是源码形状而非行为；现在有 17 项真实行为测试覆盖闸门。
+
+### 修复
+
+- 直接以脚本方式运行 `modules/active_market_value.py` 时，`sys.path[0]` 是 `modules/` 目录，会遮蔽标准库 `statistics`（`modules/statistics/`）。现在把 `sys.path[0]` 换成仓库根目录，`python modules/active_market_value.py` 与 `python -m modules.active_market_value` 两种方式都能跑。
+
+### 文档
+
+- `docs/INDEX.md` 补 `CONTEXT.md` 与 `docs/adr/` 入口。
+- `AGENTS.md` 补 `modules/active_market_gate.py` 到 Important Files，并把闸门判定列入「单一事实来源」。
+
+## v4.3.2 (2026-10-29) — B1/B2 回测恒 0 成交修复
+
+### 修复（真实 bug）
+
+- **B1/B2 回测自 v4.3.0 起恒定返回 0 笔成交。** `modules/backtest/b1_b2_backtest.py:136` 把活跃市值闸门的判定结果与裸字符串比较（`!= "OPEN"`），但 2026-08-23 的统一重构 `3e882b9`（目的正是"消除 0AMV gate 策略重复"）已把 `_gate` 的返回类型从 `str` 改成普通 `Enum` `GateAction`——枚举与字符串比较恒为 True，开仓判断因此永远为真跳过。同一重构迁移了 `== "CLEAR"` 却漏掉了 `!= "OPEN"`。现改为枚举比较（`is not GateAction.OPEN`），与 `modules/backtest/portfolio.py` 的判法一致。
+  - 影响面：仅 `zt backtest b1_b2` 及其导出的 `run_b1_b2_single` / `run_b1_b2_pool` / `run_b1_b2_walkforward`。`zt verify` 走 `backtest_shaofu_single`，不经过 B1/B2，验收数字不受影响。
+  - 闸门默认在所有入口都是关闭的，因此修复后 B1/B2 的行为等价于 v4.2 语义。
+- 新增 5 个闸门行为回归测试（`tests/test_b1_b2.py`）：闸门 OPEN 允许开仓 / WAIT 与 CLEAR 禁止开仓 / CLEAR 强制平仓 / 闸门关闭不阻断开仓。此前该处只有断言源码文本形状的测试——它们在 bug 存在时同样是绿的。
+
+### 文档
+
+- `AGENTS.md` 追加 `## Agent skills` 段；新增 `docs/agents/`（issue tracker / triage 标签 / 领域文档约定）。
+- 新增 `CONTEXT.md` 领域词汇表与 `docs/adr/0001-gate-action-representation-and-failure-policy.md`。
+
 ## v4.3.1 (2026-09-30) — 仓库瘦身 + 文档准确性 + CI 全绿
 
 ### 修复（真实 bug）

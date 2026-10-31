@@ -1,5 +1,6 @@
 """选股筛选路由"""
 
+from api.utils.errors import raise_api_error
 from fastapi import APIRouter, HTTPException
 
 from api.models.screen import ScreenRequest, ScreenResponse, StrategyInfo
@@ -24,4 +25,4 @@ def run_screen(req: ScreenRequest):
             use_parallel=req.use_parallel,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"筛选失败: {e}")
+        raise_api_error(e, prefix="筛选失败")

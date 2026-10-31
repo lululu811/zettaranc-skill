@@ -28,7 +28,8 @@ from .indicators import DailyData, calculate_ma
 from .market_regime import MarketRegimeClassifier
 from .database import get_connection
 from .dynamic_config import MarketTimingWeights
-from .active_market_value import get_active_market_gate, get_active_market_value
+from .active_market_gate import GateAction, get_active_market_gate
+from .active_market_value import get_active_market_value
 
 # 常见指数代码，计算市场广度时排除（与 modules.index_sync.DEFAULT_INDEX_CODES 保持一致）
 # 任何新增/删除默认指数时，这里必须同步更新；否则会把指数行当作"个股"纳入涨跌/成交统计。
@@ -94,7 +95,7 @@ class MarketTimingIndicators:
     active_mv_cum2_pct: float = 0.0
     active_mv_signal: str = "NEUTRAL"  # UP / DOWN / NEUTRAL
     active_mv_score: float = 50.0
-    active_mv_gate: str = "WAIT"  # OPEN / WAIT / CLEAR
+    active_mv_gate: GateAction = GateAction.WAIT  # OPEN / WAIT / CLEAR
 
     # 综合择时
     composite_score: float = 50.0
@@ -121,7 +122,7 @@ def _normalize_date(trade_date: str) -> str:
 
 
 def _to_daily_data_list(rows: list[tuple]) -> list[DailyData]:
-    """把 DuckDB/SQLite 行统一转成 DailyData（升序）。"""
+    """把 DuckDB 行统一转成 DailyData（升序）。"""
     result: list[DailyData] = []
     for i, row in enumerate(rows):
         # row: ts_code, trade_date(str), open, high, low, close, vol, amount
@@ -139,6 +140,33 @@ def _to_daily_data_list(rows: list[tuple]) -> list[DailyData]:
                 close=close,
                 vol=float(row[6]),
                 amount=float(row[7]),
+                pct_chg=(close / prev_close - 1.0) * 100.0 if prev_close else 0.0,
+                prev_close=prev_close,
+            )
+        )
+    return result
+
+
+def _daily_data_list_from_dicts(rows: list[dict]) -> list[DailyData]:
+    """把 SQLite K 线 dict 转成 DailyData（升序）。
+
+    ``pct_chg`` 由相邻收盘价**本地计算**，不用库里的 ``pct_chg`` 列——指数行的
+    库值可能缺失，而趋势判定需要一致的涨跌幅口径。
+    """
+    result: list[DailyData] = []
+    for i, row in enumerate(rows):
+        close = float(row["close"])
+        prev_close = float(rows[i - 1]["close"]) if i > 0 else close
+        result.append(
+            DailyData(
+                ts_code=str(row["ts_code"]),
+                trade_date=str(row["trade_date"]),
+                open=float(row["open"]),
+                high=float(row["high"]),
+                low=float(row["low"]),
+                close=close,
+                vol=float(row["vol"]),
+                amount=float(row["amount"]),
                 pct_chg=(close / prev_close - 1.0) * 100.0 if prev_close else 0.0,
                 prev_close=prev_close,
             )
@@ -164,22 +192,17 @@ def _load_index_klines_duckdb(con: Any, index_code: str, days: int) -> list[Dail
 
 def _load_index_klines_sqlite(index_code: str, days: int) -> list[DailyData]:
     """从项目 SQLite 加载指数 K 线。"""
+    from .core.kline import read_kline_rows
+
+    # K 线读取 SQL 的唯一来源：modules.core.kline（指数不需要 pct_chg 列）
     with get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT ts_code, trade_date, open, high, low, close, vol, amount
-            FROM (
-                SELECT ts_code, trade_date, open, high, low, close, vol, amount
-                FROM daily_kline
-                WHERE ts_code = ?
-                ORDER BY trade_date DESC
-                LIMIT ?
-            )
-            ORDER BY trade_date ASC
-            """,
-            (index_code, days),
-        ).fetchall()
-    return _to_daily_data_list(rows)
+        rows = read_kline_rows(
+            index_code,
+            conn=conn,
+            limit=days,
+            columns=("ts_code", "trade_date", "open", "high", "low", "close", "vol", "amount"),
+        )
+    return _daily_data_list_from_dicts(rows)
 
 
 def _load_market_snapshot_duckdb(con: Any, trade_date: str, weights: Any = None) -> dict[str, float]:

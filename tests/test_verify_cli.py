@@ -75,8 +75,11 @@ def test_run_verify_v10_resolves_ts_codes_arg(temp_db, tmp_path):
         conn.commit()
 
     # 把 backtest_shaofu_single 打桩成返回空结果 —— 这样不用真实行情数据
+    # v4.9.0 起验收走**真组合**分支（PortfolioBacktestEngine），
+    # 与自优化器 V10VerifyScorer 的默认一致——原先 CLI 走的是逐股独立回测
+    # + 等权合并曲线，优化目标与验收口径脱节。
     with (
-        patch("modules.verify.pipeline.backtest_shaofu_single") as mock_backtest,
+        patch("modules.verify.portfolio_engine.PortfolioBacktestEngine") as mock_engine_cls,
         patch("modules.verify.pipeline.get_datasource") as mock_ds,
         patch("modules.verify.pipeline.LoopConfig") as mock_loop_cfg,
     ):
@@ -102,21 +105,29 @@ def test_run_verify_v10_resolves_ts_codes_arg(temp_db, tmp_path):
 
         mock_loop_cfg.from_registry.return_value = RealLoopConfig()
 
-        # ShaofuBacktestResult-like 简易对象
+        # PortfolioBacktestResult-like 简易对象
         from types import SimpleNamespace
 
-        mock_backtest.return_value = SimpleNamespace(
-            ts_code="600519.SH",
+        mock_engine_cls.return_value.run.return_value = SimpleNamespace(
             total_trades=0,
             win_count=0,
+            loss_count=0,
             win_rate=0.0,
+            avg_pnl=0.0,
+            avg_win=0.0,
+            avg_loss=0.0,
+            max_win=0.0,
+            max_loss=0.0,
+            profit_factor=0.0,
+            avg_holding_days=0.0,
             total_return=0.0,
+            annualized_return=0.0,
             sharpe_ratio=0.0,
             max_drawdown=0.0,
-            avg_holding_days=0.0,
+            calmar=0.0,
             trades=[],
-            equity_curve=[],
-            name="",
+            net_values=[],
+            dates=[],
         )
 
         out_dir = tmp_path / "reports"
@@ -131,11 +142,89 @@ def test_run_verify_v10_resolves_ts_codes_arg(temp_db, tmp_path):
         assert isinstance(result, VerifyResult)
         assert result.meta.get("ts_codes_count") == 1
         # 没有回落到 get_all_stock_codes
-        assert mock_backtest.call_count == 1
-        mock_backtest.assert_called_once()
-        called_args, called_kwargs = mock_backtest.call_args
-        assert called_args[0] == "600519.SH"
+        mock_engine = mock_engine_cls.return_value
+        assert mock_engine.run.call_count == 1
+        mock_engine.run.assert_called_once()
+        called_args, called_kwargs = mock_engine.run.call_args
+        assert called_args[0] == ["600519.SH"]
 
         # 验证 get_all_stock_codes 真的可用（Bug 1 已修）
         codes = get_all_stock_codes()
         assert "999999.SH" in codes  # 我们注入的那只
+
+
+class TestVerifyOutputAndExitCode:
+    """zt verify 的 --output 转发与退出码。
+
+    背景：顶层 CLI 曾把解析好的参数重新拼成 argv 交给第二个 argparse，
+    --output 因此被静默丢弃（报告落到 data/reports 而不是用户指定的目录），
+    且 handler 的退出码在 cli.py 的分发处被丢掉——参数错误时进程仍退 0。
+    """
+
+    @staticmethod
+    def _args(**overrides):
+        from argparse import Namespace
+
+        base = {
+            "limit": 50,
+            "days": 250,
+            "walk_forward": False,
+            "wf_train": 120,
+            "wf_test": 60,
+            "ts_codes": "600519.SH",
+            "output": None,
+            "json": False,
+            "no_markdown": False,
+        }
+        base.update(overrides)
+        return Namespace(**base)
+
+    def test_cmd_verify_v10_forwards_output_dir(self, tmp_path, monkeypatch):
+        """--output 必须真的生效：报告写进用户指定的目录。"""
+        from modules.cli_commands.backtest import cmd_verify_v10
+        from modules.verify.pipeline import VerifyResult
+
+        out_dir = tmp_path / "custom_reports"
+        monkeypatch.setattr(
+            "modules.verify.cli.verify_v10_pipeline",
+            lambda **kwargs: VerifyResult(),
+        )
+
+        rc = cmd_verify_v10(self._args(output=str(out_dir)))
+
+        assert rc == 0
+        assert out_dir.is_dir(), "--output 指定的目录应被创建"
+        assert list(out_dir.glob("verify_v10_*.json")), "报告应写在 --output 指定的目录"
+        assert list(out_dir.glob("verify_v10_*.md")), "Markdown 报告同样应在那里"
+
+    def test_cmd_verify_v10_returns_2_on_invalid_param(self, capsys):
+        """参数非法 → 退出码 2（不是 0）。"""
+        from modules.cli_commands.backtest import cmd_verify_v10
+
+        rc = cmd_verify_v10(self._args(days=50))  # days 必须在 [120, 1000]
+
+        assert rc == 2
+        assert "参数错误" in capsys.readouterr().out
+
+    def test_verify_cli_main_returns_2_on_invalid_param(self, capsys):
+        """argparse 适配层同样返回 2。"""
+        from modules.verify.cli import main as verify_main
+
+        rc = verify_main(["--days", "50"])
+
+        assert rc == 2
+        assert "参数错误" in capsys.readouterr().out
+
+    def test_run_verify_v10_command_returns_0_on_valid_params(self, monkeypatch, capsys):
+        """参数合法 → 退出码 0。"""
+        from modules.verify.cli import run_verify_v10_command
+        from modules.verify.pipeline import VerifyResult
+
+        monkeypatch.setattr(
+            "modules.verify.cli.verify_v10_pipeline",
+            lambda **kwargs: VerifyResult(),
+        )
+
+        rc = run_verify_v10_command(ts_codes_arg="600519.SH", days=250)
+
+        assert rc == 0

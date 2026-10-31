@@ -389,36 +389,21 @@ def _get_local_daily(
     end_date: str | None = None,
 ) -> list[dict]:
     """从本地 SQLite 获取日线数据"""
+    from .core.kline import read_kline_rows, resolve_kline_limit
     from .database import get_db_connection
 
     conn = get_db_connection()
-    cursor = conn.cursor()
-
-    params: list = [ts_code]
-    sql = """
-        SELECT ts_code, trade_date, open, high, low, close, vol, amount, pct_chg
-        FROM daily_kline
-        WHERE ts_code = ?
-    """
-
-    if start_date:
-        sql += " AND trade_date >= ?"
-        params.append(start_date)
-    if end_date:
-        sql += " AND trade_date <= ?"
-        params.append(end_date)
-
-    sql += " ORDER BY trade_date DESC"
-    if not start_date and days > 0:
-        sql += " LIMIT ?"
-        params.append(days)
-
-    cursor.execute(sql, params)
-    rows = cursor.fetchall()
-    conn.close()
-
-    # 转为升序
-    return [dict(row) for row in reversed(rows)]
+    try:
+        # K 线读取 SQL 的唯一来源：modules.core.kline（此前此处是第 5 份同语义副本）
+        return read_kline_rows(
+            ts_code,
+            conn=conn,
+            limit=resolve_kline_limit(days, start_date),
+            start_date=start_date,
+            end_date=end_date,
+        )
+    finally:
+        conn.close()
 
 
 def _get_local_stock_list(exchange: str | None = None) -> list[dict]:

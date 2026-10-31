@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 # ── 指标详情 ──
 
+
 class KDJDetail(BaseModel):
     k: float = 0
     d: float = 0
@@ -86,6 +87,7 @@ class IndicatorDetail(BaseModel):
 
 # ── 战法信号 ──
 
+
 class StrategySignalResponse(BaseModel):
     strategy: str
     date: str
@@ -99,6 +101,7 @@ class StrategySignalResponse(BaseModel):
 
 # ── 评分 ──
 
+
 class ScoreDetail(BaseModel):
     total: float = 0
     b1_score: float = 0
@@ -111,6 +114,7 @@ class ScoreDetail(BaseModel):
 
 
 # ── 诊断摘要 ──
+
 
 class DiagnosisSummary(BaseModel):
     price_position: str = ""
@@ -127,6 +131,7 @@ class DiagnosisSummary(BaseModel):
 
 # ── 主力阶段 ──
 
+
 class WaveInfo(BaseModel):
     wave: str = "未知"
     confidence: float = 0
@@ -141,6 +146,7 @@ class KirinInfo(BaseModel):
 
 
 # ── 完整分析响应 ──
+
 
 class StockAnalysisResponse(BaseModel):
     ts_code: str
@@ -158,6 +164,7 @@ class StockAnalysisResponse(BaseModel):
 
 
 # ── K 线图表数据 ──
+
 
 class SignalMarker(BaseModel):
     date: str
@@ -213,8 +220,8 @@ class KlineChartResponse(BaseModel):
     breathing_wave: list[float] = []
 
 
-
 # ── 全量指标（供前端 IndicatorPanel 展示）──
+
 
 class FullIndicatorResponse(BaseModel):
     ts_code: str

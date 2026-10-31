@@ -36,8 +36,8 @@ def render_json(result: VerifyResult) -> str:
         },
         "aggregate": asdict(result.aggregate),
         "gates": {name: asdict(g) for name, g in result.gates.items()},
-        "passed_count": sum(1 for g in result.gates.values() if g.passed),
-        "total_count": len(result.gates),
+        "passed_count": _gate_counts(result.gates)[0],
+        "total_count": _gate_counts(result.gates)[1],
         "summary": _make_summary(result),
         "per_stock": [asdict(s) for s in result.per_stock],
         "meta": result.meta,
@@ -45,11 +45,20 @@ def render_json(result: VerifyResult) -> str:
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
+def _gate_counts(gates: dict) -> tuple[int, int]:
+    """统计 (通过数, 适用项总数)。
+
+    **不适用**的项（``applicable=False``，如数据不足算不出 OOS/IS）既不算通过
+    也不算失败，且不进分母——否则会出现 "4/5 通过" 但实际 4 项全过的误导。
+    """
+    applicable = [g for g in gates.values() if getattr(g, "applicable", True)]
+    return sum(1 for g in applicable if g.passed), len(applicable)
+
+
 def render_markdown(result: VerifyResult) -> str:
     """把 VerifyResult 渲染为 Markdown 报告"""
     agg = result.aggregate
-    passed = sum(1 for g in result.gates.values() if g.passed)
-    total = len(result.gates)
+    passed, total = _gate_counts(result.gates)
 
     md = [
         "# 少妇战法 v1.0 验收报告",
@@ -75,6 +84,10 @@ def render_markdown(result: VerifyResult) -> str:
 
     for name, gate in result.gates.items():
         label, fmt_v, fmt_t = label_map.get(name, (name, str, str))
+        if not getattr(gate, "applicable", True):
+            # 不适用：显示 N/A，不给 ✅/❌（既非通过也非未达标）
+            md.append(f"| {label} | N/A | {fmt_t(gate.threshold)} | ➖ 不适用 |")
+            continue
         icon = "✅" if gate.passed else "❌"
         md.append(f"| {label} | {fmt_v(gate.value)} | {fmt_t(gate.threshold)} | {icon} |")
 
@@ -86,8 +99,8 @@ def render_markdown(result: VerifyResult) -> str:
         ]
     )
 
-    # 失败项的改进建议
-    failed = [g for g in result.gates.values() if not g.passed]
+    # 失败项的改进建议（不适用项不算失败）
+    failed = [g for g in result.gates.values() if not g.passed and getattr(g, "applicable", True)]
     if failed:
         md.extend(["## 改进建议", ""])
         for g in failed:
@@ -134,8 +147,7 @@ def write_report(
 
 
 def _make_summary(result: VerifyResult) -> str:
-    passed = sum(1 for g in result.gates.values() if g.passed)
-    total = len(result.gates)
+    passed, total = _gate_counts(result.gates)
     if total == 0:
         return "无指标"
     if passed == total:

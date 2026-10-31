@@ -226,7 +226,7 @@ def analyze_all_parameters(
         ParameterSensitivityReport: 完整报告
     """
     from modules.loop_engine import LoopConfig
-    from modules.backtest_six_step import backtest_shaofu_single
+    from modules.backtest import backtest_shaofu_single
 
     report = ParameterSensitivityReport(strategy_name=strategy_name)
 

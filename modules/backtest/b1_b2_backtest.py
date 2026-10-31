@@ -16,9 +16,10 @@ import statistics
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from ..active_market_gate import GateAction, GateConfig, TradingGate
 from ..indicators import DailyData, get_kline_data
 from ..loop_engine import LoopConfig, LoopTrade, ShaofuLoopEngine, _calc_stop_loss_price
-from ..backtest_six_step import ShaofuBacktestResult, _calc_metrics
+from .shaofu import ShaofuBacktestResult, _calc_metrics
 from ..strategies.b1_b2 import B1B2Config, is_b2_signal, is_high_open_skip
 
 logger = logging.getLogger(__name__)
@@ -55,9 +56,7 @@ def _run_stock_klines(
     loop_config: LoopConfig,
     start_date: str | None = None,
     end_date: str | None = None,
-    active_mv_enabled: bool = False,
-    active_mv_duckdb_path: str | None = None,
-    active_mv_path: str | None = None,
+    gate: TradingGate | None = None,
 ) -> list[LoopTrade]:
     """对单只股票的 K 线运行 B1+B2 策略，返回完成交易列表。
 
@@ -67,12 +66,14 @@ def _run_stock_klines(
         loop_config: 离场参数。
         start_date: 可选，仅允许该日期（含）后买入。
         end_date: 可选，仅允许该日期（含）前买入。
-        active_mv_enabled: 是否启用活跃市值全局闸门。
-        active_mv_duckdb_path: 活跃市值 DuckDB 路径。
-        active_mv_path: 活跃市值 CSV 路径。
+        gate: 活跃市值全局闸门 port；None 表示闸门不存在（等价关闭，一律放行）。
     """
     if not klines or len(klines) < 35:
         return []
+
+    # 闸门由调用方注入，engine 不再现场 import 闸门实现（"接受依赖，不要创建"）
+    if gate is None:
+        gate = TradingGate(GateConfig(enabled=False))
 
     engine = ShaofuLoopEngine(loop_config)
     trades: list[LoopTrade] = []
@@ -80,21 +81,10 @@ def _run_stock_klines(
     n = len(klines)
     i = 20
 
-    def _gate(date: str):
-        """活跃市值闸门判定(v4.3+ 统一走 apply_active_mv_gate)。"""
-        from modules.active_market_value import apply_active_mv_gate
-
-        return apply_active_mv_gate(
-            date,
-            enabled=active_mv_enabled,
-            duckdb_path=active_mv_duckdb_path,
-            path=active_mv_path,
-        )
-
     while i < n - 1:
         if current is not None:
             # 活跃市值 CLEAR：无条件清仓
-            if _gate(klines[i].trade_date).value == "CLEAR":
+            if gate.evaluate(klines[i].trade_date) is GateAction.CLEAR:
                 last = klines[i]
                 pnl_pct = (
                     (last.close - current.entry_price) / current.entry_price * 100.0 if current.entry_price else 0.0
@@ -133,7 +123,8 @@ def _run_stock_klines(
                     continue
 
                 # 活跃市值闸门：非 OPEN 不允许开仓
-                if _gate(entry_k.trade_date) != "OPEN":
+                # 必须与枚举比较（GateAction.OPEN != "OPEN" 恒为 True，会把所有开仓全部跳过）
+                if gate.evaluate(entry_k.trade_date) is not GateAction.OPEN:
                     i += 1
                     continue
 
@@ -181,11 +172,12 @@ def run_b1_b2_single(
     days: int = 500,
     config: B1B2Config | None = None,
     loop_config: LoopConfig | None = None,
-    active_mv_enabled: bool = False,
-    active_mv_duckdb_path: str | None = None,
-    active_mv_path: str | None = None,
+    gate: TradingGate | None = None,
 ) -> ShaofuBacktestResult:
-    """单只股票 B1+B2 策略回测。"""
+    """单只股票 B1+B2 策略回测。
+
+    gate: 活跃市值全局闸门 port；None 表示闸门不存在（等价关闭）。
+    """
     cfg = config or B1B2Config()
     cfg.validate()
     lc = loop_config or _default_loop_config()
@@ -199,9 +191,7 @@ def run_b1_b2_single(
         klines,
         cfg,
         lc,
-        active_mv_enabled=active_mv_enabled,
-        active_mv_duckdb_path=active_mv_duckdb_path,
-        active_mv_path=active_mv_path,
+        gate=gate,
     )
     result.trades = trades
     _calc_metrics(result)
@@ -239,11 +229,12 @@ def run_b1_b2_pool(
     days: int = 500,
     config: B1B2Config | None = None,
     loop_config: LoopConfig | None = None,
-    active_mv_enabled: bool = False,
-    active_mv_duckdb_path: str | None = None,
-    active_mv_path: str | None = None,
+    gate: TradingGate | None = None,
 ) -> B1B2PoolResult:
-    """多只股票 B1+B2 策略回测。"""
+    """多只股票 B1+B2 策略回测。
+
+    gate: 活跃市值全局闸门 port；None 表示闸门不存在（等价关闭）。
+    """
     cfg = config or B1B2Config()
     cfg.validate()
     lc = loop_config or _default_loop_config()
@@ -257,9 +248,7 @@ def run_b1_b2_pool(
                     days=days,
                     config=cfg,
                     loop_config=lc,
-                    active_mv_enabled=active_mv_enabled,
-                    active_mv_duckdb_path=active_mv_duckdb_path,
-                    active_mv_path=active_mv_path,
+                    gate=gate,
                 )
             )
         except Exception as e:  # noqa: BLE001
@@ -275,13 +264,13 @@ def run_b1_b2_walkforward(
     window: int = 120,
     config: B1B2Config | None = None,
     loop_config: LoopConfig | None = None,
-    active_mv_enabled: bool = False,
-    active_mv_duckdb_path: str | None = None,
-    active_mv_path: str | None = None,
+    gate: TradingGate | None = None,
 ) -> dict[str, Any]:
     """滚动窗口 Walk-forward 验证。
 
     使用第一只股票的交易日历切分样本外窗口，每个窗口只统计在该窗口内买入的交易。
+
+    gate: 活跃市值全局闸门 port；None 表示闸门不存在（等价关闭）。
     """
     cfg = config or B1B2Config()
     cfg.validate()
@@ -316,9 +305,7 @@ def run_b1_b2_walkforward(
                     lc,
                     start_date,
                     end_date,
-                    active_mv_enabled=active_mv_enabled,
-                    active_mv_duckdb_path=active_mv_duckdb_path,
-                    active_mv_path=active_mv_path,
+                    gate=gate,
                 )
             )
 

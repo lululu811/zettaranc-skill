@@ -49,14 +49,23 @@ def test_rate_limiter_available_via_data_sync_shim():
     assert DataSyncer is not None
 
 
-def test_data_syncer_uses_global_limiter():
-    """DataSyncer._rate_limit() 必须调模块级 _GLOBAL_LIMITER.wait()"""
-    import inspect
+def test_data_syncer_uses_global_limiter(monkeypatch):
+    """DataSyncer._rate_limit() 必须真的走到模块级限流器。
+
+    原先这里是源码文本断言（`assert "_GLOBAL_LIMITER" in inspect.getsource(...)`），
+    测的是源码形状而不是行为——重命名一下就绿了。改为行为断言：把全局限流器
+    的 wait 换成探针，调用后必须被触达。
+    """
+    from modules.data_sync import rate_limiter
     from modules.data_sync.syncer import DataSyncer
 
-    src = inspect.getsource(DataSyncer._rate_limit)
-    assert "_rate_limit_global" in src
-    assert "_GLOBAL_LIMITER" in src
+    calls = []
+    monkeypatch.setattr(rate_limiter._GLOBAL_LIMITER, "wait", lambda: calls.append(1))
+
+    syncer = DataSyncer()
+    syncer._rate_limit("test_api")
+
+    assert calls == [1], "DataSyncer._rate_limit 必须触发模块级限流器"
 
 
 # ==================== _RateLimiter 行为 ====================
@@ -189,12 +198,59 @@ def test_data_syncer_rate_limit_does_not_crash():
 
 
 def test_global_limiter_reads_tushare_rpm_env(monkeypatch):
-    """TUSHARE_RPM env var 必须能覆盖默认 180"""
-    # 模块级 _GLOBAL_LIMITER 在 import 时已确定 max_per_min
-    # 验证模块级代码确实读了 TUSHARE_RPM（静态检查）
-    import inspect
-    from modules.data_sync import rate_limiter
+    """TUSHARE_RPM env var 必须能覆盖默认 180。
 
-    src = inspect.getsource(rate_limiter)
-    assert "TUSHARE_RPM" in src
-    assert "os.environ.get" in src
+    原先是源码文本断言（`assert "TUSHARE_RPM" in inspect.getsource(...)`）——
+    测源码形状而非行为。改为行为断言：改 env 后新建的限流器应当采用新值。
+    """
+    from modules.core.rate_limit import make_window_limiter
+
+    monkeypatch.setenv("TUSHARE_RPM", "42")
+    assert make_window_limiter()._max == 42
+
+    monkeypatch.delenv("TUSHARE_RPM", raising=False)
+    assert make_window_limiter()._max == 180
+
+
+def test_min_interval_is_shared_implementation(monkeypatch):
+    """4 个客户端的"最小间隔"限流共用同一份实现。
+
+    原先 tushare / indevs / a-stock-data / hithink 各抄了一份完全相同的
+    sleep 逻辑。现在都在 modules.core.rate_limit.wait_min_interval。
+    """
+    from modules.core.rate_limit import wait_min_interval
+
+    # 间隔为 0 时不等待
+    import time
+
+    t0 = time.time()
+    wait_min_interval(0.0, t0)
+    assert time.time() - t0 < 0.05
+
+    # 间隔大于 0 时会等到点
+    t0 = time.time()
+    wait_min_interval(0.05, t0)
+    assert time.time() - t0 >= 0.04
+
+    # 各客户端确实都在用共享实现——用探针验证"委托"这个行为
+    import importlib
+
+    import pytest
+
+    cases = [
+        ("tushare_client", "TushareClient", {"min_request_interval": 0.0, "last_request_time": 0.0}),
+        ("indevs_client", "IndevsClient", {"_min_interval": 0.0, "_last_request_time": 0.0}),
+        ("a_stock_data_client", "AStockDataClient", {"_min_interval": 0.0, "_last_request_time": 0.0}),
+        ("hithink_client", "HithinkFinanceClient", {"_last_request_time": 0.0}),
+    ]
+    for mod_name, cls_name, attrs in cases:
+        mod = importlib.import_module(f"modules.{mod_name}")
+        obj = object.__new__(getattr(mod, cls_name))
+        for key, value in attrs.items():
+            setattr(obj, key, value)
+
+        seen = []
+        monkeypatch.setattr(mod, "wait_min_interval", lambda mi, last: (seen.append((mi, last)), time.time())[1])
+
+        obj._rate_limit()
+        assert seen, f"{cls_name}._rate_limit 未委托给共享的 wait_min_interval"

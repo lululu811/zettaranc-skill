@@ -9,6 +9,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
+from ..constants import (
+    MARKET_REGIME_STRONG_BREADTH,
+    MARKET_REGIME_STRONG_MONEYFLOW,
+    MARKET_REGIME_STRONG_TREND,
+    MARKET_REGIME_WEAK_BREADTH,
+    MARKET_REGIME_WEAK_MONEYFLOW,
+    MARKET_REGIME_WEAK_TREND,
+)
+
 
 class MarketRegime(Enum):
     """市场环境状态"""
@@ -34,12 +43,12 @@ def classify_market_regime(
     trend_score: float,
     breadth: float,
     moneyflow_score: float,
-    strong_threshold: float = 65.0,
-    weak_threshold: float = 40.0,
-    breadth_strong: float = 0.1,
-    breadth_weak: float = -0.15,
-    moneyflow_strong: float = 55.0,
-    moneyflow_weak: float = 40.0,
+    strong_threshold: float = MARKET_REGIME_STRONG_TREND,
+    weak_threshold: float = MARKET_REGIME_WEAK_TREND,
+    breadth_strong: float = MARKET_REGIME_STRONG_BREADTH,
+    breadth_weak: float = MARKET_REGIME_WEAK_BREADTH,
+    moneyflow_strong: float = MARKET_REGIME_STRONG_MONEYFLOW,
+    moneyflow_weak: float = MARKET_REGIME_WEAK_MONEYFLOW,
 ) -> MarketRegime:
     """
     根据指标判定市场环境。

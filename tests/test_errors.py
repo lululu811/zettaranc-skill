@@ -72,10 +72,9 @@ class TestTushareClientPilot:
     def test_missing_token_raises_zettaranc_error(self, monkeypatch):
         monkeypatch.setenv("DATA_MODE", "jnb")
         monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
+        monkeypatch.setenv("TUSHARE_API_URL", "http://example.com")
         import modules.tushare_client as tc
 
-        monkeypatch.setattr(tc, "TUSHARE_TOKEN", "")
-        monkeypatch.setattr(tc, "TUSHARE_API_URL", "http://example.com")
         with pytest.raises(ZettarancError) as exc_info:
             tc.TushareClient()
         assert exc_info.value.code == ErrorCode.CONFIG_MISSING
@@ -83,10 +82,10 @@ class TestTushareClientPilot:
 
     def test_missing_api_url_raises_zettaranc_error(self, monkeypatch):
         monkeypatch.setenv("DATA_MODE", "jnb")
+        monkeypatch.setenv("TUSHARE_TOKEN", "fake_token")
+        monkeypatch.delenv("TUSHARE_API_URL", raising=False)
         import modules.tushare_client as tc
 
-        monkeypatch.setattr(tc, "TUSHARE_TOKEN", "fake_token")
-        monkeypatch.setattr(tc, "TUSHARE_API_URL", "")
         with pytest.raises(ZettarancError, match="TUSHARE_API_URL"):
             tc.TushareClient()
 
@@ -129,6 +128,39 @@ class TestCliTopLevelCatch:
             cli.main()
         assert exc_info.value.code == 2
         assert "[CONFIG_MISSING] 未配置 Token" in capsys.readouterr().err
+
+    def test_cli_propagates_handler_exit_code(self, monkeypatch):
+        """handler 返回非 0 时，进程必须以该退出码退出。
+
+        以前 cli.main() 丢弃 handler 的返回值，于是 cmd_verify_v10 的
+        "参数错误 → 2" 和 cmd_self_optimize 的 "未知 action → 1" 都退 0，
+        宿主脚本会误判成功。
+        """
+
+        from modules import cli
+
+        class FakeArgs:
+            command = "verify"
+
+        monkeypatch.setattr(cli, "build_parser", lambda: type("P", (), {"parse_args": lambda self: FakeArgs()})())
+        monkeypatch.setattr(cli, "cmd_verify_v10", lambda args: 2)
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.main()
+        assert exc_info.value.code == 2
+
+    def test_cli_success_does_not_raise_system_exit(self, monkeypatch):
+        """成功路径（handler 返回 None）不应抛 SystemExit——main() 仍可被程序内调用。"""
+
+        from modules import cli
+
+        class FakeArgs:
+            command = "verify"
+
+        monkeypatch.setattr(cli, "build_parser", lambda: type("P", (), {"parse_args": lambda self: FakeArgs()})())
+        monkeypatch.setattr(cli, "cmd_verify_v10", lambda args: None)
+
+        cli.main()  # 不抛异常即通过
 
 
 if __name__ == "__main__":
