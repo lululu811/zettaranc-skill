@@ -11,6 +11,7 @@ def run_shaofu(ts_code: str, days: int = 250, **kwargs) -> dict:
     """少妇战法单股回测"""
     try:
         from modules.backtest import backtest_shaofu_single
+
         result = backtest_shaofu_single(ts_code, days=days)
         return _shaofu_to_response(ts_code, result)
     except ImportError:
@@ -19,14 +20,20 @@ def run_shaofu(ts_code: str, days: int = 250, **kwargs) -> dict:
         return run_multi(ts_code, days=days, **kwargs)
 
 
-def run_multi(ts_code: str, days: int = 240, initial_capital: float = 100000,
-              position_pct: float = 0.3, stop_loss_pct: float = 0.07,
-              take_profit_pct: float = 0.15) -> dict:
+def run_multi(
+    ts_code: str,
+    days: int = 240,
+    initial_capital: float = 100000,
+    position_pct: float = 0.3,
+    stop_loss_pct: float = 0.07,
+    take_profit_pct: float = 0.15,
+) -> dict:
     """多策略融合回测"""
     from modules.backtest import backtest_multi_strategy
 
     result = backtest_multi_strategy(
-        ts_code, days=days,
+        ts_code,
+        days=days,
         initial_capital=initial_capital,
         position_pct=position_pct,
         stop_loss_pct=stop_loss_pct,
@@ -35,15 +42,21 @@ def run_multi(ts_code: str, days: int = 240, initial_capital: float = 100000,
     return _portfolio_to_response(ts_code, result)
 
 
-def run_portfolio(ts_codes: list[str], days: int = 240, initial_capital: float = 100000,
-                  position_pct: float = 0.2, stop_loss_pct: float = 0.07,
-                  take_profit_pct: float = 0.15) -> dict:
+def run_portfolio(
+    ts_codes: list[str],
+    days: int = 240,
+    initial_capital: float = 100000,
+    position_pct: float = 0.2,
+    stop_loss_pct: float = 0.07,
+    take_profit_pct: float = 0.15,
+) -> dict:
     """多股票组合回测"""
     from modules.backtest import backtest_portfolio
 
     stock_configs = [{"ts_code": code} for code in ts_codes]
     result = backtest_portfolio(
-        stock_configs, days=days,
+        stock_configs,
+        days=days,
         initial_capital=initial_capital,
         position_pct=position_pct,
         stop_loss_pct=stop_loss_pct,
@@ -54,6 +67,7 @@ def run_portfolio(ts_codes: list[str], days: int = 240, initial_capital: float =
 
 # ── 内部序列化 ──
 
+
 def _shaofu_to_response(ts_code: str, result) -> dict:
     """将少妇战法结果转为 API 响应。
 
@@ -63,9 +77,7 @@ def _shaofu_to_response(ts_code: str, result) -> dict:
     d = shaofu_result_to_dict(result)
 
     # 构建资金曲线（从 trades 推算）
-    equity_curve = _build_equity_curve_from_trades(
-        result.trades, getattr(result, "initial_capital", 100000)
-    )
+    equity_curve = _build_equity_curve_from_trades(result.trades, getattr(result, "initial_capital", 100000))
 
     return {
         "ts_code": ts_code,
@@ -153,28 +165,30 @@ def _per_stock_responses(ts_code: str, result, canonical: dict) -> list[dict]:
         curve = _build_equity_curve_from_trades(obj_groups[code], getattr(result, "initial_capital", 100000))
         values = [v for _, v in curve]
         cm = calc_curve_metrics(values, trading_days=len(values)) if len(values) > 1 else None
-        per_stock.append({
-            "ts_code": code,
-            "summary": {
-                "total_trades": stats.total_trades,
-                "win_rate": round(stats.win_rate, 3),
-                "profit_factor": round(stats.profit_factor, 2),
-                "total_return": round(cm.total_return * 100, 2) if cm else 0.0,
-                "max_drawdown": round(cm.max_drawdown * 100, 2) if cm else 0.0,
-                "sharpe_ratio": round(cm.sharpe_ratio, 2) if cm else 0.0,
-                "avg_holding_days": round(stats.avg_holding_days, 1),
-                "annualized_return": round(cm.annualized_return * 100, 2) if cm else 0.0,
-                "win_count": stats.win_count,
-                "loss_count": stats.loss_count,
-                "avg_pnl": round(stats.avg_pnl, 2),
-                "avg_win": round(stats.avg_win, 2),
-                "avg_loss": round(stats.avg_loss, 2),
-                "max_win": round(stats.max_win, 2),
-                "max_loss": round(stats.max_loss, 2),
-            },
-            "equity_curve": curve,
-            "trades": tds,
-        })
+        per_stock.append(
+            {
+                "ts_code": code,
+                "summary": {
+                    "total_trades": stats.total_trades,
+                    "win_rate": round(stats.win_rate, 3),
+                    "profit_factor": round(stats.profit_factor, 2),
+                    "total_return": round(cm.total_return * 100, 2) if cm else 0.0,
+                    "max_drawdown": round(cm.max_drawdown * 100, 2) if cm else 0.0,
+                    "sharpe_ratio": round(cm.sharpe_ratio, 2) if cm else 0.0,
+                    "avg_holding_days": round(stats.avg_holding_days, 1),
+                    "annualized_return": round(cm.annualized_return * 100, 2) if cm else 0.0,
+                    "win_count": stats.win_count,
+                    "loss_count": stats.loss_count,
+                    "avg_pnl": round(stats.avg_pnl, 2),
+                    "avg_win": round(stats.avg_win, 2),
+                    "avg_loss": round(stats.avg_loss, 2),
+                    "max_win": round(stats.max_win, 2),
+                    "max_loss": round(stats.max_loss, 2),
+                },
+                "equity_curve": curve,
+                "trades": tds,
+            }
+        )
     return per_stock
 
 
@@ -188,7 +202,7 @@ def _build_equity_curve_from_trades(trades, initial_capital: float) -> list:
     for t in trades:
         # LoopTrade.pnl_pct 是百分数（10.0 = +10%），复利需换算成小数
         pnl = (getattr(t, "pnl_pct", 0) or 0) / 100.0
-        capital *= (1 + pnl)
+        capital *= 1 + pnl
         exit_date = getattr(t, "exit_date", None) or getattr(t, "entry_date", "")
         curve.append([exit_date, round(capital, 2)])
 

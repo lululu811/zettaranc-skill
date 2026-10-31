@@ -35,19 +35,20 @@ def sync_status():
 
         with get_connection() as conn:
             rows = conn.execute(
-                "SELECT data_type, ts_code, last_date, status, message "
-                "FROM sync_log ORDER BY id DESC LIMIT 50"
+                "SELECT data_type, ts_code, last_date, status, message FROM sync_log ORDER BY id DESC LIMIT 50"
             ).fetchall()
 
         logs = []
         for row in rows:
-            logs.append({
-                "data_type": row[0],
-                "ts_code": row[1],
-                "last_date": row[2],
-                "status": row[3],
-                "message": row[4],
-            })
+            logs.append(
+                {
+                    "data_type": row[0],
+                    "ts_code": row[1],
+                    "last_date": row[2],
+                    "status": row[3],
+                    "message": row[4],
+                }
+            )
         return {"logs": logs}
     except Exception as e:
         raise_api_error(e, prefix="获取同步状态失败")

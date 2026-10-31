@@ -113,15 +113,12 @@ def _result_to_response(result) -> dict:
     else:
         # 兼容旧格式：只有 equity_curve（list[float]）
         equity_curve = [
-            {"date": "", "equity": round(v, 2), "cash": 0, "positions": 0, "regime": ""}
-            for v in result.equity_curve
+            {"date": "", "equity": round(v, 2), "cash": 0, "positions": 0, "regime": ""} for v in result.equity_curve
         ]
 
     benchmark_curve = []
     for p in result.benchmark_curve:
-        benchmark_curve.append(
-            {"date": p.get("date", ""), "close": round(float(p.get("close", 0)), 2)}
-        )
+        benchmark_curve.append({"date": p.get("date", ""), "close": round(float(p.get("close", 0)), 2)})
 
     trades = []
     for t in result.trades:

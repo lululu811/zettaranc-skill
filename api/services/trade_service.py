@@ -16,20 +16,22 @@ def list_trades(page: int = 1, page_size: int = 20, ts_code: str | None = None) 
     for r in result.get("records", []):
         if ts_code and r.get("ts_code") != ts_code:
             continue
-        records.append({
-            "id": r.get("id", 0),
-            "ts_code": r.get("ts_code", ""),
-            "trade_date": r.get("trade_date", ""),
-            "action": r.get("action", ""),
-            "price": r.get("price", 0),
-            "quantity": r.get("quantity", 0),
-            "amount": r.get("amount", 0),
-            "reason": r.get("reason", ""),
-            "signal_type": r.get("signal_type", ""),
-            "zg_review": r.get("zg_review", ""),
-            "tags": r.get("tags", ""),
-            "notes": r.get("notes", ""),
-        })
+        records.append(
+            {
+                "id": r.get("id", 0),
+                "ts_code": r.get("ts_code", ""),
+                "trade_date": r.get("trade_date", ""),
+                "action": r.get("action", ""),
+                "price": r.get("price", 0),
+                "quantity": r.get("quantity", 0),
+                "amount": r.get("amount", 0),
+                "reason": r.get("reason", ""),
+                "signal_type": r.get("signal_type", ""),
+                "zg_review": r.get("zg_review", ""),
+                "tags": r.get("tags", ""),
+                "notes": r.get("notes", ""),
+            }
+        )
 
     return {
         "total": result.get("total", len(records)),
