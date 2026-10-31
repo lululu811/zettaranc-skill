@@ -148,7 +148,7 @@ class TestCliSyncDoesNotPinTushare:
             def sync_stock_basic(self):
                 return 0
 
-            def sync_all_daily_kline(self, days=730):
+            def sync_all_daily_kline(self, days=730, incremental=False):
                 return {}
 
             def sync_daily_kline(self, ts_code, *a, **k):

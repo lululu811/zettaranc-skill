@@ -352,5 +352,6 @@ def test_fetch_all_codes_queries_database(monkeypatch):
             return FakeCursor()
 
     monkeypatch.setattr("modules.data_sync.syncer.get_connection", lambda: FakeConn())
+    monkeypatch.setattr("modules.data_sync._infra.get_connection", lambda: FakeConn())
     codes = DataSyncer._fetch_all_codes("SELECT ts_code FROM stock_basic")
     assert codes == ["000001.SZ", "600000.SH"]
