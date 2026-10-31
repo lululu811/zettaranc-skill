@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from ._helpers import json_output, warn
+from ._helpers import error, json_output, warn
 
 logger = logging.getLogger(__name__)
 
@@ -159,8 +159,7 @@ def cmd_track(args) -> None:
 
     if action == "add":
         if not args.ts_code:
-            print("错误：添加股票需要指定股票代码")
-            return
+            error("添加股票需要指定股票代码", as_json=bool(getattr(args, "json", False)))
         success = manager.add_stock(
             ts_code=args.ts_code, name=args.name, reason=args.reason, strategy_tags=args.strategy, notes=args.notes
         )
@@ -169,8 +168,7 @@ def cmd_track(args) -> None:
 
     elif action == "remove":
         if not args.ts_code:
-            print("错误：移除股票需要指定股票代码")
-            return
+            error("移除股票需要指定股票代码", as_json=bool(getattr(args, "json", False)))
         success = manager.remove_stock(ts_code=args.ts_code, reason=args.reason)
         if args.json:
             json_output({"success": success})
@@ -196,8 +194,7 @@ def cmd_track(args) -> None:
 
     elif action == "info":
         if not args.ts_code:
-            print("错误：查看股票信息需要指定股票代码")
-            return
+            error("查看股票信息需要指定股票代码", as_json=bool(getattr(args, "json", False)))
         stock_info: dict[str, Any] | None = manager.get_stock_info(args.ts_code)
         if args.json:
             json_output(stock_info if stock_info else {})
@@ -217,8 +214,7 @@ def cmd_track(args) -> None:
 
     elif action == "status":
         if not args.ts_code:
-            print("错误：更新状态需要指定股票代码")
-            return
+            error("更新状态需要指定股票代码", as_json=bool(getattr(args, "json", False)))
         success = manager.update_stock_status(ts_code=args.ts_code, status=args.status, notes=args.notes)
         if args.json:
             json_output({"success": success})

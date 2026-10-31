@@ -303,6 +303,36 @@ def _emit_error(exc: BaseException, *, as_json: bool) -> None:
     sys.exit(2)
 
 
+def _argparse_error_message(parser: argparse.ArgumentParser, argv: list[str]) -> str:
+    """提取 argparse 的具体错误原因。
+
+    argparse 默认把 "the following arguments are required: ts_code" 写到 stderr
+    然后退出。宿主在 ``--json`` 模式下拿到的若只是笼统的"命令行参数错误"，
+    就无法告诉用户**缺哪个参数**。
+
+    这里重放一次解析（``--help`` 除外，它会正常退出），捕获 argparse 自己
+    写出的最后一行错误信息。
+    """
+    import io
+    import contextlib
+
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stderr(buf):
+            parser.parse_args(argv)
+    except SystemExit:
+        pass
+    except argparse.ArgumentError:
+        # argparse 内部错误（理论上不该发生）——同样返回可读文案
+        return "命令行参数错误"
+    lines = [ln.strip() for ln in buf.getvalue().splitlines() if ln.strip()]
+    # 末行通常是 "prog: error: <原因>"
+    for line in reversed(lines):
+        if ": error: " in line:
+            return line.split(": error: ", 1)[1].strip()
+    return "命令行参数错误"
+
+
 def main() -> None:
     """zt CLI 主入口"""
     parser = build_parser()
@@ -318,7 +348,7 @@ def main() -> None:
                     {
                         "ok": False,
                         "error_code": ErrorCode.INVALID_PARAM.value,
-                        "message": "命令行参数错误",
+                        "message": _argparse_error_message(parser, sys.argv[1:]),
                         "cause": None,
                     },
                     ensure_ascii=False,

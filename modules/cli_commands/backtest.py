@@ -117,14 +117,14 @@ def cmd_backtest(args) -> None:
     days = getattr(args, "days", 250)
 
     if not sub:
-        error("请指定回测子命令: shaofu / multi / portfolio / b2-confirm")
+        error("请指定回测子命令: shaofu / multi / portfolio / b2-confirm", as_json=use_json)
 
     ts_code = getattr(args, "ts_code", None)
 
     # ── shaofu: 少妇战法单股回测 ──
     if sub == "shaofu":
         if not ts_code:
-            error("请指定股票代码，如: backtest shaofu 600487.SH")
+            error("请指定股票代码，如: backtest shaofu 600487.SH", as_json=use_json)
 
         from modules.backtest._rust_bridge import bridge_shaofu_single
 
@@ -141,7 +141,7 @@ def cmd_backtest(args) -> None:
     # ── multi: 多策略融合回测 ──
     elif sub == "multi":
         if not ts_code:
-            error("请指定股票代码，如: backtest multi 600487.SH")
+            error("请指定股票代码，如: backtest multi 600487.SH", as_json=use_json)
 
         from modules.backtest import backtest_multi_strategy
 
@@ -159,11 +159,11 @@ def cmd_backtest(args) -> None:
     elif sub == "portfolio":
         codes_str = getattr(args, "codes", None)
         if not codes_str:
-            error("请指定股票代码列表（逗号分隔），如: backtest portfolio 600487.SH,601318.SH")
+            error("请指定股票代码列表（逗号分隔），如: backtest portfolio 600487.SH,601318.SH", as_json=use_json)
 
         ts_codes = [c.strip() for c in codes_str.split(",") if c.strip()]
         if not ts_codes:
-            error("股票代码列表为空")
+            error("股票代码列表为空", as_json=use_json)
 
         # 真组合引擎（共享资金池 + 交易费率 + 闸门 + 仓位上限）。
         # 此前这里走的是"各标的独立回测后按 1/max_concurrent 加权平均资金曲线"
@@ -214,7 +214,9 @@ def cmd_backtest(args) -> None:
         elif ts_code:
             ts_codes = [ts_code]
         else:
-            error("请指定股票代码，如: backtest b2-confirm 600487.SH 或 b2-confirm 000001.SZ,000002.SZ")
+            error(
+                "请指定股票代码，如: backtest b2-confirm 600487.SH 或 b2-confirm 000001.SZ,000002.SZ", as_json=use_json
+            )
 
         b2_j_max = getattr(args, "b2_j_max", None)
         cfg = B1B2Config(
@@ -323,7 +325,7 @@ def cmd_backtest(args) -> None:
                 _print_b1_b2_pool_summary(pool)
 
     else:
-        error(f"未知回测子命令: {sub}")
+        error(f"未知回测子命令: {sub}", as_json=use_json)
 
 
 # ==================== cmd_verify_v10 ====================

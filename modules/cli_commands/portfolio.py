@@ -95,13 +95,13 @@ def cmd_trade(args) -> None:
     use_json = getattr(args, "json", False)
 
     if not sub:
-        error("请指定交易子命令: add / list / review / stats")
+        error("请指定交易子命令: add / list / review / stats", as_json=use_json)
 
     # ── add: 解析并保存交易 ──
     if sub == "add":
         text = getattr(args, "text", None)
         if not text:
-            error('请输入交易描述，如: trade add "4月25号买了100股茅台，1800块"')
+            error('请输入交易描述，如: trade add "4月25号买了100股茅台，1800块"', as_json=use_json)
 
         from .trade_parser import TradeParser
         from .trade_manager import TradeManager
@@ -110,11 +110,11 @@ def cmd_trade(args) -> None:
         result = parser.parse(text)
 
         if not result.success:
-            error(f"解析失败: {result.error_message}")
+            error(f"解析失败: {result.error_message}", as_json=use_json)
 
         data = result.data
         if not data:
-            error("解析结果为空")
+            error("解析结果为空", as_json=use_json)
 
         # 展示解析结果
         if use_json:
@@ -253,7 +253,7 @@ def cmd_trade(args) -> None:
             print(f"{'=' * 60}")
 
     else:
-        error(f"未知交易子命令: {sub}")
+        error(f"未知交易子命令: {sub}", as_json=use_json)
 
 
 def cmd_daily(args) -> None:

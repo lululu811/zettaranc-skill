@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import sys
 
-from ._helpers import json_output
+from ._helpers import error, json_output
 
 logger = logging.getLogger(__name__)
 
@@ -229,8 +229,8 @@ def cmd_score(args) -> None:
     from modules.screener import format_stock_score
 
     if not args.ts_code:
-        print("请指定股票代码: zt score <ts_code>")
-        sys.exit(1)
+        # 走 error()：--json 模式下 stdout 也要是合法 JSON（统一错误外壳）
+        error("请指定股票代码: zt score <ts_code>", as_json=bool(getattr(args, "json", False)))
 
     core = analyze_core(args.ts_code, days=60)
     score = core["score"]

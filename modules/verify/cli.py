@@ -7,6 +7,7 @@ zt verify v1.0 CLI 适配层
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 from pathlib import Path
 
@@ -197,7 +198,15 @@ def run_verify_v10_command(
             wf_test_days=wf_test_days,
         )
     except ZettarancError as e:
-        print(f"参数错误：{e}")
+        # --json 模式下 stdout 必须是合法 JSON（统一错误外壳），否则宿主的
+        # JSON 解析会直接失败。此处不能走顶层 cli.py 的异常处理——本函数
+        # 自己吞掉了异常并返回退出码。
+        if as_json:
+            from modules.core.command_result import exception_to_dict
+
+            print(json.dumps(exception_to_dict(e), ensure_ascii=False, indent=2))
+        else:
+            print(f"参数错误：{e}")
         return 2
 
     ts_codes = _split_ts_codes(ts_codes_arg)
@@ -222,8 +231,9 @@ def run_verify_v10_command(
 
         print(render_json(result))
     else:
-        passed = sum(1 for g in result.gates.values() if g.passed)
-        total = len(result.gates)
+        from .report import _gate_counts
+
+        passed, total = _gate_counts(result.gates)
         print(f"\n少妇战法 v1.0 验收：{passed}/{total} 通过")
         print(f"报告：{output_dir or REPORTS_DIR}/verify_v10_<timestamp>.json")
     return 0

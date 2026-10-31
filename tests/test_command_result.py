@@ -170,3 +170,45 @@ class TestCliApiErrorShellParity:
         api_payload = exception_to_dict(ZettarancError(ErrorCode.SIMULATOR_INVALID_PRICE, "days 必须 > 0，当前: 0"))
         assert cli_payload["error_code"] == api_payload["error_code"]
         assert cli_payload["message"] == api_payload["message"]
+
+
+class TestSubcommandErrorPaths:
+    """子命令**自己**吞掉异常的错误路径——绕过了顶层 cli.py 的处理器。
+
+    这些路径此前把裸文本打到 stdout，在 ``--json`` 模式下是非法 JSON。
+    """
+
+    @pytest.mark.parametrize(
+        ("args", "expect_in_message"),
+        [
+            (("verify", "v1.0", "--limit", "5", "--json"), "--limit"),
+            (("score", "--json"), "股票代码"),
+            (("track", "add", "--json"), "股票代码"),
+            (("backtest", "shaofu", "--json"), "ts_code"),
+            (("trade", "add", "--json"), "text"),
+        ],
+    )
+    def test_error_path_emits_valid_json(self, args, expect_in_message):
+        """每个子命令的错误路径在 --json 模式下都必须产出合法 JSON。"""
+        code, stdout, _ = _run_cli(*args)
+        assert code != 0
+        payload = json.loads(stdout)  # 非法 JSON 即测试失败
+        assert payload["ok"] is False
+        assert payload["error_code"] == ErrorCode.INVALID_PARAM.value
+        assert expect_in_message in payload["message"], f"错误信息应具体指出缺什么，实际为：{payload['message']!r}"
+
+    def test_error_exit_code_is_uniform(self):
+        """错误退出码统一为 2——此前 error() 退 1、异常退 2，宿主要记两套码。"""
+        from modules.cli_commands._helpers import ERROR_EXIT_CODE
+
+        assert ERROR_EXIT_CODE == 2
+        for args in (("score", "--json"), ("verify", "v1.0", "--limit", "5", "--json")):
+            code, _, _ = _run_cli(*args)
+            assert code == ERROR_EXIT_CODE, f"{args} 退出码应为 {ERROR_EXIT_CODE}，实际 {code}"
+
+    def test_without_json_flag_error_text_goes_to_stdout_as_before(self):
+        """非 JSON 模式保持人类可读输出（不破坏既有交互）。"""
+        code, stdout, stderr = _run_cli("verify", "v1.0", "--limit", "5")
+        assert code != 0
+        assert stdout.strip(), "非 JSON 模式应有可读提示"
+        assert "--limit" in stdout
