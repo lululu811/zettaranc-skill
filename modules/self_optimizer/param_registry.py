@@ -613,6 +613,111 @@ _reg(
 )
 
 
+# 三种简单完美形态各自独立成组，参数名与 criteria 对应，
+# 这样前端选中某个策略时只会显示该策略真正用到的参数。
+_reg(
+    "simple_perfect_1",
+    "简单完美图形-1（经典）",
+    "类型A：低点抬高 + 温和放量上涨 → 顶部无量 → 缩量回调 + J 达大负值。"
+    "有出处的阈值（缩半量 0.5 / 未翻倍 2.0 / 放量 1.2×）写死在 modules/screener/simple_perfect.py，不参与变异。",
+    [
+        ParamSpec(
+            name="j_threshold",
+            default=0.0,
+            min=-30.0,
+            max=100.0,
+            step=5.0,
+            category="entry",
+            description="J 值上限（需 J ≤ 此值才算达标）。笔记原文是 0（负值）",
+            impact="升高（如 20/90）→ 放宽买点、可捕捉强势回调中的票，但会引入追高信号；降低（更负）→ 信号更少但超卖更充分",
+            wired=True,
+        ),
+        ParamSpec(
+            name="pullback_vol_ratio",
+            default=0.5,
+            min=0.3,
+            max=1.0,
+            step=0.05,
+            category="pattern",
+            description="回调段均量 / 上涨段均量上限。默认 0.5 = 笔记「缩半量」（成交量是完美图形最看重的要素）",
+            impact="减小 → 要求缩量更狠，命中更少更精；增大 → 只要轻微缩量即算回调，会引入假信号",
+            wired=True,
+        ),
+        ParamSpec(
+            name="pullback_min_bars",
+            default=1,
+            min=1,
+            max=5,
+            step=1,
+            category="pattern",
+            description="缩量回调至少需要的根数（默认 1；笔记字面写 2 根，可用此参数切回）",
+            impact="增大 → 要求回调缩量持续更久；设为 1 → 单日缩半量即算达标",
+            wired=True,
+        ),
+    ],
+)
+
+_reg(
+    "simple_perfect_2",
+    "简单完美图形-2（异动后的横盘）",
+    "类型B：长期横盘（20 根振幅 <15%）→ 放量异动 → 异动后仍横住。",
+    [
+        ParamSpec(
+            name="box_tolerance",
+            default=0.08,
+            min=0.03,
+            max=0.20,
+            step=0.01,
+            category="pattern",
+            description="异动后箱体容差（价格需横住在异动日区间的 ±此比例内）",
+            impact="增大 → 更容易判定为「横住」，命中增多但箱体变松；减小 → 更严格",
+            wired=True,
+        ),
+        ParamSpec(
+            name="box_min_bars",
+            default=5,
+            min=3,
+            max=15,
+            step=1,
+            category="pattern",
+            description="异动后至少横住的根数",
+            impact="增大 → 要求横得更久，命中变少更稳；减小 → 更早出信号",
+            wired=True,
+        ),
+    ],
+)
+
+_reg(
+    "simple_perfect_3",
+    "简单完美图形-3（完美绿帽 / W型）",
+    "类型C：放量站上大哥线 → 一波流 → 顶部放量下杀 → 缩量消化且不破黄线。",
+    [
+        ParamSpec(
+            name="digest_min_bars",
+            default=20,
+            min=10,
+            max=40,
+            step=2,
+            category="pattern",
+            description="类型C：绿帽下杀后的消化窗口（时间换空间）",
+            impact="增大 → 要求消化更充分；减小 → 更早判定为完成消化",
+            wired=True,
+        ),
+        ParamSpec(
+            name="wave_min_gain",
+            default=0.20,
+            min=0.10,
+            max=0.50,
+            step=0.02,
+            category="pattern",
+            description="类型C：一波流的最小累计涨幅",
+            impact="增大 → 只认更大的一波流；减小 → 小涨幅也算一波流",
+            wired=True,
+        ),
+    ],
+)
+
+
 # ──────────────────────────────────────────────
 # 公开 API
 # ──────────────────────────────────────────────

@@ -20,6 +20,11 @@ def main() -> None:
     )
     parser.add_argument("--ts_code", help="股票代码，如 000001.SZ")
     parser.add_argument("--days", type=int, default=730, help="同步天数")
+    parser.add_argument(
+        "--incremental",
+        action="store_true",
+        help="严格增量：每只股票从其最后一根 K 线的下一天续拉（默认按 --days 窗口整段重拉）",
+    )
     parser.add_argument("--indicators", action="store_true", help="同步完成后计算并缓存技术指标（indicator_cache 表）")
     parser.add_argument(
         "--skip-indicators",
@@ -50,11 +55,13 @@ def main() -> None:
         else:
             # 批量同步所有股票
             syncer.sync_stock_basic()
-            syncer.sync_all_daily_kline(days=args.days)
+            results = syncer.sync_all_daily_kline(days=args.days, incremental=args.incremental)
             # 批量同步指标缓存（需显式指定 --indicators）
             if args.indicators and not args.skip_indicators:
-                print("正在批量同步指标缓存...")
-                syncer.sync_all_indicators()
+                updated = [code for code, count in results.items() if count > 0]
+                if updated:
+                    print(f"正在批量同步指标缓存（{len(updated)} 只）...")
+                    syncer.sync_all_indicators(ts_codes=updated, incremental=args.incremental)
 
         print("同步完成")
         print(syncer.get_sync_status())

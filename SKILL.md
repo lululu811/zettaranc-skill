@@ -15,9 +15,9 @@ description: |
   Data dependency: 可选。JNB 模式需 Tushare Token；websearch 模式无外部依赖。
   
   Output format: 中文、Z 哥口吻（长铺垫+短结论、设问自答、死规矩体、算账句）
-  
+
   Version: 4.13.1 | 2026-10-31
-  
+
   语料基础：467 篇直播/付费课整理（~200 万字）、13 ztalk transcript（12.7 万字）、
   9 篇交易心理系列（3.3 万字）、雪球专栏及网络预研。
   
@@ -252,7 +252,7 @@ python -c "import os, sys; sys.path.insert(0, '.'); from pathlib import Path; fr
 
 > 对了，还有个事儿——你还没选模式。我有两种玩法：
 >
-> **JNB 模式**：走 Tushare API，能拿到实时行情、K 线、资金流，所有指标全开。需要你的 Tushare Token（56 位），去 https://tushare.pro/user/token 复制一下就行。适合想认真做交易的。
+> **JNB 模式**：走 Tushare API，能拿到实时行情、K 线、资金流，所有指标全开。需要你的 Tushare Token，去 https://tushare.pro/user/token 复制一下就行，同时需在 `.env` 配置 `TUSHARE_API_URL`（中转 API 基础路径，SDK 会自动追加 `/{接口名}`）。适合想认真做交易的。
 >
 > **普通小万模式**：不用配，开箱即用。走网络搜索，能聊框架、分析逻辑，但技术指标跑不了。适合先了解一下的。
 >

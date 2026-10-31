@@ -130,16 +130,28 @@ export interface SignalMarker {
 }
 
 // ── 选股 ──
+export interface StrategyParam {
+  name: string;
+  default: number;
+  min: number;
+  max: number;
+  step: number;
+  description: string;
+}
+
 export interface StrategyInfo {
   alias: string;
   criteria: string;
   description: string;
+  params: StrategyParam[];
 }
 
 export interface ScreenResult {
   strategy: string;
   criteria: string;
   count: number;
+  scanned: number;
+  matched: number;
   stocks: StockScore[];
 }
 
@@ -359,4 +371,19 @@ export interface SimulationResponse {
   rejected_entries: Array<Record<string, unknown>>;
   resonance_summary: Record<string, unknown>;
   positions: Array<Record<string, unknown>>;
+}
+
+// ── 股票联想搜索 ──
+export interface StockSearchItem {
+  ts_code: string;
+  name: string;
+  industry: string;
+  market: string;
+  match_type: string;
+}
+
+export interface StockSearchResult {
+  query: string;
+  total: number;
+  items: StockSearchItem[];
 }

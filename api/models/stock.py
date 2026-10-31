@@ -227,3 +227,19 @@ class FullIndicatorResponse(BaseModel):
     ts_code: str
     trade_date: str = ""
     data: dict[str, Any] = {}
+
+
+# ── 股票搜索（联想下拉）──
+
+class StockSearchItem(BaseModel):
+    ts_code: str
+    name: str = ""
+    industry: str = ""
+    market: str = ""
+    match_type: str = ""
+
+
+class StockSearchResponse(BaseModel):
+    query: str
+    total: int = 0
+    items: list[StockSearchItem] = []

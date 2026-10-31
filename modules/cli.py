@@ -90,9 +90,16 @@ def build_parser() -> argparse.ArgumentParser:
     # ── screen ──
     p_screen = subparsers.add_parser("screen", help="批量选股（11 种策略）")
     p_screen.add_argument("--strategy", choices=STRATEGY_CHOICES, default="B1", help="筛选策略（11 种别名）")
-    p_screen.add_argument("--limit", type=int, default=20, help="输出数量（0=全市场 500 上限）")
+    p_screen.add_argument("--limit", type=int, default=20, help="输出数量（0=全市场，约 5200 只）")
     p_screen.add_argument("--no-parallel", action="store_true", help="禁用多进程并行")
     p_screen.add_argument("--json", action="store_true", help="JSON输出")
+    p_screen.add_argument(
+        "--param",
+        action="append",
+        metavar="KEY=VALUE",
+        help="覆盖策略参数（可重复），如 --param j_threshold=20",
+    )
+    p_screen.add_argument("--top", type=int, default=0, help="返回条数上限（0=全部命中，默认 0）")
 
     # ── score ──
     p_score = subparsers.add_parser("score", help="单只股票综合评分")
@@ -123,6 +130,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_sync_run = p_sync_sub.add_parser("sync", help="同步日线 K 线（+ 可选指标缓存）")
     p_sync_run.add_argument("ts_code", nargs="?", help="股票代码（不传 = 全市场批量）")
     p_sync_run.add_argument("--days", type=int, default=730, help="同步天数")
+    p_sync_run.add_argument(
+        "--incremental",
+        action="store_true",
+        help="严格增量：每只股票从其最后一根 K 线的下一天续拉（默认按 --days 窗口整段重拉）",
+    )
     p_sync_run.add_argument("--indicators", action="store_true", help="批量同步完成后计算并缓存技术指标")
     p_sync_run.add_argument(
         "--skip-indicators", action="store_true", help="跳过指标缓存（单只默认同步，批量需 --indicators）"

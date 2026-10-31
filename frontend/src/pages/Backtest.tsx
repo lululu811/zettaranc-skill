@@ -81,12 +81,12 @@ export default function Backtest() {
           {/* Summary Cards */}
           <div className="grid grid-cols-6 gap-3">
             {[
-              { label: '总收益', value: formatPct(result.summary.total_return), color: result.summary.total_return >= 0 ? '#ef4444' : '#22c55e' },
-              { label: '胜率', value: `${(result.summary.win_rate * 100).toFixed(1)}%`, color: '#f59e0b' },
-              { label: '盈亏比', value: formatNumber(result.summary.profit_factor), color: '#3b82f6' },
-              { label: '最大回撤', value: formatPct(-Math.abs(result.summary.max_drawdown)), color: '#ef4444' },
-              { label: '夏普比率', value: formatNumber(result.summary.sharpe_ratio), color: '#a855f7' },
-              { label: '交易次数', value: String(result.summary.total_trades), color: '#06b6d4' },
+              { label: '总收益', value: formatPct(result.summary.total_return), color: result.summary.total_return >= 0 ? '#e74c3c' : '#2ecc71' },
+              { label: '胜率', value: `${(result.summary.win_rate * 100).toFixed(1)}%`, color: '#d68910' },
+              { label: '盈亏比', value: formatNumber(result.summary.profit_factor), color: '#2980b9' },
+              { label: '最大回撤', value: formatPct(-Math.abs(result.summary.max_drawdown)), color: '#e74c3c' },
+              { label: '夏普比率', value: formatNumber(result.summary.sharpe_ratio), color: '#8e44ad' },
+              { label: '交易次数', value: String(result.summary.total_trades), color: '#16a085' },
             ].map((item) => (
               <Card key={item.label}>
                 <div className="text-center">

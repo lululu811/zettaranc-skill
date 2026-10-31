@@ -93,11 +93,9 @@ def get_kline_chart_data(ts_code: str, days: int = 120) -> dict[str, Any]:
     """获取 K 线图表数据（ECharts 列式格式）"""
     from modules.indicators.data_layer import get_kline_data
     from modules.indicators.core import (
-        calculate_ma,
-        calculate_bbi,
-        calculate_bollinger,
-        calculate_kdj,
-        calculate_macd,
+        calculate_ma, calculate_ma_series, calculate_ema_series,
+        calculate_bbi, calculate_bollinger,
+        calculate_kdj, calculate_macd,
     )
     from modules.indicators.price_patterns import (
         calculate_zg_white,
@@ -196,22 +194,25 @@ def get_kline_chart_data(ts_code: str, days: int = 120) -> dict[str, Any]:
     overlays["boll_lower"] = boll_lower
 
     # 白线 / 黄线（双线战法）
+    # 注意：calculate_zg_white / calculate_dg_yellow 的签名是 (klines) 而非 (klines, index)，
+    # 历史上这里误传了 index 导致每天抛 TypeError 被吞掉 → 序列全为 None、图上从不出线。
+    # 现改为整段序列计算（O(n)），与逐日切片结果一致。
     try:
-        white_line = []
-        yellow_line = []
-        for i in range(len(all_klines) - days, len(all_klines)):
-            try:
-                white_val = calculate_zg_white(all_klines, i)
-                yellow_val = calculate_dg_yellow(all_klines, i)
-                white_line.append(round(white_val, 2) if white_val else None)
-                yellow_line.append(round(yellow_val, 2) if yellow_val else None)
-            except Exception:
-                white_line.append(None)
-                yellow_line.append(None)
-        overlays["white_line"] = white_line
-        overlays["yellow_line"] = yellow_line
-    except Exception:
-        logger.warning("白线/黄线计算失败: %s", ts_code, exc_info=True)
+        closes_all = [k.close for k in all_klines]
+        white_series = calculate_ema_series(calculate_ema_series(closes_all, 10), 10)
+        ma14 = calculate_ma_series(closes_all, 14)
+        ma28 = calculate_ma_series(closes_all, 28)
+        ma57 = calculate_ma_series(closes_all, 57)
+        ma114 = calculate_ma_series(closes_all, 114)
+        yellow_series: list[float | None] = []
+        for a, b, c, d in zip(ma14, ma28, ma57, ma114):
+            yellow_series.append((a + b + c + d) / 4 if None not in (a, b, c, d) else None)
+
+        start = max(0, len(all_klines) - days)
+        overlays["white_line"] = [round(v, 2) if v else None for v in white_series[start:]]
+        overlays["yellow_line"] = [round(v, 2) if v else None for v in yellow_series[start:]]
+    except (IndexError, TypeError, ValueError, ZeroDivisionError) as e:
+        logger.warning("白线/黄线计算失败: %s: %s", ts_code, e)
         overlays["white_line"] = [None] * days
         overlays["yellow_line"] = [None] * days
 
@@ -542,3 +543,138 @@ def _build_diagnosis(diagnosis) -> dict:
         "risk_level": getattr(diagnosis, "risk_level", "UNKNOWN"),
         "recommendation": getattr(diagnosis, "recommendation", ""),
     }
+# ── 股票搜索（代码 / 中文名称 / 拼音）──
+
+# 索引缓存：首次搜索时懒构建，TTL 到期后自动重建
+_SEARCH_INDEX: list[dict] | None = None
+_SEARCH_INDEX_TS: float = 0.0
+_SEARCH_INDEX_TTL = 30 * 60  # 30 分钟
+_SEARCH_PY_ENABLED: bool | None = None
+
+
+def _pinyin_fields(name: str) -> tuple[str, str]:
+    """返回 (全拼, 首字母)；pypinyin 不可用时返回空串"""
+    global _SEARCH_PY_ENABLED
+    if _SEARCH_PY_ENABLED is False:
+        return "", ""
+    try:
+        from pypinyin import Style, lazy_pinyin
+
+        syllables = lazy_pinyin(name, style=Style.NORMAL)
+        full = "".join(syllables).lower()
+        initials = "".join(s[0] for s in syllables if s).lower()
+        _SEARCH_PY_ENABLED = True
+        return full, initials
+    except Exception as e:
+        _SEARCH_PY_ENABLED = False
+        logger.warning("pypinyin 不可用，股票搜索降级为「代码 + 中文名称」匹配: %s", e)
+        return "", ""
+
+
+def _build_search_index() -> list[dict]:
+    """从 stock_basic 构建搜索索引（代码 / 名称 / 全拼 / 首字母）"""
+    from modules.database import get_connection
+
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT ts_code, name, industry, market FROM stock_basic WHERE name IS NOT NULL AND name != ''"
+        ).fetchall()
+
+    index: list[dict] = []
+    for row in rows:
+        ts_code = row["ts_code"] if "ts_code" in row.keys() else row[0]
+        name = row["name"] if "name" in row.keys() else row[1]
+        industry = row["industry"] if "industry" in row.keys() else row[2]
+        market = row["market"] if "market" in row.keys() else row[3]
+        full, initials = _pinyin_fields(name or "")
+        index.append(
+            {
+                "ts_code": ts_code,
+                "name": name or "",
+                "industry": industry or "",
+                "market": market or "",
+                "code6": (ts_code or "").split(".")[0],
+                "full": full,
+                "initials": initials,
+            }
+        )
+    return index
+
+
+def _get_search_index() -> list[dict]:
+    global _SEARCH_INDEX, _SEARCH_INDEX_TS
+    import time
+
+    now = time.time()
+    if _SEARCH_INDEX is None or now - _SEARCH_INDEX_TS > _SEARCH_INDEX_TTL:
+        _SEARCH_INDEX = _build_search_index()
+        _SEARCH_INDEX_TS = now
+        logger.info("股票搜索索引已构建: %d 条", len(_SEARCH_INDEX))
+    return _SEARCH_INDEX
+
+
+def invalidate_search_index() -> None:
+    """外部（如 sync_stock_basic 之后）主动失效索引"""
+    global _SEARCH_INDEX
+    _SEARCH_INDEX = None
+
+
+def search_stocks(q: str, limit: int = 10) -> list[dict]:
+    """按关键词搜索股票
+
+    匹配优先级：代码前缀 > 名称前缀 > 拼音首字母前缀 > 全拼前缀 > 名称子串 > 全拼子串
+    """
+    keyword = (q or "").strip().lower()
+    if not keyword:
+        return []
+
+    limit = max(1, min(int(limit), 50))
+    index = _get_search_index()
+
+    buckets: dict[str, list[dict]] = {
+        "code_prefix": [],
+        "name_prefix": [],
+        "initials_prefix": [],
+        "full_prefix": [],
+        "name_substr": [],
+        "full_substr": [],
+    }
+
+    for item in index:
+        code6 = item["code6"]
+        name = item["name"].lower()
+        full = item["full"]
+        initials = item["initials"]
+
+        if code6.startswith(keyword) or item["ts_code"].lower().startswith(keyword):
+            buckets["code_prefix"].append(item)
+        elif name.startswith(keyword):
+            buckets["name_prefix"].append(item)
+        elif initials and initials.startswith(keyword):
+            buckets["initials_prefix"].append(item)
+        elif full and full.startswith(keyword):
+            buckets["full_prefix"].append(item)
+        elif keyword in name:
+            buckets["name_substr"].append(item)
+        elif full and keyword in full:
+            buckets["full_substr"].append(item)
+
+    results: list[dict] = []
+    for match_type, items in buckets.items():
+        items.sort(key=lambda x: x["ts_code"])
+        for item in items:
+            if len(results) >= limit:
+                break
+            results.append(
+                {
+                    "ts_code": item["ts_code"],
+                    "name": item["name"],
+                    "industry": item["industry"],
+                    "market": item["market"],
+                    "match_type": match_type,
+                }
+            )
+        if len(results) >= limit:
+            break
+
+    return results

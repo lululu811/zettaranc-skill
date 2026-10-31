@@ -2,7 +2,13 @@
 Tushare 中转 API 客户端
 支持 Tushare SDK 方式调用中转 API
 
-中转服务文档: http://tsy.xiaodefa.cn/docs.html
+关于 TUSHARE_API_URL：
+    该值是「基础路径」，SDK 会自动追加 /{接口名}（见 tushare/pro/client.py:42），
+    最终请求为 {TUSHARE_API_URL}/daily 这样的形式。
+
+    因此必须填路径式中转服务，例如 https://api.waditu.com/dataapi；
+    不能填 https://api.tushare.pro（官方端点只在根路径接受 POST，
+    被追加路径后返回 404）。
 """
 
 import os
@@ -80,7 +86,9 @@ class TushareClient:
                 raise ZettarancError(
                     ErrorCode.CONFIG_MISSING,
                     "JNB 模式下未设置 TUSHARE_API_URL，请在 .env 中配置中转 API 地址。\n"
-                    "示例：TUSHARE_API_URL=https://tt.xiaodefa.cn",
+                    "注意：该地址是「基础路径」，SDK 会自动追加 /{接口名}，需填路径式中转服务。\n"
+                    "示例：TUSHARE_API_URL=https://api.waditu.com/dataapi\n"
+                    "不能填 https://api.tushare.pro（官方端点只接受根路径 POST，会被追加成 404）",
                 )
 
             # 初始化 Tushare SDK

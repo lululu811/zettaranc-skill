@@ -181,13 +181,14 @@ cp .env.example .env
 
 ```ini
 DATA_MODE=jnb
-TUSHARE_TOKEN=你的56位token
-TUSHARE_API_URL=中转API地址
+TUSHARE_TOKEN=你的token
+TUSHARE_API_URL=https://api.waditu.com/dataapi
 ```
 
 > [!NOTE]
 > - **数据模式**：`DATA_MODE=jnb` 配置 Tushare 数据最全；未配置时自动走 a-stock-data 免费源；`DATA_MODE=websearch` 可留空。
 > - **Token 获取**：前往 [Tushare 官网](https://tushare.pro/user/token) 注册。
+> - **`TUSHARE_API_URL` 是基础路径**，SDK 会自动追加 `/{接口名}`（如 `/daily`）。推荐 `https://api.waditu.com/dataapi`（官方运营中转，路径式，接受官方 token）；**不能填** `https://api.tushare.pro`——官方端点只接受根路径 POST，被追加路径后返回 404。
 > - **可选加速**：配置 `HITHINK_FINANCE_API_KEY`（同花顺官方）或 `INDEVS_API_KEY` 会自动提升数据源优先级。
 > - **LLM 配置**：可选。配置 `LLM_API_KEY` 后启用 LLM 对话及点评；未配置则仅输出命令行分析。
 > - **完整环境变量说明**：[docs/CONFIG_GUIDE.md](docs/CONFIG_GUIDE.md)
@@ -217,6 +218,34 @@ zt monitor --json                             # 自选股主动监控
 zt track --status active --json               # 跟踪池管理
 ```
 
+### 数据同步
+
+```bash
+zt sync init                                # 初始化数据库（只需一次）
+zt sync status                              # 查看同步状态
+
+# 首次建库 / 补历史（非增量）
+zt sync sync --days 730 --indicators
+
+# 日常盘后（推荐）：严格增量
+zt sync sync --incremental --days 30 --indicators
+#   K 线：每只股票从自己最后一根 K 线的下一天续拉，不重拉历史
+#   --days 只对"库里无数据"的新股兜底，有数据的股票忽略它
+#   指标：只重算本次有新 K 线的股票，且只写回新增交易日（带 250 根预热，不覆盖旧值）
+
+# 单只补数
+zt sync sync 600487.SH                      # 严格增量 + 默认同步指标缓存
+zt sync sync 600487.SH --days 120           # --days 仅作用于指标缓存窗口
+zt sync sync 600487.SH --skip-indicators
+```
+
+| 模式 | K 线起点 | 指标缓存 |
+|---|---|---|
+| 默认（不带 `--incremental`） | `今天 - days`，落后超 2 天的股票整段重拉 | 全量重算（`--indicators`） |
+| `--incremental` | 每只股票自己最后一根 K 线的下一天 | 只写回新增交易日 |
+
+增量不重算旧行。若怀疑历史数据有误（如之前用小 `--days` 反复刷过指标），先跑一次非增量的 `zt sync sync --days 730 --indicators` 修正，之后再走增量。
+
 ### 选股策略别名
 
 `--strategy` 支持 16 个别名（13 个唯一条件，`牵牛/牛绳`、`沙漏/沙漏评分` 为同义）：
@@ -234,6 +263,15 @@ pip install fastapi uvicorn pydantic-settings   # API 依赖不在 requirements.
 zt-web                                         # 后端 http://localhost:8000
 cd frontend && npm install && npm run dev      # 前端 http://localhost:5173，/api 代理到 8000
 ```
+
+> **两套前端并存**：`frontend/` 为「浅色玻璃拟态」新版；`frontend-legacy/` 是改版前的深色金融终端版（端口 5174，`/api` 同样代理到 8000），可并排对照切换。
+>
+> ```bash
+> cd frontend-legacy && npm install && npm run dev   # http://localhost:5174
+> ```
+>
+> 已知问题：`api` 包未包含在 editable 安装中（`pyproject.toml` 的 `include = ["modules*"]`），`zt-web` 会报 `ModuleNotFoundError: No module named 'api'`；可临时用
+> `PYTHONPATH=. python -c "from api.main import start_web; start_web()"` 启动后端。
 
 ---
 

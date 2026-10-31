@@ -13,6 +13,7 @@ from .core import (
     get_data_mode,
     get_db_connection,
     calculate_ma,
+    calculate_ma_series,
     calculate_ema,
     calculate_sma_td,
     calculate_slope,
@@ -109,6 +110,7 @@ __all__ = [
     "get_db_connection",
     # core math
     "calculate_ma",
+    "calculate_ma_series",
     "calculate_ema",
     "calculate_sma_td",
     "calculate_slope",

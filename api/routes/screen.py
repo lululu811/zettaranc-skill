@@ -23,6 +23,8 @@ def run_screen(req: ScreenRequest):
             strategy=req.strategy,
             limit=req.limit,
             use_parallel=req.use_parallel,
+            params=req.params,
+            top=req.top,
         )
     except Exception as e:
         raise_api_error(e, prefix="筛选失败")

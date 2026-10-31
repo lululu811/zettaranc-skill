@@ -27,7 +27,7 @@ export default function SignalTimeline({ signals }: Props) {
         const daySignals = groupedSignals[date];
         const hasCritical = daySignals.some((s) => s.priority === 'CRITICAL');
         const hasOpportunity = daySignals.some((s) => s.priority === 'OPPORTUNITY');
-        const borderColor = hasCritical ? '#ef4444' : hasOpportunity ? '#22c55e' : '#64748b';
+        const borderColor = hasCritical ? '#c0392b' : hasOpportunity ? '#1e8449' : '#7f8c8d';
 
         return (
           <div key={date} className="rounded-lg bg-bg-hover/20 border-l-[3px] overflow-hidden" style={{ borderLeftColor: borderColor }}>
@@ -42,8 +42,8 @@ export default function SignalTimeline({ signals }: Props) {
             {/* 信号列表 */}
             <div className="p-3 space-y-2.5">
               {daySignals.map((sig, i) => {
-                const color = SIGNAL_COLORS[sig.strategy] || SIGNAL_COLORS[sig.action] || '#64748b';
-                const priorityColor = sig.priority === 'CRITICAL' ? '#ef4444' : sig.priority === 'OPPORTUNITY' ? '#22c55e' : '#64748b';
+                const color = SIGNAL_COLORS[sig.strategy] || SIGNAL_COLORS[sig.action] || '#7f8c8d';
+                const priorityColor = sig.priority === 'CRITICAL' ? '#c0392b' : sig.priority === 'OPPORTUNITY' ? '#1e8449' : '#7f8c8d';
 
                 return (
                   <div key={i} className="flex items-start gap-3">

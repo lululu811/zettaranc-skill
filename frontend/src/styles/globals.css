@@ -1,58 +1,203 @@
 @import "tailwindcss";
 
-/* Z哥量化 — 深色金融终端主题 */
+/* Z哥量化 — 浅色玻璃拟态主题（对标 dyqvideo.com/stock） */
 @theme {
-  --color-bg-primary: #09090b; /* Zinc 950 */
-  --color-bg-secondary: rgba(24, 24, 27, 0.7); /* Zinc 900 transparent */
-  --color-bg-card: rgba(24, 24, 27, 0.5);
-  --color-bg-hover: rgba(39, 39, 42, 0.8);
-  --color-border: rgba(63, 63, 70, 0.5);
-  --color-text-primary: #f8fafc;
-  --color-text-secondary: #94a3b8;
-  --color-text-muted: #64748b;
-  --color-accent-red: #f43f5e; /* Rose 500 */
-  --color-accent-green: #10b981; /* Emerald 500 */
-  --color-accent-gold: #f59e0b; /* Amber 500 */
-  --color-accent-blue: #3b82f6; /* Blue 500 */
-  --color-accent-purple: #8b5cf6; /* Violet 500 */
-  --color-accent-cyan: #06b6d4; /* Cyan 500 */
+  /* 背景：浅色渐变底 + 白色半透明玻璃层 */
+  --color-bg-primary: #eef2f9;
+  --color-bg-secondary: rgba(255, 255, 255, 0.55);
+  --color-bg-card: rgba(255, 255, 255, 0.6);
+  --color-bg-hover: rgba(255, 255, 255, 0.85);
+
+  /* 描边：浅底上的低对比细线 */
+  --color-border: rgba(17, 24, 39, 0.12);
+
+  /* 文字：浅底深字 */
+  --color-text-primary: #333333;
+  --color-text-secondary: #666666;
+  --color-text-muted: #999999;
+
+  /* 功能色：中式红涨绿跌 */
+  --color-accent-red: #e74c3c;
+  --color-accent-green: #2ecc71;
+  --color-accent-gold: #e67e22;
+  --color-accent-blue: #2980b9;
+  --color-accent-purple: #8e44ad;
+  --color-accent-cyan: #16a085;
+
+  /* 品牌渐变（顶栏 / 选中态 / 强调块） */
+  --color-brand-from: #667eea;
+  --color-brand-to: #764ba2;
 }
 
 /* 全局样式 */
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
   margin: 0;
   padding: 0;
   background-color: var(--color-bg-primary);
-  background-image: radial-gradient(ellipse at top right, rgba(30, 58, 138, 0.15), transparent 50%), radial-gradient(ellipse at bottom left, rgba(139, 92, 246, 0.1), transparent 50%);
+  background-image:
+    radial-gradient(ellipse at top right, rgba(102, 126, 234, 0.22), transparent 55%),
+    radial-gradient(ellipse at bottom left, rgba(118, 75, 162, 0.16), transparent 55%);
+  background-attachment: fixed;
   color: var(--color-text-primary);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: "PingFang SC", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 .font-mono {
-  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Menlo', monospace;
+  font-family: "JetBrains Mono", "SF Mono", "Fira Code", "Menlo", monospace;
+  font-variant-numeric: tabular-nums;
 }
 
-/* 滚动条 */
+/* 玻璃拟态卡片：全站统一的容器观感 */
+.glass-card {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+/* 悬浮面板（下拉/浮层）：比卡片更实，保证叠在渐变背景上文字清晰 */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.14);
+}
+
+.glass-card-hover {
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.glass-card-hover:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.12);
+}
+
+/* 侧栏 / 顶栏磨砂玻璃 */
+.glass-bar {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-right: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+/* 品牌渐变文字 / 背景 */
+.brand-gradient-text {
+  background: linear-gradient(135deg, var(--color-brand-from), var(--color-brand-to));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.brand-gradient-bg {
+  background: linear-gradient(135deg, var(--color-brand-from), var(--color-brand-to));
+}
+
+/* 数据表格：高信息密度、文本左对齐 / 数字右对齐 */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  table-layout: fixed;
+}
+
+.data-table thead tr {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+.data-table th {
+  padding: 12px 8px;
+  text-align: left;
+  color: #333;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 12px 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.data-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table tbody tr:hover {
+  background: rgba(102, 126, 234, 0.07);
+}
+
+/* 统计卡片：小标签 + 大数值 */
+.stat-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.stat-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--color-text-primary);
+}
+
+/* 下拉面板淡入 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 滚动条（浅色） */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
+
 ::-webkit-scrollbar-track {
-  background: var(--color-bg-secondary);
+  background: rgba(0, 0, 0, 0.04);
 }
+
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 4px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-muted);
+  background: rgba(0, 0, 0, 0.3);
 }
 
 /* 涨跌颜色 */
-.text-up { color: var(--color-accent-red); }
-.text-down { color: var(--color-accent-green); }
-.bg-up { background-color: var(--color-accent-red); }
-.bg-down { background-color: var(--color-accent-green); }
+.text-up {
+  color: var(--color-accent-red);
+}
+
+.text-down {
+  color: var(--color-accent-green);
+}
+
+.bg-up {
+  background-color: var(--color-accent-red);
+}
+
+.bg-down {
+  background-color: var(--color-accent-green);
+}

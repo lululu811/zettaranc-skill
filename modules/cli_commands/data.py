@@ -41,13 +41,16 @@ def cmd_sync(args) -> None:
                 syncer.sync_indicator_cache(args.ts_code, days=args.days)
             print(f"同步完成：{args.ts_code} K 线 {kline_count} 行")
         else:
-            stock_count = syncer.sync_stock_basic()
-            kline_counts = syncer.sync_all_daily_kline(days=args.days)
-            kline_count = sum(kline_counts.values()) if isinstance(kline_counts, dict) else 0
+            syncer.sync_stock_basic()
+            incremental = getattr(args, "incremental", False)
+            results = syncer.sync_all_daily_kline(days=args.days, incremental=incremental)
             if args.indicators and not args.skip_indicators:
-                print("正在批量同步指标缓存...")
-                syncer.sync_all_indicators()
-            print(f"同步完成：股票 {stock_count} 只，K 线 {kline_count} 行")
+                # 只重算本次真正有新 K 线的股票，避免全市场重算指标
+                updated = [code for code, count in results.items() if count > 0]
+                if updated:
+                    print(f"正在批量同步指标缓存（{len(updated)} 只）...")
+                    syncer.sync_all_indicators(ts_codes=updated, incremental=incremental)
+        print("同步完成")
         print(syncer.get_sync_status())
 
     elif action == "stk-factor":

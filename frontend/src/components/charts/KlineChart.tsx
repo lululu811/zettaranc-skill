@@ -9,7 +9,34 @@ interface Props {
   height?: number;
 }
 
-export default function KlineChart({ data, height = 820 }: Props) {
+/* ── 浅色主题配色（中式红涨绿跌）── */
+const UP = '#e74c3c';
+const DOWN = '#2ecc71';
+const AXIS = '#dddddd';
+const LABEL = '#666666';
+const SPLIT = 'rgba(0,0,0,0.08)';
+const WHITE_LINE = '#2d3436'; // 白线在浅底上改用深灰蓝
+const YELLOW_LINE = '#f39c12';
+const BBI_LINE = '#9b59b6';
+const BOLL_LINE = '#95a5a6';
+
+type BgMode = 'none' | 'kirin' | 'waves';
+type SubIndicator = 'KDJ' | 'MACD' | '砖形' | '呼吸波';
+
+const KIRIN_COLORS: Record<string, string> = {
+  吸筹: 'rgba(52, 152, 219, 0.07)',
+  拉升: 'rgba(231, 76, 60, 0.07)',
+  派发: 'rgba(255, 159, 67, 0.09)',
+  回落: 'rgba(46, 204, 113, 0.07)',
+};
+
+const WAVE_COLORS: Record<string, string> = {
+  建仓波: 'rgba(155, 89, 182, 0.07)',
+  拉升波: 'rgba(231, 76, 60, 0.07)',
+  冲刺波: 'rgba(192, 57, 43, 0.10)',
+};
+
+export default function KlineChart({ data, height = 936 }: Props) {
   const {
     dates,
     ohlc,
@@ -25,12 +52,12 @@ export default function KlineChart({ data, height = 820 }: Props) {
     breathing_wave,
   } = data;
 
-  const [bgMode, setBgMode] = React.useState<'none' | 'kirin' | 'waves'>('kirin');
+  const [bgMode, setBgMode] = React.useState<BgMode>('kirin');
+  const [subIndicator, setSubIndicator] = React.useState<SubIndicator>('KDJ');
+  // 图例点击的显示/隐藏状态：ECharts 默认支持点击切换，但 notMerge 重绘会重置，
+  // 这里把选择结果存起来并回写 legend.selected，保证切换背景/副图后仍保持。
+  const [legendSelected, setLegendSelected] = React.useState<Record<string, boolean> | null>(null);
 
-  const upColor = '#ef4444';
-  const downColor = '#22c55e';
-
-  // 取每个 series 的最后一个非 null 值，用作右侧点位标签
   const lastValid = (arr: (number | null)[]): number | null => {
     for (let i = arr.length - 1; i >= 0; i--) {
       if (arr[i] !== null && arr[i] !== undefined) return arr[i];
@@ -43,50 +70,20 @@ export default function KlineChart({ data, height = 820 }: Props) {
   const lastBbi = lastValid(overlays.bbi);
   const lastDate = dates[dates.length - 1];
 
-  // 构建 markPoint 数据
-  const buyMarkers = signal_markers
-    .filter((m) => m.action === 'BUY')
-    .map((m) => ({
-      name: m.type,
-      coord: [m.date, m.price],
-      value: m.type,
-      itemStyle: { color: SIGNAL_COLORS[m.type] || SIGNAL_COLORS.BUY },
-    }));
+  const makeMarkers = (action: 'BUY' | 'SELL') =>
+    signal_markers
+      .filter((m) => m.action === action)
+      .map((m) => ({
+        name: m.type,
+        coord: [m.date, m.price],
+        value: m.type,
+        itemStyle: { color: SIGNAL_COLORS[m.type] || SIGNAL_COLORS[action === 'BUY' ? 'BUY' : 'SELL'] },
+      }));
 
-  const sellMarkers = signal_markers
-    .filter((m) => m.action === 'SELL')
-    .map((m) => ({
-      name: m.type,
-      coord: [m.date, m.price],
-      value: m.type,
-      itemStyle: { color: SIGNAL_COLORS[m.type] || SIGNAL_COLORS.SELL },
-    }));
-
-  // ── 背景色块区间压缩逻辑 ──
-  const kirinColors: Record<string, string> = {
-    '吸筹': 'rgba(59, 130, 246, 0.15)',  // 淡蓝
-    '拉升': 'rgba(239, 68, 68, 0.15)',  // 淡红
-    '派发': 'rgba(245, 158, 11, 0.15)',  // 淡黄
-    '回落': 'rgba(34, 197, 94, 0.12)',  // 淡绿
-  };
-
-  const waveColors: Record<string, string> = {
-    '建仓波': 'rgba(139, 92, 246, 0.15)', // 紫色
-    '拉升波': 'rgba(239, 68, 68, 0.15)', // 红色
-    '冲刺波': 'rgba(244, 63, 94, 0.20)', // 粉红
-  };
-
-  interface MarkAreaItem {
-    name?: string;
-    xAxis?: string;
-    itemStyle?: { color?: string };
-    label?: Record<string, unknown>;
-  }
-
+  /* ── 背景色块（麒麟四阶段 / 主力三波）── */
   const generateMarkArea = (sequence: string[] | undefined, colors: Record<string, string>) => {
-    const areas: Array<[MarkAreaItem, MarkAreaItem]> = [];
     if (!sequence || sequence.length === 0) return undefined;
-
+    const areas: Array<[Record<string, unknown>, Record<string, unknown>]> = [];
     let startIdx = 0;
     let currentVal: string | null = sequence[0];
 
@@ -98,22 +95,18 @@ export default function KlineChart({ data, height = 820 }: Props) {
             {
               name: currentVal,
               xAxis: dates[startIdx],
-              itemStyle: {
-                color: colors[currentVal],
-              },
+              itemStyle: { color: colors[currentVal] },
               label: {
                 show: true,
                 position: 'insideTop',
-                color: '#94a3b8',
-                fontSize: 8,
-                opacity: 0.5,
+                color: '#7f8c8d',
+                fontSize: 9,
+                opacity: 0.75,
                 fontWeight: 'bold',
-                offset: [0, 8],
+                offset: [0, 6],
               },
             },
-            {
-              xAxis: dates[Math.min(i - 1, dates.length - 1)],
-            },
+            { xAxis: dates[Math.min(i - 1, dates.length - 1)] },
           ]);
         }
         startIdx = i;
@@ -125,137 +118,279 @@ export default function KlineChart({ data, height = 820 }: Props) {
 
   const markAreaConfig =
     bgMode === 'kirin'
-      ? generateMarkArea(kirin_sequence, kirinColors)
+      ? generateMarkArea(kirin_sequence, KIRIN_COLORS)
       : bgMode === 'waves'
-      ? generateMarkArea(waves_sequence, waveColors)
-      : undefined;
+        ? generateMarkArea(waves_sequence, WAVE_COLORS)
+        : undefined;
+
+  /* ── 副图（grid 2）可切换指标 ── */
+  const subSeries = (() => {
+    switch (subIndicator) {
+      case 'MACD':
+        return [
+          {
+            name: 'DIF',
+            type: 'line',
+            data: macd.dif,
+            xAxisIndex: 2,
+            yAxisIndex: 2,
+            smooth: true,
+            lineStyle: { width: 1.4, color: YELLOW_LINE },
+            symbol: 'none',
+          },
+          {
+            name: 'DEA',
+            type: 'line',
+            data: macd.dea,
+            xAxisIndex: 2,
+            yAxisIndex: 2,
+            smooth: true,
+            lineStyle: { width: 1.4, color: '#3498db' },
+            symbol: 'none',
+          },
+          {
+            name: 'MACD',
+            type: 'bar',
+            data: macd.hist.map((v) => ({
+              value: v,
+              itemStyle: { color: (v ?? 0) >= 0 ? `${UP}b3` : `${DOWN}b3` },
+            })),
+            xAxisIndex: 2,
+            yAxisIndex: 2,
+            barWidth: '55%',
+          },
+        ];
+      case '砖形':
+        return [
+          {
+            name: '砖形图',
+            type: 'bar',
+            data: (brick.values || []).map((v, i) => {
+              const c = (brick.colors || [])[i];
+              return { value: v, itemStyle: { color: c === 1 ? UP : c === -1 ? DOWN : '#bdc3c7' } };
+            }),
+            xAxisIndex: 2,
+            yAxisIndex: 2,
+            barWidth: '60%',
+          },
+          {
+            name: '砖值',
+            type: 'line',
+            data: brick.values,
+            xAxisIndex: 2,
+            yAxisIndex: 2,
+            smooth: true,
+            lineStyle: { width: 1.6, color: YELLOW_LINE },
+            symbol: 'none',
+          },
+        ];
+      case '呼吸波':
+        return [
+          {
+            name: '主力呼气',
+            type: 'line',
+            data: (breathing_wave || []).map((v) => (v > 0 ? v : 0)),
+            xAxisIndex: 2,
+            yAxisIndex: 2,
+            smooth: true,
+            symbol: 'none',
+            lineStyle: { width: 1.5, color: UP },
+            areaStyle: {
+              color: {
+                type: 'linear',
+                x: 0,
+                y: 0,
+                x2: 0,
+                y2: 1,
+                colorStops: [
+                  { offset: 0, color: 'rgba(231, 76, 60, 0.30)' },
+                  { offset: 1, color: 'rgba(231, 76, 60, 0.02)' },
+                ],
+              },
+            },
+          },
+          {
+            name: '主力吸气',
+            type: 'line',
+            data: (breathing_wave || []).map((v) => (v < 0 ? v : 0)),
+            xAxisIndex: 2,
+            yAxisIndex: 2,
+            smooth: true,
+            symbol: 'none',
+            lineStyle: { width: 1.5, color: DOWN },
+            areaStyle: {
+              color: {
+                type: 'linear',
+                x: 0,
+                y: 0,
+                x2: 0,
+                y2: 1,
+                colorStops: [
+                  { offset: 0, color: 'rgba(46, 204, 113, 0.02)' },
+                  { offset: 1, color: 'rgba(46, 204, 113, 0.30)' },
+                ],
+              },
+            },
+          },
+        ];
+      default:
+        return [
+          {
+            name: 'K',
+            type: 'line',
+            data: kdj.k,
+            xAxisIndex: 2,
+            yAxisIndex: 2,
+            smooth: true,
+            lineStyle: { width: 1.4, color: YELLOW_LINE },
+            symbol: 'none',
+          },
+          {
+            name: 'D',
+            type: 'line',
+            data: kdj.d,
+            xAxisIndex: 2,
+            yAxisIndex: 2,
+            smooth: true,
+            lineStyle: { width: 1.4, color: '#3498db' },
+            symbol: 'none',
+          },
+          {
+            name: 'J',
+            type: 'line',
+            data: kdj.j,
+            xAxisIndex: 2,
+            yAxisIndex: 2,
+            smooth: true,
+            lineStyle: { width: 1.4, color: BBI_LINE },
+            symbol: 'none',
+          },
+        ];
+    }
+  })();
+
+  const subLegend =
+    subIndicator === 'MACD'
+      ? ['DIF', 'DEA', 'MACD']
+      : subIndicator === '砖形'
+        ? ['砖形图', '砖值']
+        : subIndicator === '呼吸波'
+          ? ['主力呼气', '主力吸气']
+          : ['K', 'D', 'J'];
+
+  const priceLabel = (value: number, color: string) => ({
+    symbol: 'roundRect',
+    symbolSize: [46, 18],
+    symbolOffset: [30, 0],
+    data: [
+      {
+        coord: [lastDate, value],
+        value: formatNumber(value),
+        itemStyle: { color: '#ffffff', borderColor: color, borderWidth: 1 },
+        label: { color, fontSize: 10, fontWeight: 'bold' },
+      },
+    ],
+  });
 
   const option = {
     backgroundColor: 'transparent',
     animation: false,
     tooltip: {
       trigger: 'axis',
-      axisPointer: { type: 'cross' },
-      backgroundColor: '#1a2236',
-      borderColor: '#2a3a52',
-      textStyle: { color: '#e2e8f0', fontSize: 11 },
+      axisPointer: { type: 'cross', link: [{ xAxisIndex: 'all' }] },
+      backgroundColor: 'rgba(255,255,255,0.96)',
+      borderColor: AXIS,
+      borderWidth: 1,
+      textStyle: { color: '#333333', fontSize: 12 },
+      extraCssText: 'box-shadow: 0 8px 32px rgba(0,0,0,0.12); border-radius: 12px; padding: 10px 12px;',
+      formatter: (params: Array<{ seriesName: string; dataIndex: number; data: number[] }>) => {
+        const k = params.find((p) => p.seriesName === 'K线');
+        if (!k || !k.data) return '';
+        const [open, close, low, high] = k.data;
+        const idx = k.dataIndex;
+        const pct = pct_chgs[idx];
+        const color = close >= open ? UP : DOWN;
+        const row = (label: string, val: string, cls = '') =>
+          `<div style="display:flex;justify-content:space-between;gap:16px;font-size:12px;${cls}">` +
+          `<span style="color:#888">${label}</span><span>${val}</span></div>`;
+        return (
+          `<div style="font-weight:700;margin-bottom:6px;color:#333">${dates[idx]}</div>` +
+          row('开盘', open.toFixed(2)) +
+          row('收盘', `<span style="color:${color};font-weight:700">${close.toFixed(2)}</span>`) +
+          row('最高', high.toFixed(2)) +
+          row('最低', low.toFixed(2)) +
+          row('涨跌幅', `<span style="color:${color};font-weight:700">${pct.toFixed(2)}%</span>`) +
+          row('成交量', formatVolumeAxis(volumes[idx]))
+        );
+      },
     },
+    axisPointer: { link: [{ xAxisIndex: 'all' }], label: { backgroundColor: '#667eea' } },
     legend: {
-      data: ['K线', '白线', '黄线', 'BBI', '布林上', '布林中', '布林下', '主力呼气', '主力吸气'],
-      top: 0,
-      textStyle: { color: '#94a3b8', fontSize: 11 },
+      data: ['K线', '白线', '黄线', 'BBI', '布林上', '布林中', '布林下', ...subLegend],
+      selected: legendSelected ?? undefined,
+      top: 4,
+      textStyle: { color: LABEL, fontSize: 11 },
+      inactiveColor: '#c0c4cc',
       itemWidth: 14,
-      itemHeight: 2,
+      itemHeight: 3,
     },
+    // 三区 grid：主图 K线 / 成交量 / 副图指标
+    // 副图指标区较上一版扩大一倍（13% → 20%），主图占比同步放大以拉长蜡烛
     grid: [
-      { left: 60, right: 70, top: 30, height: '30%' },
-      { left: 60, right: 20, top: '35%', height: '9%' },
-      { left: 60, right: 20, top: '47%', height: '11%' },
-      { left: 60, right: 20, top: '60%', height: '11%' },
-      { left: 60, right: 20, top: '73%', height: '11%' },
-      { left: 60, right: 20, top: '86%', height: '9%' },
+      { left: '7%', right: '5%', top: '5%', height: '47%' },
+      { left: '7%', right: '5%', top: '55%', height: '14%' },
+      { left: '7%', right: '5%', top: '71%', height: '20%' },
     ],
-    xAxis: [
-      {
-        type: 'category',
-        data: dates,
-        gridIndex: 0,
-        axisLine: { lineStyle: { color: '#2a3a52' } },
-        axisLabel: { color: '#64748b', fontSize: 10 },
-        splitLine: { show: false },
-      },
-      {
-        type: 'category',
-        data: dates,
-        gridIndex: 1,
-        axisLine: { lineStyle: { color: '#2a3a52' } },
-        axisLabel: { show: false },
-        splitLine: { show: false },
-      },
-      {
-        type: 'category',
-        data: dates,
-        gridIndex: 2,
-        axisLine: { lineStyle: { color: '#2a3a52' } },
-        axisLabel: { show: false },
-        splitLine: { show: false },
-      },
-      {
-        type: 'category',
-        data: dates,
-        gridIndex: 3,
-        axisLine: { lineStyle: { color: '#2a3a52' } },
-        axisLabel: { show: false },
-        splitLine: { show: false },
-      },
-      {
-        type: 'category',
-        data: dates,
-        gridIndex: 4,
-        axisLine: { lineStyle: { color: '#2a3a52' } },
-        axisLabel: { show: false },
-        splitLine: { show: false },
-      },
-      {
-        type: 'category',
-        data: dates,
-        gridIndex: 5,
-        axisLine: { lineStyle: { color: '#2a3a52' } },
-        axisLabel: { show: false },
-        splitLine: { show: false },
-      },
-    ],
+    xAxis: [0, 1, 2].map((i) => ({
+      type: 'category',
+      data: dates,
+      gridIndex: i,
+      boundaryGap: i === 0,
+      axisLine: { lineStyle: { color: AXIS } },
+      axisTick: { show: false },
+      axisLabel: { show: i === 2, color: LABEL, fontSize: 10 },
+      splitLine: { show: false },
+      axisPointer: { label: { show: i === 2 } },
+    })),
     yAxis: [
       {
         scale: true,
         gridIndex: 0,
-        splitLine: { lineStyle: { color: '#1e293b' } },
-        axisLabel: { color: '#64748b', fontSize: 10 },
-        axisLine: { lineStyle: { color: '#2a3a52' } },
+        splitLine: { lineStyle: { color: SPLIT } },
+        axisLabel: { color: LABEL, fontSize: 10 },
+        axisLine: { show: false },
       },
       {
         scale: true,
         gridIndex: 1,
+        splitNumber: 2,
         splitLine: { show: false },
-        axisLabel: {
-          color: '#64748b',
-          fontSize: 10,
-          formatter: (v: number) => formatVolumeAxis(v),
-        },
-        axisLine: { lineStyle: { color: '#2a3a52' } },
+        axisLabel: { color: LABEL, fontSize: 10, formatter: (v: number) => formatVolumeAxis(v) },
+        axisLine: { show: false },
+        name: '成交量',
+        nameTextStyle: { color: '#999', fontSize: 10, align: 'left' },
       },
       {
         scale: true,
         gridIndex: 2,
-        splitLine: { lineStyle: { color: '#1e293b' } },
-        axisLabel: { color: '#64748b', fontSize: 10 },
-        axisLine: { lineStyle: { color: '#2a3a52' } },
-      },
-      {
-        scale: true,
-        gridIndex: 3,
-        splitLine: { lineStyle: { color: '#1e293b' } },
-        axisLabel: { color: '#64748b', fontSize: 10 },
-        axisLine: { lineStyle: { color: '#2a3a52' } },
-      },
-      {
-        scale: true,
-        gridIndex: 4,
-        splitLine: { lineStyle: { color: '#1e293b' } },
-        axisLabel: { color: '#64748b', fontSize: 10 },
-        axisLine: { lineStyle: { color: '#2a3a52' } },
-      },
-      {
-        scale: true,
-        gridIndex: 5,
-        splitLine: { lineStyle: { color: '#1e293b' } },
-        axisLabel: { color: '#64748b', fontSize: 10 },
-        axisLine: { lineStyle: { color: '#2a3a52' } },
+        splitNumber: 2,
+        splitLine: { lineStyle: { color: SPLIT } },
+        axisLabel: { color: LABEL, fontSize: 10 },
+        axisLine: { show: false },
       },
     ],
     dataZoom: [
-      { type: 'inside', xAxisIndex: [0, 1, 2, 3, 4, 5], start: 60, end: 100 },
-      { type: 'slider', xAxisIndex: [0, 1, 2, 3, 4, 5], bottom: 5, height: 15, borderColor: '#2a3a52', fillerColor: 'rgba(245,158,11,0.1)', textStyle: { color: '#64748b' } },
+      { type: 'inside', xAxisIndex: [0, 1, 2], start: 60, end: 100 },
+      {
+        type: 'slider',
+        xAxisIndex: [0, 1, 2],
+        bottom: 4,
+        height: 16,
+        borderColor: AXIS,
+        fillerColor: 'rgba(102,126,234,0.12)',
+        handleStyle: { color: '#667eea' },
+        textStyle: { color: LABEL, fontSize: 10 },
+      },
     ],
     series: [
       {
@@ -264,34 +399,18 @@ export default function KlineChart({ data, height = 820 }: Props) {
         data: ohlc,
         xAxisIndex: 0,
         yAxisIndex: 0,
-        itemStyle: {
-          color: upColor,
-          color0: downColor,
-          borderColor: upColor,
-          borderColor0: downColor,
-        },
+        itemStyle: { color: UP, color0: DOWN, borderColor: UP, borderColor0: DOWN },
         markArea: markAreaConfig,
         markPoint: {
           symbol: 'triangle',
           symbolSize: 10,
           data: [
-            ...buyMarkers.map((m) => ({
-              ...m,
-              symbol: 'triangle',
-              symbolRotate: 0,
-              symbolOffset: [0, 10],
-            })),
-            ...sellMarkers.map((m) => ({
-              ...m,
-              symbol: 'triangle',
-              symbolRotate: 180,
-              symbolOffset: [0, -10],
-            })),
+            ...makeMarkers('BUY').map((m) => ({ ...m, symbolRotate: 0, symbolOffset: [0, 10] })),
+            ...makeMarkers('SELL').map((m) => ({ ...m, symbolRotate: 180, symbolOffset: [0, -10] })),
           ],
           label: { show: false },
         },
       },
-      // 白线 (EMA(EMA(C,10),10)) - 短期动能线
       {
         name: '白线',
         type: 'line',
@@ -299,22 +418,10 @@ export default function KlineChart({ data, height = 820 }: Props) {
         xAxisIndex: 0,
         yAxisIndex: 0,
         smooth: true,
-        lineStyle: { width: 2, color: '#ffffff' },
+        lineStyle: { width: 1.8, color: WHITE_LINE },
         symbol: 'none',
-        // 右侧点位标签
-        markPoint: lastWhite !== null ? {
-          symbol: 'roundRect',
-          symbolSize: [44, 18],
-          symbolOffset: [28, 0],
-          data: [{
-            coord: [lastDate, lastWhite],
-            value: formatNumber(lastWhite),
-            itemStyle: { color: '#0b0f19', borderColor: '#ffffff', borderWidth: 1 },
-            label: { color: '#ffffff', fontSize: 10, fontWeight: 'bold' },
-          }],
-        } : undefined,
+        markPoint: lastWhite !== null ? priceLabel(lastWhite, WHITE_LINE) : undefined,
       },
-      // 黄线 ((MA14+MA28+MA57+MA114)/4) - 多空生命线
       {
         name: '黄线',
         type: 'line',
@@ -322,21 +429,10 @@ export default function KlineChart({ data, height = 820 }: Props) {
         xAxisIndex: 0,
         yAxisIndex: 0,
         smooth: true,
-        lineStyle: { width: 2, color: '#fbbf24' },
+        lineStyle: { width: 1.8, color: YELLOW_LINE },
         symbol: 'none',
-        markPoint: lastYellow !== null ? {
-          symbol: 'roundRect',
-          symbolSize: [44, 18],
-          symbolOffset: [28, 0],
-          data: [{
-            coord: [lastDate, lastYellow],
-            value: formatNumber(lastYellow),
-            itemStyle: { color: '#0b0f19', borderColor: '#fbbf24', borderWidth: 1 },
-            label: { color: '#fbbf24', fontSize: 10, fontWeight: 'bold' },
-          }],
-        } : undefined,
+        markPoint: lastYellow !== null ? priceLabel(lastYellow, YELLOW_LINE) : undefined,
       },
-      // BBI 多空指数
       {
         name: 'BBI',
         type: 'line',
@@ -344,21 +440,10 @@ export default function KlineChart({ data, height = 820 }: Props) {
         xAxisIndex: 0,
         yAxisIndex: 0,
         smooth: true,
-        lineStyle: { width: 1.5, color: '#06b6d4', type: 'dashed' },
+        lineStyle: { width: 1.4, color: BBI_LINE, type: 'dashed' },
         symbol: 'none',
-        markPoint: lastBbi !== null ? {
-          symbol: 'roundRect',
-          symbolSize: [44, 18],
-          symbolOffset: [28, 0],
-          data: [{
-            coord: [lastDate, lastBbi],
-            value: formatNumber(lastBbi),
-            itemStyle: { color: '#0b0f19', borderColor: '#06b6d4', borderWidth: 1 },
-            label: { color: '#06b6d4', fontSize: 10, fontWeight: 'bold' },
-          }],
-        } : undefined,
+        markPoint: lastBbi !== null ? priceLabel(lastBbi, BBI_LINE) : undefined,
       },
-      // 布林上轨
       {
         name: '布林上',
         type: 'line',
@@ -366,10 +451,9 @@ export default function KlineChart({ data, height = 820 }: Props) {
         xAxisIndex: 0,
         yAxisIndex: 0,
         smooth: true,
-        lineStyle: { width: 1, color: '#a855f7', type: 'dotted', opacity: 0.6 },
+        lineStyle: { width: 1, color: BOLL_LINE, type: 'dotted', opacity: 0.8 },
         symbol: 'none',
       },
-      // 布林中轨
       {
         name: '布林中',
         type: 'line',
@@ -377,10 +461,9 @@ export default function KlineChart({ data, height = 820 }: Props) {
         xAxisIndex: 0,
         yAxisIndex: 0,
         smooth: true,
-        lineStyle: { width: 1, color: '#a855f7', type: 'dotted', opacity: 0.6 },
+        lineStyle: { width: 1, color: BOLL_LINE, type: 'dotted', opacity: 0.8 },
         symbol: 'none',
       },
-      // 布林下轨
       {
         name: '布林下',
         type: 'line',
@@ -388,183 +471,59 @@ export default function KlineChart({ data, height = 820 }: Props) {
         xAxisIndex: 0,
         yAxisIndex: 0,
         smooth: true,
-        lineStyle: { width: 1, color: '#a855f7', type: 'dotted', opacity: 0.6 },
+        lineStyle: { width: 1, color: BOLL_LINE, type: 'dotted', opacity: 0.8 },
         symbol: 'none',
       },
-      // 成交量
       {
         name: '成交量',
         type: 'bar',
         data: volumes.map((v, i) => ({
           value: v,
-          itemStyle: { color: pct_chgs[i] >= 0 ? `${upColor}80` : `${downColor}80` },
+          itemStyle: { color: pct_chgs[i] >= 0 ? `${UP}b3` : `${DOWN}b3` },
         })),
         xAxisIndex: 1,
         yAxisIndex: 1,
-      },
-      // KDJ
-      {
-        name: 'K',
-        type: 'line',
-        data: kdj.k,
-        xAxisIndex: 2,
-        yAxisIndex: 2,
-        smooth: true,
-        lineStyle: { width: 1, color: '#f59e0b' },
-        symbol: 'none',
-      },
-      {
-        name: 'D',
-        type: 'line',
-        data: kdj.d,
-        xAxisIndex: 2,
-        yAxisIndex: 2,
-        smooth: true,
-        lineStyle: { width: 1, color: '#3b82f6' },
-        symbol: 'none',
-      },
-      {
-        name: 'J',
-        type: 'line',
-        data: kdj.j,
-        xAxisIndex: 2,
-        yAxisIndex: 2,
-        smooth: true,
-        lineStyle: { width: 1, color: '#a855f7' },
-        symbol: 'none',
-      },
-      // MACD
-      {
-        name: 'DIF',
-        type: 'line',
-        data: macd.dif,
-        xAxisIndex: 3,
-        yAxisIndex: 3,
-        smooth: true,
-        lineStyle: { width: 1, color: '#f59e0b' },
-        symbol: 'none',
-      },
-      {
-        name: 'DEA',
-        type: 'line',
-        data: macd.dea,
-        xAxisIndex: 3,
-        yAxisIndex: 3,
-        smooth: true,
-        lineStyle: { width: 1, color: '#3b82f6' },
-        symbol: 'none',
-      },
-      {
-        name: 'MACD',
-        type: 'bar',
-        data: macd.hist.map((v) => ({
-          value: v,
-          itemStyle: { color: (v ?? 0) >= 0 ? `${upColor}80` : `${downColor}80` },
-        })),
-        xAxisIndex: 3,
-        yAxisIndex: 3,
-      },
-      // 砖型图 - 红绿柱子
-      {
-        name: '砖型图',
-        type: 'bar',
-        data: (brick.values || []).map((v, i) => {
-          const color = (brick.colors || [])[i];
-          const barColor = color === 1 ? upColor : color === -1 ? downColor : '#475569';
-          return {
-            value: v,
-            itemStyle: { color: barColor },
-          };
-        }),
-        xAxisIndex: 4,
-        yAxisIndex: 4,
         barWidth: '60%',
       },
-      // 砖型图 - 折线叠加
-      {
-        name: '砖值',
-        type: 'line',
-        data: brick.values,
-        xAxisIndex: 4,
-        yAxisIndex: 4,
-        smooth: true,
-        lineStyle: { width: 2, color: '#f59e0b' },
-        symbol: 'none',
-      },
-      // 呼气波（主力放量上攻，正分值部分）
-      {
-        name: '主力呼气',
-        type: 'line',
-        data: (breathing_wave || []).map((v) => (v > 0 ? v : 0)),
-        xAxisIndex: 5,
-        yAxisIndex: 5,
-        smooth: true,
-        symbol: 'none',
-        lineStyle: { width: 1.5, color: '#ef4444' },
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(239, 68, 68, 0.35)' },
-              { offset: 1, color: 'rgba(239, 68, 68, 0.02)' },
-            ],
-          },
-        },
-      },
-      // 吸气波（主力缩量调整，负分值部分）
-      {
-        name: '主力吸气',
-        type: 'line',
-        data: (breathing_wave || []).map((v) => (v < 0 ? v : 0)),
-        xAxisIndex: 5,
-        yAxisIndex: 5,
-        smooth: true,
-        symbol: 'none',
-        lineStyle: { width: 1.5, color: '#22c55e' },
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(34, 197, 94, 0.02)' },
-              { offset: 1, color: 'rgba(34, 197, 94, 0.35)' },
-            ],
-          },
-        },
-      },
+      ...subSeries,
     ],
   };
 
+  const segBtn = (active: boolean) =>
+    `px-3 py-1 text-[11px] font-bold rounded-md transition-all ${
+      active
+        ? 'brand-gradient-bg text-white shadow-[0_6px_16px_-8px_rgba(102,126,234,0.9)]'
+        : 'text-text-muted hover:text-brand-from hover:bg-[rgba(102,126,234,0.10)]'
+    }`;
+
   return (
-    <div className="space-y-4">
-      {/* 选项控件 */}
-      <div className="flex items-center justify-between pb-2 border-b border-border/20">
-        <div className="text-xs text-text-muted font-semibold tracking-wider">主力大势背景渲染</div>
-        <div className="flex items-center gap-1.5 bg-bg-secondary p-1 rounded-lg border border-border/30">
-          {(
-            [
-              { key: 'none', label: '无背景' },
-              { key: 'kirin', label: '麒麟四阶段' },
-              { key: 'waves', label: '主力三波理论' },
-            ] as const
-          ).map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setBgMode(t.key)}
-              className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${
-                bgMode === t.key
-                  ? 'bg-accent-gold text-bg-primary shadow-sm shadow-accent-gold/20'
-                  : 'text-text-muted hover:text-text-primary hover:bg-bg-hover'
-              }`}
-            >
-              {t.label}
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-border/60">
+        <div className="flex items-center gap-1.5 bg-white/60 border border-border rounded-lg p-1">
+          {(['none', 'kirin', 'waves'] as const).map((t) => (
+            <button key={t} type="button" onClick={() => setBgMode(t)} className={segBtn(bgMode === t)}>
+              {t === 'none' ? '无背景' : t === 'kirin' ? '麒麟四阶段' : '主力三波'}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5 bg-white/60 border border-border rounded-lg p-1">
+          {(['KDJ', 'MACD', '砖形', '呼吸波'] as const).map((t) => (
+            <button key={t} type="button" onClick={() => setSubIndicator(t)} className={segBtn(subIndicator === t)}>
+              {t}
             </button>
           ))}
         </div>
       </div>
-      <ReactECharts option={option} style={{ height }} notMerge />
+      <ReactECharts
+        option={option}
+        style={{ height }}
+        notMerge
+        onEvents={{
+          legendselectchanged: (params: { selected?: Record<string, boolean> }) => {
+            if (params?.selected) setLegendSelected(params.selected);
+          },
+        }}
+      />
     </div>
   );
 }

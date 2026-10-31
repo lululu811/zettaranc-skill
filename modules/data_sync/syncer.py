@@ -153,6 +153,19 @@ class DataSyncer:
             result = cursor.fetchone()
             return result["last_date"] if result else None
 
+    @staticmethod
+    def _get_kline_last_date(ts_code: str) -> str | None:
+        """取 daily_kline 中该股实际最后一根 K 线的交易日
+
+        与 _get_last_date 的区别：后者读 sync_log（可能因失败/清库而缺失），
+        这里以库里真实数据为准，作为增量续拉的断点。
+        """
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT MAX(trade_date) FROM daily_kline WHERE ts_code = ?", (ts_code,))
+            row = cursor.fetchone()
+            return row[0] if row and row[0] else None
+
     # ==================== 批量同步基础设施 ====================
 
     def _batch_sync(self, task_name: str, sync_fn, ts_codes: list[str]) -> dict[str, int]:
@@ -318,12 +331,25 @@ class DataSyncer:
                         )
                     )
 
+                # UPSERT 而非 REPLACE：REPLACE 会先删整行再插入，
+                # 把 sync_daily_basic 写入的 pe/pb/total_mv/circ_mv 等估值列清成 NULL。
+                # 这里只更新行情列，保留基本面列与 vol_ratio。
                 cursor.executemany(
                     """
-                    INSERT OR REPLACE INTO daily_kline
+                    INSERT INTO daily_kline
                     (ts_code, trade_date, open, high, low, close, vol, amount,
                      pct_chg, vol_ratio, is_limit_up, is_limit_down)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(ts_code, trade_date) DO UPDATE SET
+                        open=excluded.open,
+                        high=excluded.high,
+                        low=excluded.low,
+                        close=excluded.close,
+                        vol=excluded.vol,
+                        amount=excluded.amount,
+                        pct_chg=excluded.pct_chg,
+                        is_limit_up=excluded.is_limit_up,
+                        is_limit_down=excluded.is_limit_down
                 """,
                     records,
                 )
@@ -379,8 +405,24 @@ class DataSyncer:
             results[code] = count
         return results
 
-    def sync_all_daily_kline(self, ts_codes: list[str] | None = None, days: int = 730) -> dict[str, int]:
-        """批量同步日线数据（并发，含智能跳过）"""
+    def sync_all_daily_kline(
+        self,
+        ts_codes: list[str] | None = None,
+        days: int = 730,
+        incremental: bool = False,
+    ) -> dict[str, int]:
+        """批量同步日线数据（并发）
+
+        Args:
+            ts_codes: 股票代码列表，None = 全市场（stock_basic）
+            days: 回溯窗口天数
+            incremental: False（默认）落后超 2 天的股票按 days 窗口整段重拉；
+                True 严格增量，每只股票从其最后一根 K 线的下一天续拉，
+                只有库里完全没有数据的股票才回落到 days 窗口
+
+        Returns:
+            dict[ts_code] = 更新条数（0 表示无需更新/停牌/失败）
+        """
         if ts_codes is None:
             ts_codes = self._fetch_all_codes("SELECT ts_code FROM stock_basic")
 
@@ -388,7 +430,17 @@ class DataSyncer:
         end_date = datetime.now().strftime("%Y%m%d")
 
         def _sync_one(code: str) -> int:
-            # 近2天已同步则跳过
+            if incremental:
+                last_date = self._get_kline_last_date(code)
+                if last_date is None:
+                    # 新股 / 从未同步：无断点可续，回落到 days 窗口
+                    return self.sync_daily_kline(code, start_date, end_date)
+                next_date = (datetime.strptime(last_date, "%Y%m%d") + timedelta(days=1)).strftime("%Y%m%d")
+                if next_date > end_date:
+                    return 0  # 已同步到最新，不发请求
+                return self.sync_daily_kline(code, next_date, end_date)
+
+            # 非增量：近2天已同步则跳过，否则整段重拉窗口
             last_date = self._get_last_date("daily_kline", code)
             if last_date and (datetime.now() - datetime.strptime(last_date, "%Y%m%d")).days < 2:
                 return 0
@@ -398,21 +450,52 @@ class DataSyncer:
 
     # ==================== 指标缓存 ====================
 
-    def sync_indicator_cache(self, ts_code: str, days: int = 120) -> int:
+    @staticmethod
+    def _get_indicator_last_date(ts_code: str) -> str | None:
+        """取 indicator_cache 中该股已缓存指标的最后交易日（增量断点）"""
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT MAX(trade_date) FROM indicator_cache WHERE ts_code = ?", (ts_code,))
+            row = cursor.fetchone()
+            return row[0] if row and row[0] else None
+
+    def sync_indicator_cache(
+        self,
+        ts_code: str,
+        days: int = 120,
+        warmup: int = 250,
+        incremental: bool = False,
+    ) -> int:
         """同步单只股票技术指标到 indicator_cache 表
 
         计算流程：
-        1. 加载 K 线数据
+        1. 加载 K 线数据（含 warmup 预热段）
         2. 预计算 KDJ / MACD 全量序列（O(n)，避免循环内 O(n²)）
         3. 逐日计算指标 → 构建 INSERT 行 → 批量写入
+
+        Args:
+            ts_code: 股票代码
+            days: 写回窗口天数（只写最后 days 根）
+            warmup: 额外加载但不写回的历史根数。MA60/MA250/MACD 需要预热，
+                否则窗口最早几天因历史不足被算坏；设 0 可恢复旧行为
+            incremental: True 只写回 trade_date > 已缓存最后日期的行，
+                不覆盖此前算好的旧值
+
+        Returns:
+            实际写入条数
         """
         try:
             f = _get_indicator_funcs()
-            klines = f.get_kline_data(ts_code, days)
+            load_days = days + warmup if warmup > 0 else days
+            klines = f.get_kline_data(ts_code, load_days)
             if not klines:
                 return 0
 
-            # 预计算 O(n) 序列
+            # 预热段只参与计算，不写库（避免用不足的历史覆盖旧值）
+            write_from = max(0, len(klines) - days) if days > 0 else 0
+            last_cached = self._get_indicator_last_date(ts_code) if incremental else None
+
+            # 预计算 O(n) 序列（基于完整加载窗口，含预热）
             kdj_seq = f.precompute_kdj_sequence(klines) if len(klines) >= 9 else None
             if len(klines) >= 30:
                 macd_dif_seq, macd_dea_seq, macd_hist_seq = f.precompute_macd_sequence(klines)
@@ -422,9 +505,14 @@ class DataSyncer:
             cols = [c.strip() for c in _INDICATOR_INSERT_COLUMNS.split(",")]
             insert_sql = f"INSERT OR REPLACE INTO indicator_cache ({_INDICATOR_INSERT_COLUMNS}) VALUES ({','.join(['?'] * len(cols))})"
 
+            written = 0
             with get_connection() as conn:
                 cursor = conn.cursor()
-                for i, kline in enumerate(klines):
+                for i in range(write_from, len(klines)):
+                    kline = klines[i]
+                    if last_cached and kline.trade_date <= last_cached:
+                        continue  # 已算过：跳过，保留此前用完整历史算出的值
+
                     sub_klines = klines[: i + 1]
                     yesterday = sub_klines[-2] if len(sub_klines) > 1 else None
 
@@ -441,23 +529,46 @@ class DataSyncer:
                     )
                     row = _build_indicator_row(ts_code, kline.trade_date, ind)
                     cursor.execute(insert_sql, row)
+                    written += 1
 
             self._log_sync("indicator_cache", ts_code, klines[-1].trade_date, "success")
-            logger.info(f"指标缓存同步完成: {ts_code}, {len(klines)} 条")
-            return len(klines)
+            logger.info(f"指标缓存同步完成: {ts_code}, 写入 {written} 条")
+            return written
 
         except (sqlite3.Error, ValueError, KeyError, OSError) as e:
             logger.error(f"指标缓存同步失败 {ts_code}: {e}")
             self._log_sync("indicator_cache", ts_code, "", "failed", str(e))
             return 0
 
-    def sync_all_indicators(self, ts_codes: list[str] | None = None) -> dict[str, int]:
-        """批量同步指标缓存（并发）"""
+    def sync_all_indicators(
+        self,
+        ts_codes: list[str] | None = None,
+        days: int = 120,
+        warmup: int = 250,
+        incremental: bool = False,
+    ) -> dict[str, int]:
+        """批量同步指标缓存（并发）
+
+        Args:
+            ts_codes: 股票代码列表，None = daily_kline 中全部代码
+            days: 写回窗口天数
+            warmup: 额外加载用于预热、不写回的历史根数
+            incremental: True 只写回新增交易日，不覆盖已算好的旧值
+        """
         if ts_codes is None:
             ts_codes = self._fetch_all_codes("SELECT DISTINCT ts_code FROM daily_kline")
-        return self._batch_sync("指标缓存", self.sync_indicator_cache, ts_codes)
 
-    def sync_daily_and_compute(self, ts_codes: list[str] | None = None, days: int = 730) -> dict[str, int]:
+        def _sync_one(code: str) -> int:
+            return self.sync_indicator_cache(code, days=days, warmup=warmup, incremental=incremental)
+
+        return self._batch_sync("指标缓存", _sync_one, ts_codes)
+
+    def sync_daily_and_compute(
+        self,
+        ts_codes: list[str] | None = None,
+        days: int = 730,
+        incremental: bool = False,
+    ) -> dict[str, int]:
         """
         一站式：同步日线 K 线 + 同步指标缓存
 
@@ -466,12 +577,13 @@ class DataSyncer:
 
         Args:
             ts_codes: 股票代码列表，None = 全市场
-            days: 同步天数
+            days: 同步天数（incremental=True 时仅作为无断点股票的兜底窗口）
+            incremental: 是否严格增量续拉 K 线
 
         Returns:
             每只股票的指标更新条数（dict[ts_code] = count）
         """
-        kline_results = self.sync_all_daily_kline(ts_codes=ts_codes, days=days)
+        kline_results = self.sync_all_daily_kline(ts_codes=ts_codes, days=days, incremental=incremental)
         # 同步哪些股票有数据，传给指标计算
         if ts_codes is None:
             with get_connection() as conn:

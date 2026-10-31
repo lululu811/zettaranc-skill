@@ -24,18 +24,42 @@ DATA_MODE=jnb
 ### Tushare API
 
 ```ini
-TUSHARE_TOKEN=你的56位token
-TUSHARE_API_URL=https://tt.xiaodefa.cn
+TUSHARE_TOKEN=你的token
+TUSHARE_API_URL=https://api.waditu.com/dataapi
 TUSHARE_VERIFY_TOKEN_URL=
 ```
 
 | 变量 | 必填 | 说明 |
 |------|------|------|
-| `TUSHARE_TOKEN` | 否（jnb 建议） | Tushare Pro 的 56 位 Token，在 https://tushare.pro/user/token 获取 |
-| `TUSHARE_API_URL` | 否（jnb 建议） | 中转 API 地址，如 `https://tt.xiaodefa.cn` |
+| `TUSHARE_TOKEN` | 否（jnb 建议） | Tushare Pro Token，在 https://tushare.pro/user/token 获取 |
+| `TUSHARE_API_URL` | 否（jnb 建议） | 中转 API **基础路径**，见下方说明 |
 | `TUSHARE_VERIFY_TOKEN_URL` | 否 | 实时行情验证地址，一般不需要 |
 
 **注意**：如果 `DATA_MODE` 不是 `jnb`，这些配置可以为空，程序不会报错；jnb 模式下未配置 Token 时会自动回退 a-stock-data 免费数据源（腾讯/百度/东财/通达信，无需 API Key）。
+
+#### `TUSHARE_API_URL` 的关键约束（易踩坑）
+
+该变量是**基础路径**，不是完整端点。tushare SDK 会自动在其后追加 `/{接口名}`：
+
+```python
+# tushare/pro/client.py:42
+res = requests.post(f"{self.__http_url}/{api_name}", json=req_params, ...)
+#                      ↑ 示例：{TUSHARE_API_URL}/daily
+```
+
+| 地址 | 结果 | 原因 |
+|------|------|------|
+| `https://api.waditu.com/dataapi` | ✅ **推荐** | Tushare 官方运营中转，路径式，接受官方 token |
+| `https://api.tushare.pro` | ❌ 404 | 官方端点只在**根路径**接受 POST（接口名放请求体），被追加 `/daily` 后 404 |
+| `https://tt.xiaodefa.cn` | ❌ 40101 | 历史文档示例，需**该服务专用 token**，不接受官方 token |
+
+> SDK 默认值本身也是路径式（`http://api.waditu.com/dataapi`），印证了这个语义。
+
+**验证配置是否生效**：
+
+```bash
+zt sync status     # 配置错误会报 [CONFIG_MISSING]；正常则显示数据库统计
+```
 
 ---
 
@@ -162,14 +186,16 @@ HITHINK_FINANCE_API_KEY=sk-fuyao-xxxx
 
 ```ini
 DATA_MODE=jnb
-TUSHARE_TOKEN=ba0930...fa15
-TUSHARE_API_URL=https://tt.xiaodefa.cn
+TUSHARE_TOKEN=你的token
+TUSHARE_API_URL=https://api.waditu.com/dataapi
 ```
 
 ### 完整模式（股票 + LLM + 知识库 + Rust 回测）
 
 ```ini
 DATA_MODE=jnb
+TUSHARE_TOKEN=你的token
+TUSHARE_API_URL=https://api.waditu.com/dataapi
 HITHINK_FINANCE_API_KEY=sk-fuyao-xxxx
 LLM_API_KEY=sk-cp-...ULLC
 LLM_BASE_URL=https://api.minimaxi.com/v1/chat/completions

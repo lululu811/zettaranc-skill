@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>zettaranc-skill 项目架构说明书</title>
+<style>
+:root{
+  --bg:#0f1216; --bg2:#151a21; --bg3:#1b222b; --line:#2a3340;
+  --fg:#dfe6ee; --fg2:#9aa8b8; --fg3:#6b7a8c;
+  --accent:#4da3ff; --accent2:#7ee787; --accent3:#ffa657;
+  --accent4:#d2a8ff; --accent5:#ff7b72; --accent6:#39d0d8;
+  --code-bg:#10161d;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:15px; line-height:1.75;
+}
+/* ---------- 布局 ---------- */
+.wrap{display:flex; max-width:1600px; margin:0 auto}
+aside{
+  width:270px; flex:0 0 270px; position:sticky; top:0; height:100vh;
+  overflow-y:auto; background:var(--bg2); border-right:1px solid var(--line);
+  padding:22px 0 60px;
+}
+aside h2{font-size:13px; color:var(--fg3); letter-spacing:1.5px; margin:0 0 12px 22px; text-transform:uppercase}
+aside a{
+  display:block; padding:6px 22px 6px 22px; color:var(--fg2); text-decoration:none;
+  font-size:13.5px; border-left:3px solid transparent; transition:.15s;
+}
+aside a:hover{color:var(--accent); background:rgba(77,163,255,.07); border-left-color:var(--accent)}
+aside a.sub{padding-left:38px; font-size:12.8px; color:var(--fg3)}
+aside a.sub:hover{color:var(--accent)}
+main{flex:1; min-width:0; padding:0 48px 100px}
+/* ---------- 头部 ---------- */
+header{
+  padding:56px 0 32px; border-bottom:1px solid var(--line); margin-bottom:36px;
+}
+header h1{font-size:34px; margin:0 0 10px; letter-spacing:-.5px}
+header .sub{color:var(--fg2); font-size:15px; margin-bottom:22px}
+.badges{display:flex; flex-wrap:wrap; gap:8px}
+.badge{
+  background:var(--bg3); border:1px solid var(--line); border-radius:20px;
+  padding:4px 13px; font-size:12.5px; color:var(--fg2);
+}
+.badge b{color:var(--accent); font-weight:600}
+/* ---------- 标题 ---------- */
+h2.sec{
+  font-size:24px; margin:56px 0 18px; padding-bottom:10px;
+  border-bottom:2px solid var(--line); scroll-margin-top:20px;
+}
+h2.sec .num{color:var(--accent); font-family:ui-monospace,monospace; margin-right:10px; font-size:20px}
+h3{font-size:18px; margin:32px 0 12px; color:#fff; scroll-margin-top:20px}
+h3 .tag{
+  font-size:11px; font-weight:600; vertical-align:middle; margin-left:8px;
+  padding:2px 8px; border-radius:4px; background:rgba(77,163,255,.15); color:var(--accent);
+}
+h4{font-size:15px; margin:22px 0 8px; color:var(--accent2)}
+p{margin:10px 0}
+ul,ol{margin:10px 0; padding-left:24px}
+li{margin:5px 0}
+code{
+  background:var(--code-bg); border:1px solid var(--line); border-radius:4px;
+  padding:1px 6px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12.8px; color:var(--accent6);
+}
+a.lnk{color:var(--accent); text-decoration:none}
+/* ---------- 表格 ---------- */
+table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px; display:block; overflow-x:auto}
+th,td{border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top}
+th{background:var(--bg3); color:var(--accent2); font-weight:600; white-space:nowrap}
+tbody tr:nth-child(even){background:rgba(255,255,255,.018)}
+tbody tr:hover{background:rgba(77,163,255,.06)}
+td code{font-size:12.3px}
+/* ---------- 卡片 ---------- */
+.grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; margin:18px 0}
+.card{
+  background:var(--bg2); border:1px solid var(--line); border-radius:10px; padding:16px 18px;
+}
+.card h5{margin:0 0 8px; font-size:14.5px; color:var(--accent); display:flex; align-items:center; gap:8px}
+.card p{margin:4px 0; font-size:13.2px; color:var(--fg2)}
+.card .meta{font-size:12px; color:var(--fg3); font-family:ui-monospace,monospace}
+/* ---------- 代码块 ---------- */
+pre{
+  background:var(--code-bg); border:1px solid var(--line); border-radius:8px;
+  padding:16px 18px; overflow-x:auto; font-size:12.4px; line-height:1.6;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#c9d4e0; margin:14px 0;
+}
+pre .c{color:#6b7a8c}   /* 注释 */
+pre .k{color:var(--accent4)} /* 关键字/模块 */
+pre .g{color:var(--accent2)} /* 高亮 */
+pre .y{color:var(--accent3)} /* 强调 */
+pre .r{color:var(--accent5)} /* 红 */
+pre .b{color:var(--accent)}  /* 蓝 */
+/* ---------- 提示 ---------- */
+.note{
+  border-left:4px solid var(--accent); background:rgba(77,163,255,.07);
+  padding:12px 16px; border-radius:0 8px 8px 0; margin:16px 0; font-size:13.6px;
+}
+.warn{border-left-color:var(--accent3); background:rgba(255,166,87,.08)}
+.ok{border-left-color:var(--accent2); background:rgba(126,231,135,.07)}
+.note b{color:#fff}
+/* ---------- 分层图 ---------- */
+.layer{
+  border:1px solid var(--line); border-radius:10px; padding:14px 18px; margin:10px 0;
+  background:linear-gradient(90deg,var(--bg3),var(--bg2));
+  display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+}
+.layer .lname{
+  flex:0 0 190px; font-weight:700; font-size:14.5px; color:var(--accent);
+  font-family:ui-monospace,monospace;
+}
+.layer .ldesc{flex:1; min-width:300px; font-size:13.2px; color:var(--fg2)}
+.chips{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; width:100%}
+.chip{
+  font-size:11.8px; background:var(--bg); border:1px solid var(--line);
+  border-radius:5px; padding:2px 8px; color:var(--fg2); font-family:ui-monospace,monospace;
+}
+.chip.c1{color:var(--accent2); border-color:rgba(126,231,135,.35)}
+.chip.c2{color:var(--accent3); border-color:rgba(255,166,87,.35)}
+.chip.c3{color:var(--accent4); border-color:rgba(210,168,255,.35)}
+.chip.c4{color:var(--accent6); border-color:rgba(57,208,216,.35)}
+.arrowdown{text-align:center; color:var(--fg3); font-size:20px; margin:2px 0; line-height:1}
+footer{margin-top:70px; padding-top:20px; border-top:1px solid var(--line); color:var(--fg3); font-size:12.5px}
+@media (max-width:1100px){ aside{display:none} main{padding:0 20px 60px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<aside>
+  <h2>目录导航</h2>
+  <a href="#overview">1. 项目总览</a>
+  <a href="#stack">2. 技术栈与版本</a>
+  <a href="#layers">3. 分层架构总图</a>
+  <a href="#modlist">4. 模块清单总表</a>
+  <a href="#modules">5. Python 核心层 modules/</a>
+  <a href="#m-top" class="sub">5.1 顶层文件</a>
+  <a href="#m-core" class="sub">5.2 core 公共基础</a>
+  <a href="#m-ds" class="sub">5.3 数据源与存储</a>
+  <a href="#m-ind" class="sub">5.4 indicators 指标</a>
+  <a href="#m-str" class="sub">5.5 strategies 战法</a>
+  <a href="#m-scr" class="sub">5.6 screener 选股</a>
+  <a href="#m-sim" class="sub">5.7 simulator 模拟器</a>
+  <a href="#m-bt" class="sub">5.8 backtest 回测</a>
+  <a href="#m-ver" class="sub">5.9 verify 验收</a>
+  <a href="#m-sync" class="sub">5.10 data_sync 同步</a>
+  <a href="#m-opt" class="sub">5.11 self_optimizer</a>
+  <a href="#m-stat" class="sub">5.12 statistics 统计</a>
+  <a href="#m-cli" class="sub">5.13 CLI 层</a>
+  <a href="#rust">6. Rust 计算核</a>
+  <a href="#api">7. API 服务层</a>
+  <a href="#fe">8. 前端看板</a>
+  <a href="#know">9. 知识与规则层</a>
+  <a href="#flow">10. 核心运行流程</a>
+  <a href="#flow1" class="sub">10.1 个股分析</a>
+  <a href="#flow2" class="sub">10.2 批量选股</a>
+  <a href="#flow3" class="sub">10.3 战法折叠</a>
+  <a href="#flow4" class="sub">10.4 回测/模拟器</a>
+  <a href="#flow5" class="sub">10.5 验收管线</a>
+  <a href="#flow6" class="sub">10.6 自优化闭环</a>
+  <a href="#datasource">11. 数据源降级链</a>
+  <a href="#convention">12. 关键约定</a>
+  <a href="#cmd">13. 命令速查</a>
+  <a href="#qa">14. 质量保障</a>
+</aside>
+
+<main>
+<header>
+  <h1>zettaranc-skill · 项目架构说明书</h1>
+  <div class="sub">「Z 哥（zettaranc / 万千）思维框架蒸馏包」+「A 股真实数据量化工具」双轨工程 — 架构、模块组件、功能与运行流程全景</div>
+  <div class="badges">
+    <span class="badge">版本 <b>v4.3.0</b>（pyproject）</span>
+    <span class="badge">Python <b>&gt;=3.12</b></span>
+    <span class="badge">Python 模块 <b>135</b> 个</span>
+    <span class="badge">Rust crates <b>6</b></span>
+    <span class="badge">REST 端点 <b>22</b></span>
+    <span class="badge">CLI 子命令 <b>15</b></span>
+    <span class="badge">战法 <b>30+</b></span>
+    <span class="badge">技术指标 <b>60+</b></span>
+    <span class="badge">License <b>MIT</b></span>
+  </div>
+</header>
+
+<!-- ============ 1 总览 ============ -->
+<h2 class="sec" id="overview"><span class="num">01</span>项目总览</h2>
+
+<h3>双轨定位</h3>
+<p>本项目是<strong>两条互不干扰、同时并行的轨道</strong>，刻意做了分层，这是理解全局的第一把钥匙：</p>
+<div class="grid">
+  <div class="card">
+    <h5>轨道 A · 思维框架（核心交付物）</h5>
+    <p><code>SKILL.md</code> 是一份 Skill-Schema-V2 合规的<strong>角色扮演协议</strong>，被 Claude Code / Cursor 等宿主加载后，让 LLM 用「Z 哥」的角色口吻生成点评、话术、复盘。</p>
+    <p>语料基础：467 篇直播/付费课（~200 万字）、13 篇 ztalk transcript（12.7 万字）、9 篇交易心理系列、雪球专栏及网络预研。</p>
+    <p class="meta">交付物：SKILL.md + knowledge/（32 篇）+ rules/ + references/</p>
+  </div>
+  <div class="card">
+    <h5>轨道 B · 量化数据工具</h5>
+    <p>Python 包 <code>modules/</code> 只负责<strong>数据准备</strong>：指标计算、战法信号、选股评分、回测、验收。</p>
+    <p><strong>刻意不做投资话术</strong>——把「算数」和「说话」分开，避免 LLM 生成的数据带有「AI 味」或幻觉价格。</p>
+    <p class="meta">交付物：modules/（135 py）+ api/ + frontend/ + rust/</p>
+  </div>
+</div>
+
+<div class="note ok">
+  <b>分层原则：</b><code>modules/</code> 输出的是<strong>结构化事实</strong>（J 值、量比、信号、评分、绩效指标），
+  <code>SKILL.md</code> 负责把事实<strong>翻译成人话</strong>。数据层缺 key 时<strong>绝不编造价格/信号</strong>，只明确报告当前数据状态。
+</div>
+
+<h3>两种运行模式</h3>
+<table>
+<thead><tr><th>模式</th><th>环境变量</th><th>外部依赖</th><th>能力</th><th>适用场景</th></tr></thead>
+<tbody>
+<tr><td><b>JNB / 真实数据</b></td><td><code>DATA_MODE=jnb</code></td><td>数据源 API Key 或本地 SQLite</td><td>取真实行情 → 可算指标/战法/回测</td><td>个股分析、选股、回测、验收</td></tr>
+<tr><td><b>Websearch / 普通小万</b></td><td><code>DATA_MODE=websearch</code></td><td>无</td><td>纯 LLM 对话，不查外部数据</td><td>框架问答、人生/职业/商业决策</td></tr>
+</tbody>
+</table>
+
+<h3>顶层目录职责</h3>
+<table>
+<thead><tr><th>目录</th><th>职责</th><th>关键内容</th></tr></thead>
+<tbody>
+<tr><td><code>modules/</code></td><td>Python 数据层与业务逻辑（核心）</td><td>core / indicators / strategies / screener / simulator / backtest / verify / data_sync / self_optimizer / statistics + 40 个顶层模块</td></tr>
+<tr><td><code>rust/</code></td><td>Rust 高性能计算核（PyO3 桥接）</td><td>6 crates：core_types / indicators / backtest_engine / grid_search / screener / bindings</td></tr>
+<tr><td><code>api/</code></td><td>FastAPI REST 适配层</td><td>main.py + 9 router + 7 service + 8 model</td></tr>
+<tr><td><code>frontend/</code></td><td>React + Vite 可视化看板</td><td>8 页面 + 18 组件 + stores/hooks/api</td></tr>
+<tr><td><code>knowledge/</code></td><td>交易体系知识文档</td><td>29 篇顶层 + macro/ reference/ strategies/ 子目录</td></tr>
+<tr><td><code>rules/</code></td><td>意图规则与决策框架</td><td>2 md + 1 yaml</td></tr>
+<tr><td><code>corpus/</code></td><td>语料采集与质检</td><td>quality_check.py / dual_axis_review.py</td></tr>
+<tr><td><code>references/</code></td><td>语料调研提炼文件</td><td>research/ 11 篇（原始语料不入库）</td></tr>
+<tr><td><code>scripts/</code></td><td>薄壳工具脚本</td><td>业务逻辑全部下沉到 modules/</td></tr>
+<tr><td><code>tests/</code></td><td>pytest 测试</td><td>~109 个 test_*.py + conftest fixtures</td></tr>
+<tr><td><code>data/</code></td><td>SQLite 数据库与报告</td><td><b>gitignored，不入库</b></td></tr>
+<tr><td><code>docs/</code></td><td>文档</td><td>CHANGELOG / USER_GUIDE / CONFIG_GUIDE / CONTRIBUTING（26 篇）</td></tr>
+</tbody>
+</table>
+
+<!-- ============ 2 技术栈 ============ -->
+<h2 class="sec" id="stack"><span class="num">02</span>技术栈与版本事实</h2>
+
+<table>
+<thead><tr><th>层面</th><th>选型</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>语言</td><td>Python ≥3.12（CLI/测试跑 3.12、3.13）</td><td><code>pyproject.toml</code> 的 <code>requires-python</code> 为唯一事实来源；文档中残留的「3.10+」为过时说法</td></tr>
+<tr><td>核心依赖</td><td>tushare、pandas 3.x、requests、httpx、pyyaml、python-dotenv</td><td><code>requirements.txt</code> 额外含 <code>mootdx</code></td></tr>
+<tr><td>可选依赖</td><td><code>[corpus]</code>：yt-dlp、faster-whisper；<code>[dev]</code>：pytest、pytest-cov、maturin</td><td><code>pip install -e ".[dev]"</code></td></tr>
+<tr><td>包管理器</td><td><b>pip 为准</b></td><td>根目录 <code>uv.lock</code> 被 gitignore 且 pyproject 无 <code>[tool.uv]</code> 段 → 非 canonical，勿依赖</td></tr>
+<tr><td>API 依赖</td><td>fastapi、uvicorn、pydantic-settings</td><td><b>不在</b> requirements.txt，需单独安装</td></tr>
+<tr><td>Rust</td><td>toolchain 1.78.0（<code>rust-toolchain.toml</code>），pyo3 abi3-py312 + pyo3-polars（polars 0.54）</td><td>构建产物 <code>_core_compute</code> 扩展模块</td></tr>
+<tr><td>前端</td><td>React + TypeScript + Vite（端口 5173，<code>/api</code> 代理到 8000）</td><td>无 JS 测试，质量靠 <code>npm run lint</code> + <code>tsc -b</code></td></tr>
+<tr><td>数据库</td><td>SQLite（WAL 模式）</td><td>默认 <code>data/stock_data.db</code>，可由 <code>DB_PATH</code> 覆盖</td></tr>
+<tr><td>代码规范</td><td>ruff（line-length 120，select F/E/W/UP，双引号）+ mypy（非严格渐进）</td><td>pre-commit 钩子：ruff / mypy / SKILL 质量门 / merge-yaml 行尾检查</td></tr>
+<tr><td>测试</td><td>pytest，markers: <code>slow</code>、<code>realdata</code></td><td>全量约 40s；realdata 需 <code>RUN_REALDATA=true</code> + Token</td></tr>
+</tbody>
+</table>
+
+<div class="note warn">
+  <b>版本不一致提示：</b><code>pyproject.toml</code> 为 <b>4.3.0</b>；<code>SKILL.md</code> front-matter、<code>skill.json</code>、<code>docs/CHANGELOG.md</code> 顶端为 <b>v4.2.0</b>（AGENTS.md 据此描述）。以 pyproject 为构建事实来源，同步时需注意四处一致。
+</div>
+
+<!-- ============ 3 分层 ============ -->
+<h2 class="sec" id="layers"><span class="num">03</span>分层架构总图</h2>
+
+<p>系统自下而上分为 <b>7 层</b>，依赖方向严格单向（上层依赖下层，下层不反向依赖）：</p>
+
+<div class="layer">
+  <div class="lname">L7 接入层</div>
+  <div class="ldesc">CLI（<code>zt</code>）· FastAPI REST（<code>zt-web</code>）· React 看板 · 监控推送（<code>zt-monitor</code>）</div>
+  <div class="chips"><span class="chip c4">cli.py</span><span class="chip c4">cli_commands.py</span><span class="chip c4">api/</span><span class="chip c4">frontend/</span><span class="chip c4">monitor.py</span><span class="chip c4">notifier.py</span></div>
+</div>
+<div class="arrowdown">▼</div>
+<div class="layer">
+  <div class="lname">L6 编排/闭环层</div>
+  <div class="ldesc">验收管线 · Darwin 自优化 · 工作流编排 · 复盘与改进记录</div>
+  <div class="chips"><span class="chip c3">verify/</span><span class="chip c3">self_optimizer/</span><span class="chip c3">screener/workflow.py</span><span class="chip c3">loop_engine.py</span><span class="chip c3">review_generator.py</span><span class="chip c3">improvement_logger.py</span></div>
+</div>
+<div class="arrowdown">▼</div>
+<div class="layer">
+  <div class="lname">L5 策略执行层</div>
+  <div class="ldesc">回测引擎 · 少女/少妇模拟器 · 组合诊断 · 持仓管理 · 统计检验</div>
+  <div class="chips"><span class="chip c2">backtest/</span><span class="chip c2">simulator/</span><span class="chip c2">statistics/</span><span class="chip c2">portfolio_diagnosis.py</span><span class="chip c2">position_manager.py</span><span class="chip c2">market_timing.py</span></div>
+</div>
+<div class="arrowdown">▼</div>
+<div class="layer">
+  <div class="lname">L4 决策层</div>
+  <div class="ldesc">战法信号识别 · 选股评分引擎 · 卖出纪律</div>
+  <div class="chips"><span class="chip c1">strategies/</span><span class="chip c1">screener/</span><span class="chip c1">industry_filter.py</span><span class="chip c1">active_market_value.py</span></div>
+</div>
+<div class="arrowdown">▼</div>
+<div class="layer">
+  <div class="lname">L3 指标层</div>
+  <div class="ldesc">60+ 技术指标 · K 线形态 · 量能形态 · 三波理论 · 麒麟会阶段</div>
+  <div class="chips"><span class="chip">indicators/</span><span class="chip">indicators/price_patterns/</span><span class="chip">wave_theory.py</span><span class="chip">kirin_detector.py</span><span class="chip">volume_patterns.py</span></div>
+</div>
+<div class="arrowdown">▼</div>
+<div class="layer">
+  <div class="lname">L2 数据接入层</div>
+  <div class="ldesc">统一数据源抽象（7 实现 + 自动降级）· 限流 · 指标缓存 · 数据同步</div>
+  <div class="chips"><span class="chip">datasource.py</span><span class="chip">data_sync/</span><span class="chip">hithink_client.py</span><span class="chip">indevs_client.py</span><span class="chip">a_stock_data_client.py</span><span class="chip">bridge_client.py</span><span class="chip">tushare_client.py</span></div>
+</div>
+<div class="arrowdown">▼</div>
+<div class="layer">
+  <div class="lname">L1 基础层</div>
+  <div class="ldesc">绩效指标 · 市场环境 · Walk-Forward · ATR · 路径常量 · 错误码 · Rust/Python 切换 shim</div>
+  <div class="chips"><span class="chip c1">core/metrics.py</span><span class="chip c1">core/market_context.py</span><span class="chip c1">core/walk_forward.py</span><span class="chip c1">core/atr.py</span><span class="chip c1">core/paths.py</span><span class="chip c1">core/errors.py</span><span class="chip c1">core/_rust_compat.py</span></div>
+</div>
+<div class="arrowdown">▼</div>
+<div class="layer">
+  <div class="lname">L0 存储/算力</div>
+  <div class="ldesc">SQLite（WAL）· Rust <code>_core_compute</code> 扩展模块 · 本地缓存</div>
+  <div class="chips"><span class="chip c4">database.py</span><span class="chip c4">rust/crates/bindings</span><span class="chip c4">indicator_cache</span></div>
+</div>
+
+<h3>横向支撑（贯穿所有层）</h3>
+<div class="grid">
+  <div class="card"><h5>意图与知识</h5><p><code>intent_router.py</code> 分类意图 → <code>intent_chat.py</code> 生成回答 → <code>knowledge_retriever.py</code> 检索知识库 → <code>llm_providers.py</code> 多 Provider 适配</p></div>
+  <div class="card"><h5>交易记录</h5><p><code>trade_parser.py</code> 口语化解析 → <code>trade_manager.py</code> 落库 → <code>trade_reviewer.py</code> 复盘点评</p></div>
+  <div class="card"><h5>配置与常量</h5><p><code>constants.py</code> / <code>dynamic_config.py</code> / <code>setup_wizard.py</code> 交互式初始化</p></div>
+  <div class="card"><h5>报告与通知</h5><p><code>report.py</code> / <code>watchlist.py</code> / <code>notifier.py</code>（飞书 webhook）/ <code>tracking_manager.py</code></p></div>
+</div>
+
+<!-- ============ 4 模块清单 ============ -->
+<h2 class="sec" id="modlist"><span class="num">04</span>模块清单总表</h2>
+
+<table>
+<thead><tr><th>模块</th><th>文件数</th><th>层次</th><th>核心职责</th><th>对外主入口</th></tr></thead>
+<tbody>
+<tr><td><code>modules/core/</code></td><td>9</td><td>L1</td><td>公共基础：绩效指标、市场环境、WF 切分、ATR、路径、错误码、Rust shim</td><td><code>PerformanceMetrics</code> / <code>MarketRegime</code> / <code>make_walk_forward_splits</code></td></tr>
+<tr><td><code>modules/indicators/</code></td><td>14</td><td>L3</td><td>60+ 技术指标、价格/量能形态、三波理论、麒麟会</td><td><code>analyze_stock()</code> / <code>get_kline_data()</code></td></tr>
+<tr><td><code>modules/strategies/</code></td><td>7</td><td>L4</td><td>30+ 战法信号识别（B1/B2/B3/SB1、复合战法、S1-S3 卖出）</td><td><code>detect_all_strategies()</code></td></tr>
+<tr><td><code>modules/screener/</code></td><td>10</td><td>L4</td><td>选股引擎：并行分析 + 评分 + criteria 注册表 + 工作流</td><td><code>screen_stocks()</code></td></tr>
+<tr><td><code>modules/simulator/</code></td><td>18</td><td>L5</td><td>端到端模拟盘：择时→选股→仓位→成交→退出→叙事</td><td><code>run_simulation()</code></td></tr>
+<tr><td><code>modules/backtest/</code></td><td>5</td><td>L5</td><td>单策略/组合回测、B1+B2 资金池、Rust 桥</td><td><code>run_backtest()</code> / <code>_rust_bridge</code></td></tr>
+<tr><td><code>modules/verify/</code></td><td>11</td><td>L6</td><td>v1.0 五项硬指标验收 + Walk-Forward + 注册写回</td><td><code>pipeline.py</code> / <code>check_gates()</code></td></tr>
+<tr><td><code>modules/data_sync/</code></td><td>7</td><td>L2</td><td>数据同步、限流、指标缓存</td><td><code>syncer.py</code> / <code>rate_limiter.py</code></td></tr>
+<tr><td><code>modules/self_optimizer/</code></td><td>10</td><td>L6</td><td>Darwin 参数自优化：变异→回测评分→ratchet</td><td><code>param_registry.py</code> / <code>mutator.py</code></td></tr>
+<tr><td><code>modules/statistics/</code></td><td>4</td><td>L5</td><td>统计检验：Sharpe t 检验、MC 置换、敏感性、集成</td><td><code>criteria.py</code> / <code>ensemble.py</code></td></tr>
+<tr><td><code>modules/</code> 顶层</td><td>40</td><td>L2/L7</td><td>数据源、DB、CLI、LLM、交易、报告、监控</td><td><code>datasource.py</code> / <code>database.py</code> / <code>cli.py</code></td></tr>
+<tr><td><code>api/</code></td><td>33</td><td>L7</td><td>FastAPI REST（9 router / 7 service / 8 model）</td><td><code>api/main.py::start_web()</code></td></tr>
+<tr><td><code>frontend/</code></td><td>58</td><td>L7</td><td>React 看板（8 页面 / 18 组件）</td><td><code>src/main.tsx</code></td></tr>
+<tr><td><code>rust/</code></td><td>40</td><td>L0</td><td>Rust 计算核（6 crates）</td><td><code>crates/bindings</code> → <code>_core_compute</code></td></tr>
+</tbody>
+</table>
+
+<!-- ============ 5 modules 详解 ============ -->
+<h2 class="sec" id="modules"><span class="num">05</span>Python 核心层 <code>modules/</code> 详解</h2>
+
+<h3 id="m-top">5.1 顶层文件（40 个）</h3>
+
+<h4>入口与 CLI</h4>
+<table>
+<thead><tr><th>文件</th><th>职责</th><th>关键符号</th></tr></thead>
+<tbody>
+<tr><td><code>__init__.py</code></td><td>包入口。首次 import 时<strong>一次性</strong> <code>load_dotenv(override=False)</code>（支持 <code>ZETTARANC_ENV</code> 自定义路径），子模块禁止重复加载；re-export 数据库/交易 API</td><td><code>get_data_mode()</code> / <code>get_project_root()</code></td></tr>
+<tr><td><code>cli.py</code>（41.7KB）</td><td>统一 CLI 入口（<code>zt</code>）。中文别名 → 英文 criteria 映射</td><td><code>STRATEGY_ALIAS</code>（16 条）、<code>cmd_analyze</code>、<code>cmd_screen</code>、<code>cmd_score</code>、<code>cmd_workflow</code>、<code>cmd_watchlist</code>、<code>cmd_diagnose</code>、<code>cmd_sync</code>、<code>cmd_track</code>、<code>cmd_self_optimize</code>、<code>build_parser()</code>、<code>main()</code></td></tr>
+<tr><td><code>cli_commands.py</code>（43.8KB）</td><td>重量级子命令实现，从 cli.py 拆出</td><td><code>cmd_backtest</code>、<code>cmd_market_timing</code>、<code>cmd_trade</code>、<code>cmd_daily</code>（<code>_daily_step_watchlist/_screener/_portfolio/_signals/_summary</code>）、<code>cmd_monitor</code>、<code>cmd_simulate</code>、<code>cmd_verify_v10</code>；序列化 <code>_shaofu_result_to_dict</code> 等</td></tr>
+<tr><td><code>monitor.py</code>（4KB）</td><td>自选股主动监控引擎（<code>zt-monitor</code>）：同步 → 扫描信号 → 写 <code>data/reports/monitor_alert.md</code> → 多通路推送</td><td><code>run_watchlist_monitor(sync_days, enable_push)</code></td></tr>
+</tbody>
+</table>
+
+<h4>数据接入客户端</h4>
+<table>
+<thead><tr><th>文件</th><th>职责</th><th>关键类</th></tr></thead>
+<tbody>
+<tr><td><code>datasource.py</code>（47.3KB）</td><td><b>统一数据源抽象层</b>：定义 <code>DataSource</code> Protocol（12 方法），封装 7 种实现 + 自动降级组合</td><td><code>CompositeDataSource</code>、<code>get_datasource(preferred="auto")</code></td></tr>
+<tr><td><code>tushare_client.py</code></td><td>Tushare 中转 API 客户端（SDK 模式）</td><td><code>TushareClient</code></td></tr>
+<tr><td><code>hithink_client.py</code>（23.2KB）</td><td>同花顺 hithink-finance REST 客户端（<code>X-api-key</code>，信封 <code>code==0</code>，限流指数退避 3 次）</td><td><code>HithinkFinanceClient</code></td></tr>
+<tr><td><code>indevs_client.py</code></td><td>Indevs Tushare Replay API 客户端；失败抛 <code>ZettarancError(INDEVS_NO_DATA)</code></td><td><code>IndevsClient</code></td></tr>
+<tr><td><code>a_stock_data_client.py</code>（28.7KB）</td><td>免费 A 股数据聚合：腾讯行情 / 百度 K 线 / 东财资金流·龙虎榜·涨停池 / 同花顺北向</td><td><code>AStockDataClient</code></td></tr>
+<tr><td><code>bridge_client.py</code></td><td>tushare-data-bridge HTTP 缓存代理客户端</td><td><code>BridgeDataSource</code> 依赖</td></tr>
+</tbody>
+</table>
+
+<h4>业务与编排</h4>
+<div class="grid">
+  <div class="card"><h5>loop_engine.py / _enhanced</h5><p>五步工作流循环引擎；enhanced 版增加阶段化与可恢复状态</p></div>
+  <div class="card"><h5>market_regime.py / market_timing.py</h5><p>市场环境与择时信号（大盘 STRONG/NEUTRAL/WEAK 判定）</p></div>
+  <div class="card"><h5>portfolio_diagnosis.py</h5><p>组合级持仓诊断</p></div>
+  <div class="card"><h5>position_manager.py</h5><p>仓位管理与加减仓规则</p></div>
+  <div class="card"><h5>industry_filter.py</h5><p>行业过滤（赛道筛选）</p></div>
+  <div class="card"><h5>active_market_value.py</h5><p>0AMV 活跃市值因子（CLI <code>sync 0amv</code>）</p></div>
+  <div class="card"><h5>index_sync.py</h5><p>指数数据同步</p></div>
+  <div class="card"><h5>backtest_six_step.py</h5><p>六步回测法封装</p></div>
+  <div class="card"><h5>intent_router.py / intent_chat.py</h5><p>意图分类（stock/career/life/chat）→ 回答生成</p></div>
+  <div class="card"><h5>knowledge_retriever.py</h5><p>knowledge/ 知识库检索（可选向量库 <code>KB_ENABLED</code>）</p></div>
+  <div class="card"><h5>llm_providers.py</h5><p>OpenAI 兼容 / Anthropic 多 Provider 适配</p></div>
+  <div class="card"><h5>commentary_service.py</h5><p>点评生成服务（带 TTL 缓存）</p></div>
+  <div class="card"><h5>trade_parser / manager / reviewer</h5><p>口语化交易描述解析 → 落库 → 复盘点评</p></div>
+  <div class="card"><h5>report.py / watchlist.py</h5><p>报告生成 / 自选股管理</p></div>
+  <div class="card"><h5>notifier.py</h5><p>飞书 webhook 推送（<code>IM_PUSH_WEBHOOK</code>）</p></div>
+  <div class="card"><h5>tracking_manager.py / tracking_syncer.py</h5><p>跟踪表管理（<code>tracking_tables.sql</code> 建表）</p></div>
+  <div class="card"><h5>review_generator.py</h5><p>复盘报告生成</p></div>
+  <div class="card"><h5>improvement_logger.py / harness_updater.py</h5><p>改进建议记录与 harness 回写</p></div>
+  <div class="card"><h5>setup_wizard.py / dynamic_config.py</h5><p>交互式初始化向导 / 运行时动态配置</p></div>
+  <div class="card"><h5>constants.py</h5><p>全局常量</p></div>
+</div>
+
+<h3 id="m-core">5.2 <code>core/</code> 公共基础层 <span class="tag">单一事实来源</span></h3>
+<p>v3.9.0 技术债务清理时抽取，<strong>不依赖任何业务模块</strong>，是全项目最底层。</p>
+<table>
+<thead><tr><th>文件</th><th>职责</th><th>关键导出</th></tr></thead>
+<tbody>
+<tr><td><code>metrics.py</code></td><td>统一绩效指标计算（20 字段）</td><td><code>PerformanceMetrics</code>、<code>calculate_metrics()</code>、<code>calculate_performance_metrics()</code>、<code>daily_returns()</code>、<code>compute_drawdown()</code>、<code>compute_sharpe()</code>、<code>TRADING_DAYS_PER_YEAR=252</code></td></tr>
+<tr><td><code>market_context.py</code></td><td>市场环境判定</td><td><code>MarketRegime</code>（STRONG/NEUTRAL/WEAK）、<code>MarketContext</code>、<code>classify_market_regime()</code></td></tr>
+<tr><td><code>walk_forward.py</code></td><td>Walk-Forward 窗口切分</td><td><code>WalkForwardSplit</code>、<code>make_walk_forward_splits()</code></td></tr>
+<tr><td><code>atr.py</code>（v3.10.1）</td><td>统一 ATR 计算，消除 simulator 内部重复实现</td><td><code>calculate_atr()</code>、<code>atr_pct()</code></td></tr>
+<tr><td><code>paths.py</code></td><td>路径常量</td><td><code>DATA_DIR</code>、<code>REGISTRY_DIR</code>、<code>REPORTS_DIR</code></td></tr>
+<tr><td><code>errors.py</code>（v3.10.4）</td><td>统一错误码体系</td><td><code>ZettarancError</code>（基类）、<code>ErrorCode</code></td></tr>
+<tr><td><code>net.py</code></td><td>网络工具（代理处理）</td><td><code>disable_proxy()</code></td></tr>
+<tr><td><code>_rust_compat.py</code></td><td><b>Rust/Python 实现切换 shim</b></td><td><code>get_impl_choice()</code>、<code>get_compute_module()</code>、<code>compute_func(name)</code>、<code>reset_cache()</code></td></tr>
+</tbody>
+</table>
+
+<h4>components：<code>_rust_compat.py</code> 三态切换</h4>
+<pre><span class="c"># 环境变量 ZETTARANC_BACKTEST_IMPL = rust（默认）| python | auto</span>
+<span class="k">rust</span>   <span class="c">→</span> 强制使用 Rust；<span class="r">import 失败抛 RuntimeError</span>（不静默）
+<span class="k">python</span> <span class="c">→</span> 永远返回 None，走 Python 实现
+<span class="k">auto</span>   <span class="c">→</span> 优先 Rust；import 失败<span class="y">静默降级</span> Python
+
+<span class="c"># 业务层标准写法（注意：用 is not None，不能用 or —— Rust 成功返回 falsy 值会被误判）</span>
+fn = <span class="b">compute_func</span>(<span class="g">"run_single_strategy_backtest_py"</span>)
+<span class="k">if</span> fn <span class="k">is not</span> None:
+    result = fn(config, klines)
+<span class="k">else</span>:
+    result = <span class="b">python_fallback</span>(config, klines)
+</pre>
+<div class="note warn"><b>陷阱：</b><code>auto</code> 模式降级是静默的，容易掩盖 Rust 回归。CI 用 <code>tests/test_rust_compat.py</code> + <code>tests/test_cli_uses_rust.py</code> 覆盖接线。缓存是 env 感知的，monkeypatch 后自动失效。</div>
+
+<h3 id="m-ds">5.3 数据源与存储</h3>
+
+<h4><code>datasource.py</code> — 7 种数据源实现</h4>
+<table>
+<thead><tr><th>实现类</th><th>触发条件</th><th>特点</th></tr></thead>
+<tbody>
+<tr><td><code>HithinkFinanceDataSource</code></td><td><code>HITHINK_FINANCE_API_KEY</code> 配置（v4.2.0 起最优先）</td><td>同花顺官方数据，指数退避重试</td></tr>
+<tr><td><code>IndevsDataSource</code></td><td><code>INDEVS_API_KEY</code>（v3.8.1）</td><td>Tushare Replay API</td></tr>
+<tr><td><code>TushareDataSource</code></td><td>JNB 模式 + <code>TUSHARE_TOKEN</code></td><td>需 <code>_rate_limit()</code> 限流（默认 120 RPM）</td></tr>
+<tr><td><code>AStockDataDataSource</code></td><td>零配置默认（v4.1.0）</td><td>免费源聚合：腾讯/百度/东财/同花顺</td></tr>
+<tr><td><code>BridgeDataSource</code></td><td>bridge 服务可用</td><td>HTTP 缓存代理</td></tr>
+<tr><td><code>SqliteDataSource</code></td><td>离线兜底</td><td>本地 <code>data/stock_data.db</code></td></tr>
+<tr><td><code>CompositeDataSource</code></td><td><code>auto</code> 模式</td><td>按上述优先级 token 感知降级</td></tr>
+</tbody>
+</table>
+
+<h4><code>database.py</code> — SQLite 层</h4>
+<ul>
+<li>连接：<code>get_connection()</code> 上下文管理器（WAL + 自动 commit/rollback）；<code>DB_PATH</code> 从 <code>os.getenv("DB_PATH", "data/stock_data.db")</code> 读取</li>
+<li>实体：<code>TradeRecord</code>、<code>StockInfo</code></li>
+<li>API：自选股 <code>add/remove/get/update_watchlist_item</code>；交易 <code>save/get/update/delete_trade_record</code>、<code>get_trade_summary</code>；LLM 日志 <code>record_llm_response</code>、<code>get_llm_response_stats</code>；K 线 <code>save_klines</code></li>
+<li>初始化：<code>init_database()</code>、<code>init_tracking_tables()</code>、<code>drop_all_tables()</code></li>
+</ul>
+
+<h3 id="m-ind">5.4 <code>indicators/</code> 指标层 <span class="tag">L3</span></h3>
+<table>
+<thead><tr><th>文件/组件</th><th>职责</th><th>关键符号</th></tr></thead>
+<tbody>
+<tr><td><code>data_layer.py</code></td><td><b>核心</b>：DB-first K 线读取 + 指标缓存（内存 + SQLite 双层）+ <code>analyze_stock()</code> 30 步管线 → <code>IndicatorResult</code></td><td><code>get_kline_data()</code>、<code>get_realtime_data()</code>、<code>analyze_stock()</code>、<code>_step_*</code>（30 个）、<code>clear_indicator_memory_cache()</code>、<code>visualize_brick_chart()</code>、<code>format_result()</code></td></tr>
+<tr><td><code>core.py</code></td><td>指标算法实现：KDJ / BBI / MACD / RSI / WR / BOLL / DMI / 均线 / 双线 / 量比</td><td><code>_calc_kdj</code>、<code>_calc_bbi</code>、<code>calculate_macd</code>、<code>precompute_kdj_sequence</code>、<code>precompute_bbi_sequence</code></td></tr>
+<tr><td><code>price_patterns/</code></td><td>价格形态识别子包</td><td>关键 K、暴力 K、金碗、双枪、四块砖等</td></tr>
+<tr><td><code>volume_patterns.py</code></td><td>量能形态：量比攻击、阶梯放量、缩量</td><td><code>detect_volume_attack</code> 等</td></tr>
+<tr><td><code>wave_theory.py</code></td><td>三波理论：建仓波 / 拉升波 / 冲刺波</td><td><code>detect_three_waves()</code></td></tr>
+<tr><td><code>kirin_detector.py</code></td><td>麒麟会四阶段：吸筹 / 拉升 / 派发 / 回落</td><td><code>detect_kirin_stage()</code></td></tr>
+</tbody>
+</table>
+
+<h4><code>analyze_stock()</code> 的 30 步管线</h4>
+<pre>get_kline_data(ts_code, days)          <span class="c"># DB-first：先查 daily_kline 表，未命中才调 API 并写回</span>
+  ↓
+_step_kdj → _step_macd → _step_bbi → _step_moving_averages
+  → _step_rsi → _step_wr → _step_bollinger → _step_vol_ratio
+  → _step_double_line → _step_needle_20 → _step_needle_30
+  → _step_brick → _step_prev_high_low → _step_dmi
+  → _step_volume_pattern → _step_b1 → _step_b2
+  → _step_key_k → _step_violence_k → _step_two_30 → _step_nana
+  → _step_golden_bowl → _step_breathing → _step_sb1
+  → _step_sb1_detailed → _step_double_gun → _step_yidong
+  → _step_b3 → _step_four_brick → <span class="g">_step_sell_score</span>
+  ↓
+<span class="y">IndicatorResult</span>  <span class="c"># 写入 indicator_cache（内存 + SQLite 双层）</span></pre>
+<div class="note ok"><b>DB-first 约定：</b>K 线读取统一走 <code>indicators/data_layer.py::get_kline_data</code> 或 <code>strategies/core.py::get_kline_data</code>，先查 <code>daily_kline</code>，没有才调 API 并写回。</div>
+
+<h3 id="m-str">5.5 <code>strategies/</code> 战法层 <span class="tag">L4</span></h3>
+<table>
+<thead><tr><th>文件</th><th>职责</th><th>导出战法</th></tr></thead>
+<tbody>
+<tr><td><code>core.py</code></td><td>类型定义与取数：<code>StrategyType</code>、<code>Priority</code>、<code>Action</code>、<code>StrategySignal</code></td><td><code>get_kline_data</code>、<code>_dict_to_daily</code></td></tr>
+<tr><td><code>base_strategies.py</code></td><td>基础买点战法</td><td><code>detect_b1</code>、<code>detect_b2</code>、<code>detect_b3</code>、<code>detect_sb1</code>（超级 B1）</td></tr>
+<tr><td><code>compound_strategies.py</code></td><td>复合形态战法</td><td><code>detect_changan</code>（长安）、<code>detect_sifen_zhiyi_sanyin</code>（四分之三阴量）、<code>detect_nana</code>（娜娜）、<code>detect_yidong_dilian</code>（异动地量）、<code>detect_pinghang</code>（平行重炮）、<code>detect_kengqi</code>（坑里起好货）、<code>detect_duichen_va</code>（对称 VA）</td></tr>
+<tr><td><code>sell_signals.py</code></td><td>卖出/风险信号</td><td><code>detect_s1</code>（逃顶）、<code>detect_s2</code>（MACD 顶背离确认）、<code>detect_s3</code>（最后逃生）、<code>detect_brick_signals</code>、<code>detect_buy_exhaustion</code>（买盘枯竭）、<code>detect_green_fat_red_thin</code>（绿肥红瘦）、<code>detect_staircase_distribution</code>（阶梯放量下跌）、<code>detect_top_pinwheel</code>（顶部大风车）</td></tr>
+<tr><td><code>b1_b2_confirm.py</code>（v4.3+ 推荐）</td><td>新版 B1/B2 确认逻辑</td><td><code>B1B2Config</code>、<code>has_b1_in_window</code>、<code>is_b2_signal</code>、<code>is_high_open_skip</code></td></tr>
+<tr><td><code>vectorized.py</code></td><td>向量化批量检测（性能路径）</td><td>—</td></tr>
+<tr><td><code>__init__.py</code></td><td><b>折叠入口</b> <code>detect_all_strategies()</code> + 信号后处理</td><td><code>get_latest_signal()</code>、<code>analyze_with_strategies()</code>、<code>format_signal()</code></td></tr>
+</tbody>
+</table>
+
+<h4>信号后处理 <code>_post_process_signals()</code> 三步</h4>
+<ol>
+<li><b>去重</b>：同一天 + 同一策略类型，只保留置信度最高的</li>
+<li><b>排序</b>：按 <code>(priority, confidence, trade_date)</code> 降序</li>
+<li><b>截断</b>：每个类型最多保留最近 <b>3</b> 个，总体最多 <b>30</b> 个；最终按日期降序输出（时间线最自然）</li>
+</ol>
+
+<h3 id="m-scr">5.6 <code>screener/</code> 选股层 <span class="tag">L4</span></h3>
+<table>
+<thead><tr><th>文件</th><th>职责</th></tr></thead>
+<tbody>
+<tr><td><code>engine.py</code></td><td><b>核心引擎</b>：<code>screen_stocks(criteria, ...)</code> 并行选股；<code>analyze_stock()</code> 单股；<code>_analyze_worker()</code> 进程池 worker；<code>_is_picklable()</code> 参数可序列化校验；<code>_filter_stock()</code> 过滤</td></tr>
+<tr><td><code>criteria.py</code></td><td>选股条件注册表（12 种策略：B1/B2/B3/SB1/长安/娜娜/…）</td></tr>
+<tr><td><code>scoring.py</code></td><td>综合评分（曼城评分）</td></tr>
+<tr><td><code>models.py</code></td><td><code>StockScore</code> 等数据模型</td></tr>
+<tr><td><code>market.py</code></td><td>市场宽度/环境数据接入</td></tr>
+<tr><td><code>data.py</code></td><td>候选池数据获取（全市场 / 自选 / 行业）</td></tr>
+<tr><td><code>workflow.py</code></td><td>五步工作流编排（与 CLI <code>zt workflow</code> 对应）</td></tr>
+<tr><td><code>format.py</code></td><td>结果格式化输出</td></tr>
+<tr><td><code>cli.py</code></td><td>选股独立 CLI 入口</td></tr>
+</tbody>
+</table>
+
+<h3 id="m-sim">5.7 <code>simulator/</code> 模拟盘引擎 <span class="tag">L5 · 18 文件</span></h3>
+<p>端到端交易模拟器：择时 → 选股 → 过滤 → 仓位 → 成交 → 退出 → 叙事，是"最接近真实交易"的组件。</p>
+<table>
+<thead><tr><th>组件</th><th>职责</th></tr></thead>
+<tbody>
+<tr><td><code>simulator.py</code></td><td><b>主引擎</b>：<code>run_simulation()</code> 主循环、<code>_run_single_day()</code> 单日推进、<code>_SimulatorState</code> 状态、<code>_portfolio_value()</code> 估值、<code>_entry_stop_loss()</code>/<code>_entry_take_profit()</code> 出入场价、<code>_build_result()</code>、<code>summary_text()</code></td></tr>
+<tr><td><code>strategy_adapter.py</code></td><td>战法 → 模拟信号的适配器</td></tr>
+<tr><td><code>signal_filter.py</code></td><td>信号过滤（去重、冲突消解）</td></tr>
+<tr><td><code>resonance_scorer.py</code></td><td>多因子共振打分</td></tr>
+<tr><td><code>market_context.py</code></td><td>模拟器内市场环境判定（复用 <code>core.MarketRegime</code>）</td></tr>
+<tr><td><code>environment_weights.py</code></td><td>不同市况下的参数权重</td></tr>
+<tr><td><code>position_sizer.py</code></td><td>仓位 sizing（凯利/固定分数/波动率倒数）</td></tr>
+<tr><td><code>execution_engine.py</code></td><td>订单执行引擎</td></tr>
+<tr><td><code>execution_constraints.py</code></td><td>执行约束（涨跌停、T+1、停牌）</td></tr>
+<tr><td><code>cost_model.py</code> / <code>slippage_model.py</code></td><td>交易成本模型 / 滑点模型</td></tr>
+<tr><td><code>exit_manager.py</code></td><td>退出管理（止损/止盈/时间止损/信号退出）</td></tr>
+<tr><td><code>metrics.py</code></td><td>模拟器绩效指标（基于 <code>core.PerformanceMetrics</code>）</td></tr>
+<tr><td><code>walk_forward.py</code> / <code>param_space.py</code> / <code>optimizer_report.py</code></td><td>Walk-Forward 参数寻优 + 参数空间 + 优化报告</td></tr>
+<tr><td><code>narrator.py</code></td><td>LLM 叙事生成（把结果翻译成人话，带 TTL 缓存）</td></tr>
+</tbody>
+</table>
+
+<h3 id="m-bt">5.8 <code>backtest/</code> 回测层 <span class="tag">L5</span></h3>
+<table>
+<thead><tr><th>文件</th><th>职责</th></tr></thead>
+<tbody>
+<tr><td><code>single.py</code></td><td>单股单策略回测（少妇战法等），走 Rust 桥优先</td></tr>
+<tr><td><code>portfolio.py</code></td><td>多股票组合回测</td></tr>
+<tr><td><code>b1_b2_backtest.py</code></td><td>B1+B2 联合资金池回测</td></tr>
+<tr><td><code>_rust_bridge.py</code></td><td>Rust 桥：<code>is_rust_available()</code> / <code>try_call(name, ...)</code>，失败由业务层 fallback 到 Python</td></tr>
+</tbody>
+</table>
+<div class="note warn"><b>注意：</b><code>api/services/backtest_service.py</code> 目前<strong>直接调用 Python 回测模块，不走 Rust 桥</strong>——这是已知的不一致点。</div>
+
+<h3 id="m-ver">5.9 <code>verify/</code> 验收层 <span class="tag">L6 · v1.0 五项硬指标</span></h3>
+<h4>五项硬门槛（<code>gates.py::THRESHOLDS</code>）</h4>
+<table>
+<thead><tr><th>指标</th><th>阈值</th><th>方向</th><th>失败改进建议</th></tr></thead>
+<tbody>
+<tr><td>Sharpe</td><td>≥ 0.5</td><td>higher</td><td>增大收益弹性 / 降低波动</td></tr>
+<tr><td>Calmar</td><td>≥ 0.5</td><td>higher</td><td>提升年化收益或降低回撤</td></tr>
+<tr><td>WinRate</td><td>≥ 0.40</td><td>higher</td><td>收紧入场条件（如降低 j_threshold）</td></tr>
+<tr><td>MaxDD</td><td>≤ 0.25</td><td>lower</td><td>降低仓位 / 加严止损</td></tr>
+<tr><td>OOS/IS</td><td>≥ 0.60</td><td>higher</td><td>降低过拟合（减少参数维度）</td></tr>
+</tbody>
+</table>
+<p><b>组件</b>：<code>pipeline.py</code>（主管线 + <code>AggregateMetrics</code>/<code>GateResult</code> 定义）、<code>gates.py</code>（<code>check_gates()</code>）、<code>walk_forward.py</code> + <code>portfolio_walk_forward.py</code>（样本外验证）、<code>pool.py</code>（候选池）、<code>portfolio_engine.py</code>（组合引擎）、<code>scorer.py</code>（评分）、<code>registry_writer.py</code>（注册写回）、<code>report.py</code>（报告）、<code>cli.py</code>（CLI 入口）。</p>
+<div class="note">前 4 项从 <code>metrics</code> 直接取；<b>OOS/IS 仅在 <code>wf</code> 不为 None 时判定</b>（需要 walk-forward 结果）。</div>
+
+<h3 id="m-sync">5.10 <code>data_sync/</code> 数据同步层 <span class="tag">L2</span></h3>
+<table>
+<thead><tr><th>文件</th><th>职责</th></tr></thead>
+<tbody>
+<tr><td><code>rate_limiter.py</code></td><td>令牌桶限流（<code>TUSHARE_RPM</code>，默认 120 次/分）——<b>所有 Tushare 调用必须包裹</b></td></tr>
+<tr><td><code>syncer.py</code></td><td>批量同步编排（日线/基本面/指数/0AMV）</td></tr>
+<tr><td><code>fetcher.py</code></td><td>单次取数 + 写库</td></tr>
+<tr><td><code>indicator_cache.py</code></td><td>指标缓存管理（内存 + SQLite 双层）</td></tr>
+<tr><td><code>cli.py</code> / <code>__main__.py</code></td><td>CLI 入口（<code>zt sync init|sync|status|stk-factor|index|0amv</code>）</td></tr>
+</tbody>
+</table>
+
+<h3 id="m-opt">5.11 <code>self_optimizer/</code> Darwin 自优化 <span class="tag">L6 · 闭环</span></h3>
+<table>
+<thead><tr><th>文件</th><th>职责</th></tr></thead>
+<tbody>
+<tr><td><code>param_registry.py</code></td><td>可优化参数的注册中心（单一事实来源）</td></tr>
+<tr><td><code>mutator.py</code></td><td>参数变异（高斯扰动 / 网格 / 交叉）</td></tr>
+<tr><td><code>scorer.py</code> / <code>backtest_scorer.py</code></td><td>变体评分（回测绩效 + 硬门槛）</td></tr>
+<tr><td><code>reflex_blacklist.py</code></td><td>反射式黑名单（反复失败的参数组合不再试）</td></tr>
+<tr><td><code>phase1_baseline.py</code></td><td>阶段一：建立基线</td></tr>
+<tr><td><code>phase2_hillclimb.py</code></td><td>阶段二：爬山搜索</td></tr>
+<tr><td><code>phase3_report.py</code></td><td>阶段三：报告生成</td></tr>
+<tr><td><code>llm_judge.py</code></td><td>LLM 评判（可选，用于话术/框架类目标）</td></tr>
+</tbody>
+</table>
+
+<h3 id="m-stat">5.12 <code>statistics/</code> 统计检验 <span class="tag">L5</span></h3>
+<div class="grid">
+  <div class="card"><h5>criteria.py</h5><p>统计显著性判据：Sharpe t 检验、Monte-Carlo 置换检验</p></div>
+  <div class="card"><h5>sensitivity.py</h5><p>参数敏感性分析（邻域扰动看绩效衰减）</p></div>
+  <div class="card"><h5>ensemble.py</h5><p>多策略/多参数集成（Bagging / 加权投票）</p></div>
+</div>
+
+<h3 id="m-cli">5.13 CLI 层全景</h3>
+<pre>zt <span class="y">analyze</span>    &lt;code&gt; --days 365 --json      <span class="c"># 个股全量分析</span>
+zt <span class="y">screen</span>     --strategy B1 --limit 20      <span class="c"># 批量选股（支持 16 条中文别名）</span>
+zt <span class="y">score</span>      &lt;code&gt;                        <span class="c"># 综合评分</span>
+zt <span class="y">workflow</span>                                <span class="c"># 每日五步工作流（等价 daily）</span>
+zt <span class="y">diagnose</span>   &lt;code&gt; --json                 <span class="c"># 持仓诊断</span>
+zt <span class="y">watchlist</span>  add|remove|list|scan|report  <span class="c"># 自选股</span>
+zt <span class="y">sync</span>       init|sync|status|stk-factor|index|0amv
+zt <span class="y">track</span>      ...                           <span class="c"># 跟踪管理</span>
+zt <span class="y">backtest</span>   shaofu|multi|portfolio|b2-confirm
+zt <span class="y">trade</span>      add|list|review|stats         <span class="c"># 口语化记录交易</span>
+zt <span class="y">daily</span>                                   <span class="c"># 五步日常</span>
+zt <span class="y">monitor</span>    --json                       <span class="c"># 自选股监控</span>
+zt <span class="y">simulate</span>   [codes] --days 250 --capital 100000
+zt <span class="y">self-optimize</span> run --target trading --rounds 3
+zt <span class="y">market timing</span>                           <span class="c"># 择时</span>
+zt <span class="y">verify-v10</span>  --limit 50 --days 300 --walk-forward
+<span class="c"># 所有命令支持 --json，宿主（LLM / 前端）直接解析结构化输出</span></pre>
+
+<!-- ============ 6 Rust ============ -->
+<h2 class="sec" id="rust"><span class="num">06</span>Rust 计算核 <code>rust/</code></h2>
+
+<h3>Workspace 结构（6 crates）</h3>
+<pre>rust/
+├── Cargo.toml                  <span class="c"># workspace 根</span>
+├── rust-toolchain.toml         <span class="c"># 锁 1.78.0</span>
+├── Dockerfile.test             <span class="c"># Linux 构建兜底（py3.11）</span>
+├── scripts/build_macos.sh / build-linux.sh
+└── crates/
+    ├── <span class="k">core_types</span>       <span class="c"># 基础类型：KLineSeries、Config、CoreError</span>
+    ├── <span class="k">indicators</span>       <span class="c"># 指标计算（ATR 等）</span>
+    ├── <span class="k">backtest_engine</span>  <span class="c"># 单策略 / 组合回测引擎</span>
+    ├── <span class="k">grid_search</span>      <span class="c"># 参数网格搜索</span>
+    ├── <span class="k">screener</span>         <span class="c"># 选股筛选（polars 加速）</span>
+    └── <span class="k">bindings</span>         <span class="c"># PyO3 绑定 → _core_compute 扩展模块</span></pre>
+
+<h3>PyO3 暴露给 Python 的接口</h3>
+<table>
+<thead><tr><th>Python 函数名</th><th>签名</th><th>底层调用</th></tr></thead>
+<tbody>
+<tr><td><code>compute_atr_py</code></td><td><code>(klines, window=14) → list[float]</code></td><td><code>core_compute_atr</code> → <code>zt_indicators::compute_atr</code></td></tr>
+<tr><td><code>run_single_strategy_backtest_py</code></td><td><code>(config, klines)</code></td><td><code>core_run_single_strategy_backtest</code></td></tr>
+<tr><td><code>run_portfolio_backtest_py</code></td><td><code>(config, klines_by_code)</code></td><td><code>core_run_portfolio_backtest</code></td></tr>
+<tr><td><code>run_grid_search_py</code></td><td><code>(base_config, param_grid, splits, klines)</code></td><td><code>core_run_grid_search</code></td></tr>
+<tr><td><code>rust_smoke</code></td><td><code>() → "ok from rust"</code></td><td>CI 冒烟测试用</td></tr>
+<tr><td><code>raise_value_error</code> / <code>raise_key_error</code></td><td>错误映射验证</td><td><code>core_error_to_pyerr</code>：<code>CoreError::InvalidKLine</code> → <code>PyValueError</code></td></tr>
+</tbody>
+</table>
+
+<h4>构建与产物</h4>
+<pre><span class="c"># maturin 配置（pyproject.toml [tool.maturin]）</span>
+name         = "_core_compute"
+python-source = "python"
+module-name  = "_core_compute._core_compute"   <span class="c"># 桩包在 python/_core_compute/</span>
+
+<span class="c"># 构建</span>
+cd rust/crates/bindings &amp;&amp; maturin develop --release
+<span class="c"># macOS：rust/scripts/build_macos.sh</span>
+<span class="c"># Linux：rust/Dockerfile.test 或 rust/scripts/build-linux.sh</span>
+
+<span class="c"># 测试（bindings 由 PyO3 侧构建，需排除）</span>
+cargo test --workspace --exclude zt_bindings
+cargo fmt --check &amp;&amp; cargo clippy</pre>
+<div class="note"><b>产物：</b><code>_core_compute</code> 是 pyo3 扩展模块（<code>.so</code> 为 build artifact，不入库）；<code>python/_core_compute/</code> 仅存 <code>__init__.py</code> 桩。</div>
+
+<!-- ============ 7 API ============ -->
+<h2 class="sec" id="api"><span class="num">07</span>API 服务层 <code>api/</code></h2>
+
+<h3>架构</h3>
+<pre>api/
+├── main.py          <span class="c"># FastAPI 实例（title「Z哥量化 API」v1.0.0）+ CORS + 全局异常处理 + 9 router + start_web()</span>
+├── config.py        <span class="c"># pydantic-settings Settings: db_path / data_mode / cors_origins / api_port / api_prefix</span>
+├── routes/  (9)     <span class="c"># 路由层：参数校验 + 调用 service + 响应模型</span>
+├── services/(7)     <span class="c"># 业务层：编排 modules/，无 HTTP 语义</span>
+├── models/  (8)     <span class="c"># Pydantic 请求/响应模型</span>
+└── utils/serializers.py  <span class="c"># safe_serialize / dataclass_to_dict（Enum + 嵌套 dataclass 递归）</span></pre>
+<p>统一前缀 <code>/api/v1</code>；<code>start_web()</code> 用 <code>uvicorn.run("api.main:app", host="0.0.0.0", port=8000)</code>。</p>
+
+<h3>端点清单（22 个）</h3>
+<table>
+<thead><tr><th>模块</th><th>方法</th><th>路径（前缀 <code>/api/v1</code>）</th><th>功能</th><th>Service</th></tr></thead>
+<tbody>
+<tr><td rowspan="4"><code>stock</code></td><td>GET</td><td><code>/stock/analyze/{ts_code}?days=</code></td><td>全量分析：指标 + 三波 + 麒麟会 + 战法 + 诊断 + 评分</td><td><code>get_full_analysis</code></td></tr>
+<tr><td>GET</td><td><code>/stock/analyze/{ts_code}/klines</code></td><td>K 线图表数据（ECharts 列式：dates/ohlc/volumes/overlays/kdj/macd/brick/waves/kirin/breathing）</td><td><code>get_kline_chart_data</code></td></tr>
+<tr><td>GET</td><td><code>/stock/analyze/{ts_code}/signals</code></td><td>战法信号列表</td><td><code>get_signals</code></td></tr>
+<tr><td>GET</td><td><code>/stock/score/{ts_code}</code></td><td>综合评分（曼城评分）</td><td><code>get_score</code></td></tr>
+<tr><td rowspan="2"><code>screen</code></td><td>GET</td><td><code>/screen/strategies</code></td><td>列出 12 种可用选股策略</td><td><code>get_strategies</code></td></tr>
+<tr><td>POST</td><td><code>/screen/run</code></td><td>执行选股（strategy / limit / use_parallel）</td><td><code>run_screen</code></td></tr>
+<tr><td rowspan="5"><code>watchlist</code></td><td>GET</td><td><code>/watchlist/?tags=</code></td><td>列出自选股</td><td><code>list_watchlist</code></td></tr>
+<tr><td>POST</td><td><code>/watchlist/</code></td><td>添加自选股</td><td><code>add_to_watchlist</code></td></tr>
+<tr><td>DELETE</td><td><code>/watchlist/{ts_code}</code></td><td>移除自选股</td><td><code>remove_from_watchlist</code></td></tr>
+<tr><td>POST</td><td><code>/watchlist/scan</code></td><td>扫描信号（B1/B2/出货/破位/异动计数）</td><td><code>scan_watchlist</code></td></tr>
+<tr><td>GET</td><td><code>/watchlist/report</code></td><td>生成日报文本</td><td><code>generate_report</code></td></tr>
+<tr><td><code>diagnosis</code></td><td>GET</td><td><code>/diagnosis/{ts_code}?days=</code></td><td>单股完整持仓诊断</td><td><code>diagnose</code></td></tr>
+<tr><td rowspan="3"><code>backtest</code></td><td>POST</td><td><code>/backtest/shaofu</code></td><td>少妇战法单股回测</td><td><code>run_shaofu</code></td></tr>
+<tr><td>POST</td><td><code>/backtest/multi</code></td><td>多策略融合回测</td><td><code>run_multi</code></td></tr>
+<tr><td>POST</td><td><code>/backtest/portfolio</code></td><td>多股票组合回测</td><td><code>run_portfolio</code></td></tr>
+<tr><td rowspan="2"><code>simulator</code></td><td>POST</td><td><code>/simulator/run</code></td><td>组合模拟盘运行</td><td><code>run_simulation_service</code></td></tr>
+<tr><td>POST</td><td><code>/simulator/walk-forward</code></td><td>Walk-forward 参数寻优</td><td><code>run_walk_forward_service</code></td></tr>
+<tr><td rowspan="4"><code>trade</code></td><td>GET</td><td><code>/trade/?page=&page_size=&ts_code=</code></td><td>分页交易记录</td><td><code>list_trades</code></td></tr>
+<tr><td>POST</td><td><code>/trade/parse</code></td><td>解析口语化交易描述（<b>不落库</b>）</td><td><code>parse_trade</code></td></tr>
+<tr><td>POST</td><td><code>/trade/</code></td><td>新增交易记录</td><td><code>create_trade</code></td></tr>
+<tr><td>GET</td><td><code>/trade/stats</code></td><td>交易统计</td><td><code>trade_stats</code></td></tr>
+<tr><td rowspan="3"><code>system</code></td><td>GET</td><td><code>/system/health</code></td><td>健康检查</td><td>—</td></tr>
+<tr><td>GET</td><td><code>/system/sync/status</code></td><td>数据同步状态</td><td>—</td></tr>
+<tr><td>POST</td><td><code>/system/sync/{ts_code}</code></td><td>触发单股同步</td><td>—</td></tr>
+<tr><td><code>commentary</code></td><td>POST</td><td><code>/commentary/{ts_code}</code></td><td>生成 Z 哥口吻点评</td><td><code>commentary_service</code></td></tr>
+</tbody>
+</table>
+
+<!-- ============ 8 前端 ============ -->
+<h2 class="sec" id="fe"><span class="num">08</span>前端看板 <code>frontend/</code></h2>
+<pre>frontend/src/
+├── main.tsx / App.tsx
+├── api/         <span class="c"># 后端接口封装</span>
+├── pages/  (8)  <span class="c"># Dashboard | StockAnalysis | Screener | Watchlist | Backtest | Simulator | Trades | Settings</span>
+├── components/(18)
+├── hooks/
+├── lib/         <span class="c"># 工具库（含 ECharts 图表封装）</span>
+├── stores/      <span class="c"># 状态管理</span>
+└── styles/</pre>
+<table>
+<thead><tr><th>页面</th><th>对应后端</th><th>主要内容</th></tr></thead>
+<tbody>
+<tr><td><code>Dashboard</code></td><td><code>/system/health</code></td><td>总览：系统状态、自选股速览</td></tr>
+<tr><td><code>StockAnalysis</code></td><td><code>/stock/analyze/*</code></td><td>个股全量分析 + ECharts K 线（含砖形图、波浪、麒麟序列叠加）</td></tr>
+<tr><td><code>Screener</code></td><td><code>/screen/*</code></td><td>选股：12 策略选择 + 结果表 + 排序</td></tr>
+<tr><td><code>Watchlist</code></td><td><code>/watchlist/*</code></td><td>自选股管理与信号扫描</td></tr>
+<tr><td><code>Backtest</code></td><td><code>/backtest/*</code></td><td>回测：少妇/多策略/组合</td></tr>
+<tr><td><code>Simulator</code></td><td><code>/simulator/*</code></td><td>模拟盘运行 + Walk-Forward</td></tr>
+<tr><td><code>Trades</code></td><td><code>/trade/*</code></td><td>交易记录、口语化录入、复盘统计</td></tr>
+<tr><td><code>Settings</code></td><td><code>/system/*</code></td><td>配置与数据源状态</td></tr>
+</tbody>
+</table>
+<p>Vite 端口 5173，<code>/api</code> 代理到 <code>http://localhost:8000</code>；质量靠 <code>npm run lint</code> + <code>npm run build</code>（<code>tsc -b &amp;&amp; vite build</code>），<b>无 JS 测试</b>。</p>
+
+<!-- ============ 9 知识层 ============ -->
+<h2 class="sec" id="know"><span class="num">09</span>知识与规则层（轨道 A）</h2>
+
+<h3><code>SKILL.md</code> 结构（Skill-Schema-V2）</h3>
+<pre>front-matter  <span class="c"># name / description(Load when + Do NOT load when + Risk level + Data dependency + Output format + Version)</span>
+  ↓
+<span class="g">能力边界与 API 依赖声明</span>   <span class="c"># 4 种数据模式表 + 5 条能力边界 + 强制免责声明</span>
+  ↓
+<span class="g">路由声明（Routing Surface）</span>  <span class="c"># 何时加载 / 何时不加载 / 优先级</span>
+  ↓
+<span class="g">契约（Contract Surface）</span>     <span class="c"># 输入契约 / 输出契约 / 边界与限制</span>
+  ↓
+<span class="y">运行时索引 → 安全边界 → 首次对话 → 角色规则 → 可用工具 → 回答工作流</span></pre>
+<div class="note">
+<b>加载提示（SKILL.md 内嵌）：</b>按需加载运行时资源，<b>避免全量注入</b> —— 这是上下文成本控制的关键设计。
+</div>
+
+<h4>输出契约（4 类任务的硬性验收标准）</h4>
+<table>
+<thead><tr><th>任务</th><th>输出要求</th><th>验收标准</th></tr></thead>
+<tbody>
+<tr><td>个股分析</td><td>评分 + 战法匹配 + 风险警告 + 操作建议</td><td>必须含具体数字（J 值、量比、评分）；必须含进场/止损/止盈规则；<b>不含「建议买入/卖出」字样</b></td></tr>
+<tr><td>选股</td><td>按评分排序的候选列表 + 匹配理由</td><td>必须说明为什么匹配（如「B1: J=-12，缩量回调」）</td></tr>
+<tr><td>交易复盘</td><td>逐笔点评 + 模式总结 + 改进建议</td><td>Z 哥口吻；非 AI 味；指出具体错误和修正方向</td></tr>
+<tr><td>人生/职业/商业决策</td><td>框架评估 + 行动建议 + 反共识视角</td><td>不模板化；追问具体情况；给出可执行步骤</td></tr>
+<tr><td>知识解释</td><td>概念定义 + 案例 + 适用边界 + 常见误区</td><td>不能只说「是什么」，必须说「什么时候用、什么时候不能用」</td></tr>
+</tbody>
+</table>
+
+<h3><code>knowledge/</code> 知识库（32 篇）</h3>
+<div class="chips" style="margin:10px 0">
+<span class="chip c1">trading-core</span><span class="chip c1">indicators</span><span class="chip c1">signal_dictionary</span><span class="chip c1">data_dictionary</span>
+<span class="chip c1">key-candles</span><span class="chip c1">trend-lines</span><span class="chip c1">advanced-patterns</span><span class="chip c1">breathing-theory</span>
+<span class="chip c2">exit-strategies</span><span class="chip c2">sell-discipline</span><span class="chip c2">position-management</span><span class="chip c2">portfolio-management</span>
+<span class="chip c2">iron-butterfly</span><span class="chip c2">four-rhythms</span><span class="chip c2">three-best-principles</span>
+<span class="chip c3">heuristics</span><span class="chip c3">trading-psychology</span><span class="chip c3">market-macro</span><span class="chip c3">six-tracks-2026</span>
+<span class="chip c4">career-development</span><span class="chip c4">life-decision</span><span class="chip c4">business-judgment</span>
+<span class="chip c4">framework-extraction</span><span class="chip c4">improvement-system</span><span class="chip c4">harness</span><span class="chip c4">workflow</span>
+<span class="chip">stock-glossary</span><span class="chip">macro/</span><span class="chip">reference/</span><span class="chip">strategies/</span>
+</div>
+
+<h3>其他配套</h3>
+<div class="grid">
+  <div class="card"><h5>rules/</h5><p>意图规则与决策框架（2 md + 1 yaml）</p></div>
+  <div class="card"><h5>references/research/</h5><p>11 篇语料调研提炼（原始语料不入库）</p></div>
+  <div class="card"><h5>corpus/</h5><p>语料采集与质检：<code>quality_check.py</code>（SKILL.md 12 项质量门）、<code>dual_axis_review.py</code>（双轴评审）</p></div>
+  <div class="card"><h5>test-prompts.json</h5><p>测试用例提示集</p></div>
+</div>
+
+<!-- ============ 10 流程 ============ -->
+<h2 class="sec" id="flow"><span class="num">10</span>核心运行流程</h2>
+
+<h3 id="flow1">10.1 流程一：个股全量分析（<code>zt analyze</code> / <code>GET /stock/analyze</code>）</h3>
+<pre><span class="b">用户 / API</span>
+   │  ts_code, days
+   ▼
+<span class="y">cli.py::_analyze_core()</span>  ── 中文别名归一化 ──►  <span class="y">api/routes/stock.py</span>
+   │
+   ▼
+<span class="g">indicators/data_layer.py::get_kline_data()</span>
+   │  <span class="c">① 查 SQLite daily_kline（DB-first）</span>
+   │  <span class="c">② 未命中 → CompositeDataSource.get_daily()（7 源降级链）</span>
+   │  <span class="c">③ 写回 daily_kline + 限流包装</span>
+   ▼
+<span class="g">analyze_stock() 30 步管线</span>  <span class="c"># _step_kdj / macd / bbi / brick / b1 / b2 / ... / sell_score</span>
+   │  <span class="c">查 indicator_cache（内存 L1 → SQLite L2）→ 命中直接返回</span>
+   ▼
+<span class="y">IndicatorResult</span>  <span class="c"># 60+ 指标 + 形态 + 三波 + 麒麟会</span>
+   │
+   ├──► <span class="k">strategies.detect_all_strategies()</span>   <span class="c"># 见流程 10.3</span>
+   ├──► <span class="k">portfolio_diagnosis / screener.scoring</span>
+   └──► <span class="k">format_result()</span>
+   ▼
+<span class="b">--json 结构化输出</span> / <span class="b">人类可读文本</span> / <span class="b">ECharts 列式 K 线</span></pre>
+
+<h3 id="flow2">10.2 流程二：批量选股（<code>zt screen</code> / <code>POST /screen/run</code>）</h3>
+<pre><span class="y">screener/engine.py::screen_stocks(criteria, limit, use_parallel)</span>
+   │
+   ├─ <span class="g">criteria.py</span>：解析策略名（支持 16 条中文别名）→ 过滤条件集
+   ├─ <span class="g">data.py</span>：拉取候选池（全市场 / 自选 / 行业过滤）
+   ├─ <span class="g">market.py</span>：取市场宽度 + <span class="k">core.MarketRegime</span> 环境判定
+   │
+   ▼ <span class="c">并行：进程池 _analyze_worker（_is_picklable 预检参数可序列化）</span>
+   对每只股票：
+     get_kline_data → analyze_stock → detect_all_strategies
+       ↓
+     <span class="g">scoring.py</span>：综合评分 → <span class="y">StockScore</span>
+       ↓
+     <span class="g">_filter_stock()</span>：按 criteria 过滤
+   │
+   ▼ 汇总排序 → <span class="g">format.py</span> 格式化
+<span class="b">按评分排序的候选列表 + 每只的匹配理由</span></pre>
+
+<h3 id="flow3">10.3 流程三：战法信号折叠（<code>detect_all_strategies()</code>）</h3>
+<pre><span class="y">strategies/__init__.py::detect_all_strategies(ts_code, days, klines=None)</span>
+   │
+   ├─ 取数：klines 为 None → <span class="g">get_kline_data()</span>
+   ├─ <span class="g">预计算</span>（消除 daily loop 内重复计算）：
+   │     precompute_kdj_sequence → kdj_k/d/j 挂载
+   │     precompute_bbi_sequence → bbi 挂载
+   │     calculate_macd         → macd_dif 挂载
+   │
+   ▼ <span class="c">逐日折叠（i 从 20 开始，用增长前缀避免 O(n) 切片复制）</span>
+   for i in range(20, len(klines)):
+       kirin_context = detect_kirin_stage(kirin_prefix)   <span class="c"># 麒麟会上下文</span>
+       ├─ detect_b1  ├─ detect_b2  ├─ detect_b3  ├─ detect_sb1
+       ├─ detect_changan ├─ detect_sifen_zhiyi_sanyin ├─ detect_nana
+       ├─ detect_yidong_dilian ├─ detect_pinghang ├─ detect_kengqi ├─ detect_duichen_va
+       ├─ detect_s1 ├─ detect_s2 ├─ detect_s3 ├─ detect_brick_signals
+       └─ detect_buy_exhaustion ├─ detect_green_fat_red_thin
+          ├─ detect_staircase_distribution ├─ detect_top_pinwheel
+   │
+   ▼ <span class="c">P1 全局指标（只针对最新一天）</span>
+   detect_didi / detect_macd_trap / detect_chuhuo_wushi / detect_volume_attack
+   detect_zaihou_chongjian / detect_yueyueyushi / detect_key_candle
+   │
+   ▼ <span class="c">P2 指标</span>
+   detect_three_waves（三波：建仓/拉升/冲刺）
+   detect_kirin_stage（麒麟会：吸筹/拉升/派发/回落）
+   │
+   ▼ <span class="g">_post_process_signals()：去重 → 排序 → 截断（每类≤3，总计≤30）</span>
+<span class="b">list[StrategySignal]</span></pre>
+
+<h3 id="flow4">10.4 流程四：回测 / 模拟盘（含 Rust 加速路径）</h3>
+<pre><span class="b">CLI / API</span>
+   │
+   ▼
+<span class="y">backtest/single.py | portfolio.py | b1_b2_backtest.py</span>
+   │
+   ├─► <span class="g">_rust_bridge.try_call("run_single_strategy_backtest_py", ...)</span>
+   │      └─ <span class="g">core._rust_compat.compute_func(name)</span>
+   │            ├─ env=rust   → 强制；import 失败抛错
+   │            ├─ env=python → None
+   │            └─ env=auto   → 失败静默返回 None
+   │      ├─ <span class="g">命中</span> → <span class="y">_core_compute（Rust）</span>：core_types → backtest_engine → 返回
+   │      └─ <span class="g">未命中</span> → <span class="y">Python fallback</span>（同语义实现）
+   │
+   ▼
+<span class="y">core.PerformanceMetrics 计算</span>（20 字段，TRADING_DAYS_PER_YEAR=252）
+   │
+   ▼
+<span class="k">simulator/</span>（更完整路径，择时→选股→过滤→共振打分→仓位→执行约束→成本/滑点→退出→叙事）
+   │  <span class="c">environment_weights 按 MarketRegime 调参</span>
+   ▼
+<span class="k">statistics/</span>：Sharpe t 检验 / MC 置换 / 敏感性 / 集成
+   ▼
+<span class="b">绩效结果 → --json / API 响应</span></pre>
+
+<h3 id="flow5">10.5 流程五：v1.0 验收管线（<code>zt verify</code>）</h3>
+<pre><span class="y">verify/pipeline.py</span>
+   │
+   ├─ <span class="g">pool.py</span>：构建候选池
+   ├─ <span class="g">core.make_walk_forward_splits()</span>：IS/OOS 窗口切分
+   │      ├─ <span class="g">walk_forward.py</span>（单股）
+   │      └─ <span class="g">portfolio_walk_forward.py</span>（组合）
+   ├─ <span class="g">portfolio_engine.py</span>：跑 IS + OOS
+   ├─ <span class="g">scorer.py</span> → <span class="y">AggregateMetrics</span>
+   ├─ <span class="g">gates.py::check_gates(metrics, wf)</span>
+   │      Sharpe≥0.5 · Calmar≥0.5 · WinRate≥0.40 · MaxDD≤0.25 · OOS/IS≥0.60
+   │      └─ 每项产出 <span class="y">GateResult</span>（pass/fail + 改进建议）
+   ├─ <span class="g">registry_writer.py</span>：达标参数写回注册中心（ratchet）
+   └─ <span class="g">report.py</span>：生成验收报告
+<span class="b">五项硬指标全 PASS → 允许进入下一阶段</span></pre>
+
+<h3 id="flow6">10.6 流程六：Darwin 自优化闭环（<code>zt self-optimize</code>）</h3>
+<pre>       ┌──────────────────────────────────────────────┐
+       │                                              ▼
+<span class="g">param_registry</span> ──► <span class="g">phase1_baseline</span>（建立基线）
+       │                    │
+       │                    ▼
+       │            <span class="g">phase2_hillclimb</span>
+       │                    │  <span class="g">mutator.py</span> 变异参数
+       │                    ▼
+       │            <span class="g">backtest_scorer</span>（回测 + 硬门槛）
+       │                    │
+       │            <span class="g">reflex_blacklist</span> 过滤已失败组合
+       │                    │
+       │                    ▼
+       │            <span class="y">scorer.py</span> 评分对比
+       │                    │
+       │         ┌──────────┴──────────┐
+       │     更优 ▼                   ▼ 更差
+       │   <span class="g">ratchet 更新参数</span>      回退 / 拉黑
+       │         │                    │
+       └─────────┘                    │
+                                      └──► 记入黑名单
+       │
+       ▼
+<span class="g">phase3_report</span> → 报告 + <span class="g">registry_writer</span> 写回
+（可选）<span class="g">llm_judge.py</span>：对话术/框架类目标做 LLM 评判</pre>
+
+<!-- ============ 11 数据源 ============ -->
+<h2 class="sec" id="datasource"><span class="num">11</span>数据源降级链</h2>
+<pre><span class="y">CompositeDataSource（auto 模式，token 感知降级）</span>
+
+  <span class="g">1. hithink</span>        HITHINK_FINANCE_API_KEY   <span class="c"># v4.2.0 起最优先（配置时）</span>
+        │ 未配置 / 失败
+        ▼
+  <span class="g">2. Indevs</span>         INDEVS_API_KEY            <span class="c"># v3.8.1</span>
+        │ 未配置 / 失败
+        ▼
+  <span class="g">3. Tushare Pro</span>    TUSHARE_TOKEN（JNB 模式）  <span class="c"># 必须 _rate_limit()</span>
+        │ 未配置 / 失败
+        ▼
+  <span class="g">4. a-stock-data</span>   <span class="y">免费源，零配置默认</span>       <span class="c"># v4.1.0（腾讯/百度/东财/同花顺）</span>
+        │ 失败
+        ▼
+  <span class="g">5. bridge</span>         tushare-data-bridge HTTP  <span class="c"># 缓存代理</span>
+        │ 失败
+        ▼
+  <span class="g">6. 本地 SQLite</span>    data/stock_data.db        <span class="c"># 离线兜底</span>
+        │
+        ▼
+  <span class="r">无数据 → 明确报告数据状态，绝不编造价格/信号</span></pre>
+
+<h4>环境变量清单（<code>.env.example</code>）</h4>
+<table>
+<thead><tr><th>变量</th><th>作用</th><th>必填</th></tr></thead>
+<tbody>
+<tr><td><code>DATA_MODE</code></td><td><code>jnb</code>（真实数据）/ <code>websearch</code>（纯 LLM）</td><td>✅</td></tr>
+<tr><td><code>TUSHARE_TOKEN</code> / <code>TUSHARE_API_URL</code></td><td>Tushare 中转 API</td><td>JNB 且未用 Indevs</td></tr>
+<tr><td><code>INDEVS_API_KEY</code> / <code>URL</code></td><td>Indevs Replay API</td><td>可选（优先级 2）</td></tr>
+<tr><td><code>HITHINK_FINANCE_API_KEY</code> / <code>URL</code></td><td>同花顺金融数据</td><td>可选（优先级 1）</td></tr>
+<tr><td><code>TUSHARE_BRIDGE_*</code></td><td>Bridge 代理（host/port/timeout/enabled）</td><td>可选</td></tr>
+<tr><td><code>TUSHARE_RPM</code></td><td>限流（默认 120 次/分）</td><td>可选</td></tr>
+<tr><td><code>DATA_DIR</code> / <code>DB_PATH</code></td><td>数据目录 / SQLite 路径</td><td>✅</td></tr>
+<tr><td><code>LLM_API_KEY</code> / <code>BASE_URL</code> / <code>MODEL</code> / <code>ANTHROPIC_API_KEY</code></td><td>LLM 生成（未配置则只出意图识别结果）</td><td>可选</td></tr>
+<tr><td><code>KB_ENABLED</code> / <code>KB_API_URL</code></td><td>向量知识库（默认关闭）</td><td>可选</td></tr>
+<tr><td><code>IM_PUSH_WEBHOOK</code></td><td>飞书预警推送</td><td>可选</td></tr>
+<tr><td><code>COMMENTARY_CACHE_TTL</code> / <code>SIMULATION_NARRATE_CACHE_TTL</code></td><td>缓存 TTL（秒）</td><td>可选</td></tr>
+<tr><td><code>ZETTARANC_ENV</code></td><td>自定义 .env 路径</td><td>可选</td></tr>
+<tr><td><code>ZETTARANC_BACKTEST_IMPL</code></td><td><code>rust</code>（默认）/ <code>python</code> / <code>auto</code></td><td>可选</td></tr>
+</tbody>
+</table>
+
+<!-- ============ 12 约定 ============ -->
+<h2 class="sec" id="convention"><span class="num">12</span>关键约定（改动前必读）</h2>
+
+<h3>单一事实来源</h3>
+<table>
+<thead><tr><th>概念</th><th>唯一定义位置</th><th>禁止行为</th></tr></thead>
+<tbody>
+<tr><td><code>MarketRegime</code></td><td><code>modules/core/market_context.py</code></td><td>另立第二套枚举</td></tr>
+<tr><td><code>PerformanceMetrics</code>（20 字段）</td><td><code>modules/core/metrics.py</code></td><td>自定义绩效结构</td></tr>
+<tr><td><code>TRADING_DAYS_PER_YEAR=252</code></td><td><code>modules/core/metrics.py</code></td><td>硬编码 252 / 250</td></tr>
+<tr><td>路径常量 <code>DATA_DIR/REGISTRY_DIR/REPORTS_DIR</code></td><td><code>modules/core/paths.py</code></td><td>硬编码路径</td></tr>
+<tr><td>ATR</td><td><code>modules/core/atr.py</code></td><td>模块内重复实现</td></tr>
+<tr><td>错误码</td><td><code>modules/core/errors.py</code></td><td>裸 <code>raise Exception</code></td></tr>
+<tr><td>收益率字段 <code>annualized_return</code>、<code>equity_curve: list[float]</code></td><td><code>modules/core/</code></td><td>命名漂移</td></tr>
+</tbody>
+</table>
+
+<h3>编码约定</h3>
+<ul>
+<li><b>语言</b>：中文文档字符串/注释；脚本文件头 <code>#!/usr/bin/env python3</code></li>
+<li><b>DB 访问</b>：统一 <code>modules/database.py::get_connection()</code> 上下文管理器（WAL + 自动 commit/rollback）</li>
+<li><b>环境变量</b>：仅 <code>modules/__init__.py</code> 首次 import 时 <code>load_dotenv(override=False)</code>；<b>子模块禁止重复加载</b></li>
+<li><b>限流</b>：所有 Tushare API 调用必须带 <code>_rate_limit()</code></li>
+<li><b>错误处理</b>：API 调用 try/except 包裹，记录 error log，返回空 DataFrame/None 而非抛异常中断</li>
+<li><b>DB-first 读</b>：K 线/指标先查 <code>daily_kline</code>/<code>indicator_cache</code>，未命中才调 API 并写回</li>
+<li><b>Rust 桥判断</b>：<code>if result is not None</code>，<b>不要用 <code>or</code></b>（Rust 成功返回 falsy 值会被误判）</li>
+<li><b>Ruff</b>：line-length 120，target py312，select F/E/W/UP，ignore E501/F401/F403；format 双引号 + 空格</li>
+<li><b>Mypy</b>：py3.12，ignore_missing_imports，仅关键路径类型检查（screener/cli/data_sync/indicators/core/strategies），非严格渐进</li>
+<li><b>安全</b>：敏感 key（TUSHARE/INDEVS/HITHINK/LLM/webhook）<b>绝不硬编码</b>，全部走 <code>.env</code>（gitignored）</li>
+</ul>
+
+<!-- ============ 13 命令 ============ -->
+<h2 class="sec" id="cmd"><span class="num">13</span>命令速查</h2>
+
+<h4>安装</h4>
+<pre>pip install -r requirements.txt        <span class="c"># 核心依赖</span>
+pip install -e ".[dev]"                <span class="c"># 注册 zt / zt-web / zt-monitor + 测试依赖</span>
+pip install -e ".[corpus]"             <span class="c"># 语料处理可选依赖（yt-dlp / faster-whisper）</span>
+pip install fastapi uvicorn pydantic-settings   <span class="c"># API 依赖（不在 requirements.txt）</span>
+<span class="c"># Rust 加速：</span>
+cd rust/crates/bindings &amp;&amp; maturin develop --release</pre>
+
+<h4>常用命令</h4>
+<pre>zt analyze 600487.SH --days 365 --json
+zt screen --strategy B1 --limit 20 --json
+zt diagnose 600487.SH --json
+zt backtest shaofu 600487.SH --days 250 --json
+zt simulate 600487.SH --days 250 --capital 100000 --json
+zt verify v1.0 --limit 50 --days 300 --walk-forward
+zt workflow                    <span class="c"># 每日五步工作流</span>
+zt sync status
+zt monitor --json
+zt self-optimize run --target trading --rounds 3
+zt trade add "今天 10.5 买了 1000 股 600487"
+zt web                         <span class="c"># 等价 zt-web → http://localhost:8000</span></pre>
+
+<h4>前端</h4>
+<pre>zt-web                                   <span class="c"># 后端 :8000</span>
+cd frontend &amp;&amp; npm install &amp;&amp; npm run dev  <span class="c"># 前端 :5173</span>
+npm run build                            <span class="c"># tsc -b &amp;&amp; vite build</span>
+npm run lint</pre>
+
+<!-- ============ 14 质量 ============ -->
+<h2 class="sec" id="qa"><span class="num">14</span>质量保障体系</h2>
+
+<h4>质量检查</h4>
+<pre>ruff check modules tests
+ruff format --check modules tests
+mypy modules/ --ignore-missing-imports
+python corpus/quality_check.py SKILL.md --strict        <span class="c"># SKILL.md 12 项质量门</span>
+python corpus/dual_axis_review.py SKILL.md --skip-llm   <span class="c"># 双轴评审</span></pre>
+
+<h4>测试</h4>
+<pre>python -m pytest tests/ -v                       <span class="c"># 全量（约 40s，~109 文件）</span>
+python -m pytest tests/ -m slow -v               <span class="c"># 慢速端到端</span>
+RUN_REALDATA=true python -m pytest tests/test_indicators_realdata.py -v
+cargo test --workspace --exclude zt_bindings     <span class="c"># Rust</span></pre>
+
+<h4>关键 fixtures（<code>tests/conftest.py</code>）</h4>
+<ul>
+<li><code>mock_env_for_tests</code>（autouse）：剥离真实 env，<code>DATA_MODE=websearch</code> + 临时 DB</li>
+<li><code>temp_db</code>（init + drop）、<code>db_conn</code>（连接上下文）</li>
+<li>状态 fixtures：<code>state_with_interrupted_run</code>、<code>mock_monthly_reviews_with_poor_strategy</code></li>
+<li>数据工厂：<code>make_kline_row</code>、<code>make_daily_data</code>、<code>generate_uptrend_klines</code>、<code>generate_downtrend_klines</code>、<code>generate_b1_scenario</code>、<code>write_klines_to_db</code>、<code>write_stock_basic</code></li>
+<li><b>数据库隔离</b>：每个测试用临时 SQLite 文件，互不干扰</li>
+</ul>
+
+<h4>CI（<code>.github/workflows/</code>）</h4>
+<table>
+<thead><tr><th>工作流</th><th>触发</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td><code>rust-ci.yml</code></td><td>PR / push</td><td>ubuntu+macOS，Rust 1.78 + <code>cargo fmt/clippy/test --exclude zt_bindings</code>；Python smoke（<code>maturin develop --release</code> 后 import <code>_core_compute</code>）</td></tr>
+<tr><td><code>release.yml</code></td><td>tag <code>v*.*.*</code></td><td>test(py3.12/3.13) → build wheel(maturin) → 装 wheel → 跑 <code>test_rust_compat.py</code> + <code>test_cli_uses_rust.py</code> → PyPI → GH Release → ClawHub</td></tr>
+</tbody>
+</table>
+
+<h4>已知不一致 / 技术债</h4>
+<div class="note warn">
+<ul style="margin:4px 0">
+<li><b>版本号</b>：pyproject 4.3.0 vs SKILL.md/skill.json/CHANGELOG v4.2.0</li>
+<li><b>API 回测不走 Rust 桥</b>：<code>api/services/backtest_service.py</code> 直接调 Python 模块</li>
+<li><b>Python 版本</b>：文档残留「3.10+」，实际 <code>requires-python &gt;=3.12</code></li>
+<li><b>Rust 静默降级</b>：<code>auto</code> 模式 import 失败不报错，易掩盖回归</li>
+<li><b>uv.lock 非 canonical</b>：被 gitignore 且 pyproject 无 <code>[tool.uv]</code>，用 pip</li>
+<li><b>前端无 JS 测试</b>：仅靠 lint + tsc</li>
+</ul>
+</div>
+
+<footer>
+  <p>zettaranc-skill 项目架构说明书 · 基于仓库源码与 AGENTS.md 逐项核实生成</p>
+  <p>覆盖：modules/（135 py）· rust/（6 crates）· api/（22 端点）· frontend/（8 页面）· knowledge/（32 篇）· tests/（~109 文件）</p>
+</footer>
+
+</main>
+</div>
+</body>
+</html>

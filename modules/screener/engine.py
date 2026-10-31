@@ -219,7 +219,7 @@ def screen_stocks(
     - "sandglass_perfect": 沙漏完美图形（评分>=80）
     - "volume_ratio_super": 量比战法（立即买或强势攻击场景）
 
-    max_stocks: 最大扫描数量，0=全量（默认500只性能保护）
+    max_stocks: 最大扫描数量，0=全量（全市场约 5200 只，实测 4 秒级，无需限量）
     max_workers: 并行进程数，0=自动（CPU核心数）
     use_parallel: 是否启用多进程并行（<50只时自动关闭；注入的 datasource 需可 pickle）
 
@@ -238,7 +238,8 @@ def screen_stocks(
         )
 
     stocks = get_all_stocks(datasource=datasource)
-    limit = max_stocks if max_stocks > 0 else 500
+    # 0（或负数）= 全市场。指标走 indicator_cache，全市场实测秒级，不再做性能截断
+    limit = max_stocks if max_stocks > 0 else len(stocks)
     stocks = stocks[:limit]
 
     # v3.10.4: 股票池彻底为空 → 抛 SCREENER_NO_DATA
