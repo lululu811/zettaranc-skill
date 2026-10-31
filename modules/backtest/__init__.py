@@ -4,6 +4,7 @@
 提供单股和组合回测功能。
 """
 
+from .types import BacktestResult as UnifiedBacktestResult
 from .single import (
     Trade,
     BacktestResult,
@@ -41,6 +42,8 @@ from .shaofu import (
 )
 
 __all__ = [
+    # types (统一回测结果接口)
+    "UnifiedBacktestResult",
     # single
     "Trade",
     "BacktestResult",
