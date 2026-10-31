@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
-from ..core.metrics import TRADING_DAYS_PER_YEAR, compute_drawdown, compute_sharpe
+from ..core.metrics import TRADING_DAYS_PER_YEAR, calc_trade_stats, compute_drawdown, compute_sharpe
 from ..core.net import disable_proxy
 from ..indicators import DailyData, get_kline_data
 from ..loop_engine import LoopConfig, LoopTrade, ShaofuLoopEngine
@@ -45,6 +45,54 @@ class ShaofuBacktestResult:
     sharpe_ratio: float = 0  # 夏普比率
     equity_curve: list[float] = field(default_factory=list)  # 资金曲线
 
+    def to_dict(self) -> dict:
+        """规范化结果字典（见 :func:`shaofu_result_to_dict`）。"""
+        return shaofu_result_to_dict(self)
+
+
+def shaofu_result_to_dict(result: ShaofuBacktestResult) -> dict:
+    """规范化的结果字典 —— CLI 与 API 都从这份派生。
+
+    单位约定（对外展示单位）：
+    - ``total_return`` / ``max_drawdown`` 为**百分数**（已 ×100）
+    - ``avg_pnl`` / ``avg_win`` / ``avg_loss`` / ``max_win`` / ``max_loss`` /
+      ``pnl_pct`` 为**百分数**；``avg_loss`` / ``max_loss`` 是有符号的负值
+    - ``win_rate`` 为分数（0.455）
+
+    CLI 用扁平契约，API 用 ``summary`` 嵌套契约——字段集与取值相同。
+
+    写成模块级函数（而非方法）以便鸭子类型：测试可以用 SimpleNamespace 替身。
+    """
+    return {
+        "ts_code": result.ts_code,
+        "total_trades": result.total_trades,
+        "win_count": result.win_count,
+        "loss_count": result.loss_count,
+        "win_rate": round(result.win_rate, 3),
+        "avg_pnl": round(result.avg_pnl, 2),
+        "avg_win": round(result.avg_win, 2),
+        "avg_loss": round(result.avg_loss, 2),
+        "max_win": round(result.max_win, 2),
+        "max_loss": round(result.max_loss, 2),
+        "profit_factor": round(result.profit_factor, 2),
+        "total_return": round(result.total_return * 100, 2),
+        "max_drawdown": round(result.max_drawdown * 100, 2),
+        "sharpe_ratio": round(result.sharpe_ratio, 2),
+        "avg_holding_days": round(result.avg_holding_days, 1),
+        "trades": [
+            {
+                "entry_date": t.entry_date,
+                "entry_price": round(t.entry_price, 2),
+                "exit_date": t.exit_date,
+                "exit_price": round(t.exit_price, 2) if t.exit_price else None,
+                "exit_reason": t.exit_reason,
+                "pnl_pct": round(t.pnl_pct, 2),
+                "holding_days": t.holding_days,
+            }
+            for t in result.trades
+        ],
+    }
+
 
 def _calc_metrics(result: ShaofuBacktestResult) -> None:
     """
@@ -57,35 +105,22 @@ def _calc_metrics(result: ShaofuBacktestResult) -> None:
     if not trades:
         return
 
-    result.total_trades = len(trades)
-
-    # 盈亏统计
+    # 交易统计：统一走 core.metrics.calc_trade_stats（唯一的交易统计算法）
     pnl_list = [t.pnl_pct for t in trades]
-    win_pnls = [p for p in pnl_list if p > 0]
-    loss_pnls = [p for p in pnl_list if p < 0]
-
-    result.win_count = len(win_pnls)
-    result.loss_count = len(loss_pnls)
-    result.win_rate = result.win_count / result.total_trades if result.total_trades > 0 else 0.0
-
-    # 平均盈亏
-    result.avg_pnl = sum(pnl_list) / result.total_trades
-    result.avg_win = sum(win_pnls) / len(win_pnls) if win_pnls else 0.0
-    result.avg_loss = sum(loss_pnls) / len(loss_pnls) if loss_pnls else 0.0
-
-    # 最大单笔
-    result.max_win = max(pnl_list) if pnl_list else 0.0
-    result.max_loss = min(pnl_list) if pnl_list else 0.0
-
-    # 平均持仓天数
     holding_days = [t.holding_days for t in trades if hasattr(t, "holding_days")]
-    if holding_days:
-        result.avg_holding_days = sum(holding_days) / len(holding_days)
+    stats = calc_trade_stats(pnl_list, holding_days)
 
-    # 盈亏比（总盈利 / 总亏损的绝对值）
-    total_profit = sum(win_pnls)
-    total_loss = abs(sum(loss_pnls))
-    result.profit_factor = total_profit / total_loss if total_loss > 0 else float("inf")
+    result.total_trades = stats.total_trades
+    result.win_count = stats.win_count
+    result.loss_count = stats.loss_count
+    result.win_rate = stats.win_rate
+    result.avg_pnl = stats.avg_pnl
+    result.avg_win = stats.avg_win
+    result.avg_loss = stats.avg_loss
+    result.max_win = stats.max_win
+    result.max_loss = stats.max_loss
+    result.profit_factor = stats.profit_factor
+    result.avg_holding_days = stats.avg_holding_days
 
     # 资金曲线：从 100 开始，逐笔按实际仓位复利
     # 注意：pnl_pct 是百分比数值（如 5.0 表示 5%），需除以 100 转为小数比例

@@ -20,7 +20,11 @@ from .market_context import (
     classify_market_regime,
 )
 from .metrics import (
+    CurveStats,
     PerformanceMetrics,
+    TradeStats,
+    calc_curve_metrics,
+    calc_trade_stats,
     calculate_metrics,
     calculate_performance_metrics,
     daily_returns,
@@ -43,6 +47,10 @@ __all__ = [
     "classify_market_regime",
     # metrics
     "PerformanceMetrics",
+    "TradeStats",
+    "CurveStats",
+    "calc_trade_stats",
+    "calc_curve_metrics",
     "calculate_metrics",
     "calculate_performance_metrics",
     "daily_returns",

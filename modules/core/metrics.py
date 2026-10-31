@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import math
 import statistics
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from collections.abc import Sequence
 from typing import Any
 
 # 每年交易日数（A 股年化因子统一常量）
@@ -66,6 +67,161 @@ def daily_returns(values: list[float]) -> list[float]:
         else:
             rets.append((cur - prev) / prev)
     return rets
+
+
+@dataclass(frozen=True)
+class TradeStats:
+    """逐笔交易的统计聚合（口径见 :func:`calc_trade_stats`）。
+
+    ``avg_loss`` 与 ``max_loss`` 是**有符号的**（负值表示亏损），与逐笔盈亏
+    序列同口径；需要"亏损幅度"的调用方自行取绝对值。
+    """
+
+    total_trades: int = 0
+    win_count: int = 0
+    loss_count: int = 0
+    win_rate: float = 0.0
+    avg_pnl: float = 0.0
+    avg_win: float = 0.0
+    avg_loss: float = 0.0  # 有符号（负值）
+    max_win: float = 0.0
+    max_loss: float = 0.0  # 有符号（负值）
+    profit_factor: float = 0.0
+    avg_holding_days: float = 0.0
+    max_consecutive_wins: int = 0
+    max_consecutive_losses: int = 0
+
+
+def calc_trade_stats(pnls: Sequence[float], holding_days: Sequence[float] | None = None) -> TradeStats:
+    """从逐笔盈亏算交易统计 —— **交易统计算法的唯一实现**。
+
+    口径：
+
+    - ``p > 0`` 为盈利，``p < 0`` 为亏损，``p == 0`` 为**不盈不亏**
+      （计入总交易数，但既不计入盈利也不计入亏损）。
+      零盈亏不是亏损——历史上有实现把它算成亏损，两边口径因此不一致。
+    - ``avg_loss`` / ``max_loss`` 为有符号的负值（与输入同单位）。
+    - 连胜/连亏：零盈亏的成交会**同时打断**连胜与连亏。
+
+    Args:
+        pnls: 逐笔盈亏序列（单位随调用方：金额或百分比）。
+        holding_days: 与 ``pnls`` 对齐的持仓天数序列，可选。
+
+    Returns:
+        TradeStats。
+    """
+    if not pnls:
+        return TradeStats()
+
+    wins = [p for p in pnls if p > 0]
+    losses = [p for p in pnls if p < 0]
+    total = len(pnls)
+    win_count, loss_count = len(wins), len(losses)
+
+    total_profit = sum(wins)
+    total_loss = abs(sum(losses))
+
+    stats = TradeStats(
+        total_trades=total,
+        win_count=win_count,
+        loss_count=loss_count,
+        win_rate=win_count / total if total else 0.0,
+        avg_pnl=sum(pnls) / total,
+        avg_win=sum(wins) / win_count if win_count else 0.0,
+        avg_loss=sum(losses) / loss_count if loss_count else 0.0,
+        max_win=max(pnls),
+        max_loss=min(pnls),
+        profit_factor=total_profit / total_loss if total_loss > 0 else float("inf"),
+    )
+
+    if holding_days:
+        stats = replace(stats, avg_holding_days=sum(holding_days) / len(holding_days))
+
+    # 连胜 / 连亏：零盈亏的成交同时打断两者
+    max_wins = max_losses = 0
+    cur_wins = cur_losses = 0
+    for pnl in pnls:
+        if pnl > 0:
+            cur_wins += 1
+            cur_losses = 0
+            max_wins = max(max_wins, cur_wins)
+        elif pnl < 0:
+            cur_losses += 1
+            cur_wins = 0
+            max_losses = max(max_losses, cur_losses)
+        else:
+            cur_wins = 0
+            cur_losses = 0
+    stats = replace(stats, max_consecutive_wins=max_wins, max_consecutive_losses=max_losses)
+
+    return stats
+
+
+@dataclass(frozen=True)
+class CurveStats:
+    """净值序列的曲线类指标。"""
+
+    total_return: float = 0.0
+    annualized_return: float = 0.0
+    max_drawdown: float = 0.0
+    sharpe_ratio: float = 0.0
+
+
+def calc_curve_metrics(values: list[float], trading_days: int | None = None) -> CurveStats:
+    """从净值序列算曲线类指标 —— **曲线指标算法的唯一实现**。
+
+    Args:
+        values: 净值序列（升序）。
+        trading_days: 年化分母（交易日数）。``None`` 或 <= 0 表示不做年化。
+            **调用方必须显式传入**——不同路径的序列长度不同（单股按 K 线天数、
+            组合按净值序列长度），年化结果因此不同。
+
+    Returns:
+        CurveStats。
+    """
+    if not values or len(values) < 2:
+        return CurveStats()
+
+    initial, final = values[0], values[-1]
+    total_return = (final / initial - 1.0) if initial > 0 else 0.0
+
+    annualized = 0.0
+    if trading_days and trading_days > 0 and initial > 0:
+        annualized = (1.0 + total_return) ** (TRADING_DAYS_PER_YEAR / trading_days) - 1.0
+
+    max_dd, _ = compute_drawdown(values)
+    sharpe = compute_sharpe(daily_returns(values))
+
+    return CurveStats(
+        total_return=total_return,
+        annualized_return=annualized,
+        max_drawdown=max_dd,
+        sharpe_ratio=sharpe,
+    )
+
+
+def _is_closed_trade(trade: Any) -> bool:
+    """判断一笔成交是否计入交易统计。
+
+    - 带 ``action`` 字段（模拟器的 ``TradeRecord``、dict 代理）：只有 SELL 计入。
+    - 不带 ``action`` 字段（回测的 ``LoopTrade``）：按"已平仓"判定——
+      ``exit_date`` 非空即为已平仓。未平仓的持仓 ``exit_date`` 为空且 pnl_pct 为 0。
+    """
+    action = getattr(trade, "action", None)
+    if action is not None:
+        return action == "SELL"
+    return bool(getattr(trade, "exit_date", ""))
+
+
+def _trade_pnl(trade: Any) -> float:
+    """取一笔成交的盈亏。
+
+    优先用绝对金额 ``pnl``；没有时退回 ``pnl_pct``（此时统计口径随输入单位）。
+    """
+    pnl = getattr(trade, "pnl", None)
+    if pnl is None:
+        pnl = getattr(trade, "pnl_pct", 0)
+    return float(pnl or 0.0)
 
 
 def compute_sharpe(returns: list[float], periods_per_year: float = TRADING_DAYS_PER_YEAR) -> float:
@@ -130,12 +286,15 @@ def calculate_metrics(
     - 波动率与夏普/索提诺使用 sample std（``statistics.stdev``）
     - 夏普/索提诺不减无风险利率
     - 支持 benchmark 曲线计算 alpha/beta
-    - 交易统计仅统计 SELL 动作的成交
+    - 交易统计仅统计**已平仓**成交：带 ``action`` 字段的按 ``action == "SELL"``，
+      不带 ``action`` 字段的（回测的 ``LoopTrade``）按 ``exit_date`` 非空判定
+    - 零盈亏的成交（``pnl == 0``）不计入盈利也不计入亏损，但计入总交易数
 
     Args:
         equity_curve: 资金曲线，每个元素至少包含 ``date`` 与 ``equity``。
         benchmark_curve: 基准曲线，每个元素至少包含 ``date`` 与 ``close``。
-        trades: 成交记录列表，通常为 ``TradeRecord`` 序列。
+        trades: 成交记录列表，通常为 ``TradeRecord`` 序列；也可传 ``LoopTrade``
+            （此时盈亏取 ``pnl_pct``，统计口径随输入单位）。
 
     Returns:
         PerformanceMetrics: 各项绩效指标。
@@ -202,48 +361,22 @@ def calculate_metrics(
                 metrics.beta = 0.0
                 metrics.alpha = 0.0
 
-    # 交易统计（仅 SELL 成交）
-    sell_trades = [t for t in trades if getattr(t, "action", None) == "SELL"]
-    if sell_trades:
-        pnls = [float(getattr(t, "pnl", 0)) for t in sell_trades]
-        wins = [p for p in pnls if p > 0]
-        losses = [p for p in pnls if p <= 0]
+    # 交易统计（仅已平仓成交）
+    closed_trades = [t for t in trades if _is_closed_trade(t)]
+    pnls = [_trade_pnl(t) for t in closed_trades]
+    holding_days_list = [float(getattr(t, "holding_days", 0) or 0) for t in closed_trades]
+    stats = calc_trade_stats(pnls, holding_days_list)
 
-        metrics.win_rate = len(wins) / len(pnls) if pnls else 0.0
-
-        total_profit = sum(wins)
-        total_loss = abs(sum(losses))
-        metrics.profit_factor = total_profit / total_loss if total_loss > 0 else float("inf")
-
-        metrics.avg_win = statistics.mean(wins) if wins else 0.0
-        metrics.avg_loss = abs(statistics.mean(losses)) if losses else 0.0
-        metrics.gain_loss_ratio = metrics.avg_win / metrics.avg_loss if metrics.avg_loss > 0 else 0.0
-
-        # 最大连胜 / 连亏
-        max_wins = 0
-        max_losses = 0
-        cur_wins = 0
-        cur_losses = 0
-        for pnl in pnls:
-            if pnl > 0:
-                cur_wins += 1
-                cur_losses = 0
-                if cur_wins > max_wins:
-                    max_wins = cur_wins
-            else:
-                cur_losses += 1
-                cur_wins = 0
-                if cur_losses > max_losses:
-                    max_losses = cur_losses
-        metrics.max_consecutive_wins = max_wins
-        metrics.max_consecutive_losses = max_losses
-
-    metrics.total_trades = len(sell_trades)
-
-    # 平均持仓天数（兼容字段）
-    holding_days_list = [getattr(t, "holding_days", 0) for t in sell_trades]
-    if holding_days_list:
-        metrics.avg_holding_days = sum(holding_days_list) / len(holding_days_list)
+    metrics.total_trades = stats.total_trades
+    metrics.win_rate = stats.win_rate
+    metrics.profit_factor = stats.profit_factor
+    metrics.avg_win = stats.avg_win
+    # calc_trade_stats 的 avg_loss 是有符号的负值；这里取幅度（正值）
+    metrics.avg_loss = abs(stats.avg_loss)
+    metrics.gain_loss_ratio = metrics.avg_win / metrics.avg_loss if metrics.avg_loss > 0 else 0.0
+    metrics.max_consecutive_wins = stats.max_consecutive_wins
+    metrics.max_consecutive_losses = stats.max_consecutive_losses
+    metrics.avg_holding_days = stats.avg_holding_days
 
     return metrics
 
@@ -289,6 +422,10 @@ def calculate_performance_metrics(
 __all__ = [
     "TRADING_DAYS_PER_YEAR",
     "PerformanceMetrics",
+    "TradeStats",
+    "CurveStats",
+    "calc_trade_stats",
+    "calc_curve_metrics",
     "calculate_metrics",
     "calculate_performance_metrics",
     "compute_sharpe",

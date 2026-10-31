@@ -7,6 +7,9 @@ from dataclasses import asdict
 from typing import Any
 
 from ..active_market_gate import GateConfig, TradingGate
+from ..backtest.portfolio import portfolio_result_to_dict
+from ..backtest.single import multi_strategy_result_to_dict
+from ..backtest.shaofu import shaofu_result_to_dict
 from ._helpers import error, json_output, warn
 from .simulate import cmd_simulate
 
@@ -17,70 +20,23 @@ logger = logging.getLogger(__name__)
 
 
 def _shaofu_result_to_dict(result: Any) -> dict:
-    """将 ShaofuBacktestResult 转换为可序列化的字典"""
-    trades = []
-    for t in result.trades:
-        trades.append(
-            {
-                "entry_date": t.entry_date,
-                "entry_price": t.entry_price,
-                "exit_date": t.exit_date,
-                "exit_price": t.exit_price,
-                "exit_reason": t.exit_reason,
-                "pnl_pct": round(t.pnl_pct, 2),
-                "holding_days": t.holding_days,
-            }
-        )
+    """将 ShaofuBacktestResult 转换为可序列化的字典。
 
-    return {
-        "ts_code": result.ts_code,
-        "total_trades": result.total_trades,
-        "win_count": result.win_count,
-        "win_rate": round(result.win_rate, 3),
-        "avg_pnl": round(result.avg_pnl, 2),
-        "max_win": round(result.max_win, 2),
-        "max_loss": round(result.max_loss, 2),
-        "profit_factor": round(result.profit_factor, 2),
-        "total_return": round(result.total_return * 100, 2),
-        "max_drawdown": round(result.max_drawdown * 100, 2),
-        "sharpe_ratio": round(result.sharpe_ratio, 2),
-        "avg_holding_days": round(result.avg_holding_days, 1),
-        "trades": trades,
-    }
+    字段集与取值来自 ``ShaofuBacktestResult.to_dict()``——CLI 与 API 共用同一份
+    规范字典，只是嵌套方式不同（CLI 扁平、API 用 summary 嵌套）。
+    """
+    return shaofu_result_to_dict(result)
 
 
 def _portfolio_result_to_dict(result: Any) -> dict:
-    """将 PortfolioBacktestResult 转换为可序列化的字典。
+    """将 MultiStrategyBacktestResult 转换为可序列化的字典。
 
-    单位约定：trades 来自 modules.backtest.single.Trade，其 pnl_pct 是【分数】
-    （0.1 表示 +10%），输出为百分数需乘 100。
+    字段集与取值来自 ``MultiStrategyBacktestResult.to_dict()``——CLI 与 API 共用
+    同一份规范字典，只是嵌套方式不同。单位约定：trades 来自
+    modules.backtest.single.Trade，其 pnl_pct 是【分数】（0.1 表示 +10%），
+    canonical 已统一换算成百分数。
     """
-    trades = []
-    for t in result.trades:
-        trades.append(
-            {
-                "ts_code": t.ts_code,
-                "entry_date": t.entry_date,
-                "entry_price": round(t.entry_price, 2),
-                "exit_date": t.exit_date,
-                "exit_price": round(t.exit_price, 2) if t.exit_price else None,
-                "exit_reason": t.exit_reason,
-                "pnl_pct": round(t.pnl_pct * 100, 2),
-            }
-        )
-
-    return {
-        "initial_capital": result.initial_capital,
-        "final_value": round(result.final_value, 2),
-        "total_return": round(result.total_return * 100, 2),
-        "annualized_return": round(result.annualized_return * 100, 2),
-        "sharpe_ratio": round(result.sharpe_ratio, 2),
-        "max_drawdown": round(result.max_drawdown * 100, 2),
-        "win_rate": round(result.win_rate, 3),
-        "profit_factor": round(result.profit_factor, 2),
-        "total_trades": result.total_trades,
-        "trades": trades,
-    }
+    return multi_strategy_result_to_dict(result)
 
 
 def _shaofu_portfolio_to_dict(result: dict) -> dict:

@@ -2,6 +2,40 @@
 
 所有值得记录的变更都会写在这里。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## v4.9.0 (2026-10-31) — 回测结果形状与指标聚合归一（BacktestRunner 阶段 3）
+
+[ADR-0002](adr/0002-backtest-runner-unification.md) 阶段 3。**验收数字与基线逐位相同**。
+
+### 新增
+
+- **`modules/core/metrics.py` 的共享原语** —— 指标算法收敛到一处：
+  - `TradeStats` + `calc_trade_stats(pnls, holding_days)`：**交易统计的唯一实现**。口径统一为 `p > 0` 盈 / `p < 0` 亏 / `p == 0` 不盈不亏（计入总交易数，但既不算盈也不算亏）。此前有三套不同口径——其中 `core/metrics.py` 把零盈亏算成亏损，`backtest/six_step.py` 不算，`backtest/portfolio.py` 用 `total - win` 间接算成亏损。**零盈亏不是亏损**，现已统一。
+  - `CurveStats` + `calc_curve_metrics(values, trading_days)`：**曲线指标的唯一实现**。年化分母由调用方显式传入——单股按 K 线天数、组合按净值序列长度，两者不同，年化结果因此不同，不能由函数替调用方决定。
+- **三个结果类型的 canonical 字典**（模块级函数，鸭子类型可用）：`shaofu_result_to_dict` / `multi_strategy_result_to_dict` / `portfolio_result_to_dict`。CLI 与 API 都从它们派生，只差嵌套方式（CLI 扁平、API 用 `summary` 嵌套）。
+
+### 修复
+
+- **`core/metrics.py::calculate_metrics` 的 SELL 过滤只认 `action == "SELL"`**，而回测的 `LoopTrade` 没有 `action` 字段，喂进去会得到 `total_trades == 0`。现在按"已平仓"判定：有 `action` 字段的按 action 判，没有的按 `exit_date` 非空判。
+- **API 把回测结果字段硬编码成 0。** `_portfolio_to_response` 的 `avg_holding_days` / `win_count` / `max_win` / `max_loss` 全是 0，`avg_pnl` 因结果类没有该字段也退化成 0；而 CLI 侧根本不输出这些字段。**同一份回测结果，两个出口给出的是两套数。** 现统一从 canonical 字典派生。
+- **`PortfolioBacktestResponse` 会静默丢弃 `ts_code`**——模型没声明该字段，Pydantic 把它过滤掉了。
+- **`PortfolioBacktestResponse.per_stock` 声明了却从不填充**，恒为 `[]`。现在按标的分组真正填上逐股摘要（含逐股资金曲线）。
+
+### 补齐的字段
+
+- `PortfolioBacktestResult` 补 `avg_pnl` / `avg_win` / `avg_loss` / `max_win` / `max_loss` / `avg_holding_days` / `initial_capital` / `final_value`——CLI 与 API 一直在消费其中几个，但结果类型上并不存在。
+- `MultiStrategyBacktestResult` 补 `win_count` / `loss_count` / `avg_pnl` / `avg_win` / `avg_loss` / `max_win` / `max_loss` / `avg_holding_days`，同上。
+
+### 测试
+
+- `tests/test_output_units.py` 新增 `TestCliApiParity`（2 项）：断言 CLI 与 API 对同一份结果的**字段集与取值完全一致**，且都来自同一个 canonical 函数——防止两个出口再次各写一份。
+- 测试里的假结果补齐 `loss_count` / `avg_win` / `avg_loss`（canonical 新增的字段）。
+
+### 验证
+
+- **验收数字与基线逐位相同**：`total_trades` 193 / `sharpe` 1.2502485663220784 / `calmar` 4.183420808217639 / `win_rate` 0.45595854922279794 / `max_drawdown` 0.004161901067962086，四项 gate 全通过。
+- CLI 与 API 对同一份结果：字段集仅差 API 独有的 `annualized_return`（少妇战法的资金曲线是**交易序**而非日序，无法按日频年化，该指标不可得），**共有字段取值全部一致**。
+- pytest **1570 passed** / ruff / mypy 82 文件 / SKILL 质量门 12/12。
+
 ## v4.8.0 (2026-10-31) — 解除回测依赖倒挂（BacktestRunner 阶段 2）
 
 [ADR-0002](adr/0002-backtest-runner-unification.md) 阶段 2。**纯搬迁，验收数字逐位不变。**

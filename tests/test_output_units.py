@@ -14,6 +14,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from modules.backtest.single import (
@@ -196,3 +198,69 @@ class TestReportFormatters:
         result = BacktestResult(ts_code="600519.SH", trades=[_single_trade()])
         text = result.summary()
         assert "+10.00%" in text
+
+
+class TestCliApiParity:
+    """CLI 与 API 对同一份结果必须给出**同一组字段、同一组取值**。
+
+    历史上两者各写一份序列化器：API 把 avg_holding_days / win_count /
+    max_win / max_loss 全硬编码成 0，而 CLI 根本不输出这些字段——同一份回测
+    结果，两个出口给出的是两套数。现在都从 modules.backtest 的 canonical
+    字典派生，只差嵌套方式（CLI 扁平、API 用 summary 嵌套）。
+    """
+
+    @staticmethod
+    def _fake_shaofu_result():
+        return SimpleNamespace(
+            ts_code="600519.SH",
+            total_trades=2,
+            win_count=1,
+            loss_count=1,
+            win_rate=0.5,
+            avg_pnl=8.0,
+            avg_win=12.0,
+            avg_loss=-4.0,
+            max_win=12.0,
+            max_loss=-4.0,
+            profit_factor=2.0,
+            total_return=0.15,
+            max_drawdown=0.05,
+            sharpe_ratio=1.5,
+            avg_holding_days=8.0,
+            trades=[],
+        )
+
+    def test_shaofu_cli_and_api_agree(self):
+        from api.services.backtest_service import _shaofu_to_response
+        from modules.cli_commands.backtest import _shaofu_result_to_dict
+
+        result = self._fake_shaofu_result()
+        cli = _shaofu_result_to_dict(result)
+        api = _shaofu_to_response("600519.SH", result)
+
+        # API 多一个 annualized_return：少妇战法路径的资金曲线是交易序而非日序，
+        # 无法按日频年化，该指标不可得。CLI 不输出它。
+        assert set(api["summary"]) - set(cli) == {"annualized_return"}
+        assert not (set(cli) - set(api["summary"]) - {"ts_code", "trades"})
+
+        common = set(cli) & set(api["summary"])
+        for key in common:
+            assert cli[key] == api["summary"][key], f"{key} 在 CLI 与 API 取值不一致"
+
+    def test_shaofu_canonical_is_single_source(self):
+        """CLI 与 API 都必须调用 canonical 字典函数，而不是各写一份。"""
+        from modules.backtest import shaofu as shaofu_mod
+
+        result = self._fake_shaofu_result()
+        canonical = shaofu_mod.shaofu_result_to_dict(result)
+
+        from api.services.backtest_service import _shaofu_to_response
+        from modules.cli_commands.backtest import _shaofu_result_to_dict
+
+        cli = _shaofu_result_to_dict(result)
+        api = _shaofu_to_response("600519.SH", result)
+        for key, value in canonical.items():
+            if key in cli:
+                assert cli[key] == value, f"CLI 的 {key} 与 canonical 不一致"
+            if key in api["summary"]:
+                assert api["summary"][key] == value, f"API 的 {key} 与 canonical 不一致"
