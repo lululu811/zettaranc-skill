@@ -21,47 +21,38 @@ def calculate_brick_value(klines: list[DailyData]) -> float:
     lows = [k.low for k in klines]
     closes = [k.close for k in klines]
 
-    # 构建 VAR3A 序列（需要至少 6 个值来算 SMA(VAR3A,6,1)）
+    # 同一个 4 日 HHV/LLV 窗口同时构建 VAR3A 与 VAR1A 序列（从索引 3 开始）
+    # len(klines) >= 12 保证两个序列长度 >= 9，足够 SMA 递推
     var3a_list: list[float] = []
-    for i in range(3, len(klines)):  # HHV/LLV 需要 4 天，所以从索引 3 开始
-        hhv4 = max(highs[max(0, i - 3) : i + 1])
-        llv4 = min(lows[max(0, i - 3) : i + 1])
+    var1a_list: list[float] = []
+    for h0, h1, h2, h3, l0, l1, l2, l3, close in zip(
+        highs, highs[1:], highs[2:], highs[3:], lows, lows[1:], lows[2:], lows[3:], closes[3:]
+    ):
+        hhv4 = max(h0, h1, h2, h3)
+        llv4 = min(l0, l1, l2, l3)
         if hhv4 == llv4:
-            v3 = 50.0
+            var3a_list.append(50.0)
+            var1a_list.append(-90.0)
         else:
-            v3 = (closes[i] - llv4) / (hhv4 - llv4) * 100
-        var3a_list.append(v3)
+            var3a_list.append((close - llv4) / (hhv4 - llv4) * 100)
+            var1a_list.append((hhv4 - close) / (hhv4 - llv4) * 100 - 90.0)
 
-    if len(var3a_list) < 6:
-        return 0
+    # VAR4A = SMA(VAR3A, 6, 1)，VAR5A = SMA(VAR4A, 6, 1) —— 与 calculate_sma_series 相同的递推，只保留末值
+    w6 = 1 / 6
+    keep6 = 1 - w6
+    var4a = var5a = var3a_list[0]
+    for v3 in var3a_list[1:]:
+        var4a = v3 * w6 + var4a * keep6
+        var5a = var4a * w6 + var5a * keep6
+    var5a += 100
 
-    # VAR4A = SMA(VAR3A, 6, 1) —— 递推序列，每个点承接前一个结果
-    var4a_list = calculate_sma_series(var3a_list, 6, 1)
-
-    if len(var4a_list) < 6:
-        return 0
-
-    # VAR5A = SMA(VAR4A, 6, 1) + 100 —— 递推序列
-    var5a_list = calculate_sma_series(var4a_list, 6, 1)
-    var5a = var5a_list[-1] + 100
-
-    # 构建 VAR1A 序列
-    var1a_list = []
-    for i in range(3, len(klines)):
-        hhv4 = max(highs[max(0, i - 3) : i + 1])
-        llv4 = min(lows[max(0, i - 3) : i + 1])
-        if hhv4 == llv4:
-            v1: float = -90.0
-        else:
-            v1 = (hhv4 - closes[i]) / (hhv4 - llv4) * 100 - 90.0
-        var1a_list.append(v1)
-
-    if len(var1a_list) < 4:
-        var2a = (var1a_list[-1] if var1a_list else -90) + 100
-    else:
-        # VAR2A = SMA(VAR1A, 4, 1) + 100 —— 递推序列
-        var2a_list = calculate_sma_series(var1a_list, 4, 1)
-        var2a = var2a_list[-1] + 100
+    # VAR2A = SMA(VAR1A, 4, 1) + 100
+    w4 = 1 / 4
+    keep4 = 1 - w4
+    var2a = var1a_list[0]
+    for v1 in var1a_list[1:]:
+        var2a = v1 * w4 + var2a * keep4
+    var2a += 100
 
     # VAR6A = VAR5A - VAR2A
     var6a = var5a - var2a
